@@ -21,8 +21,8 @@
 
 ## Safety
 
-- The --target deploy flag must not overwrite existing files without user confirmation unless --force is explicitly provided.
-- Build output to dist/ must never modify files outside of dist/.
+- Writing to any target scope must not overwrite existing files without user confirmation unless --force is explicitly provided.
+- When writing to dist/ (--target dist) or any explicit output path, output must never modify files outside that path.
 
 ## Maintainability
 

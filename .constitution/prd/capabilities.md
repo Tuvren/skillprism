@@ -23,8 +23,8 @@
 
 | Priority | ID | Capability | Rationale |
 | :--- | :--- | :--- | :--- |
-| P0 | BD-1 | Write all generated output to a dist/{harness}/ directory by default, with each subdirectory mirroring the exact layout that harness expects. | Enables safe inspection and diff before deployment; avoids overwriting existing installations. |
-| P0 | BD-2 | Accept a --target flag (project | user) that deploys generated output to the agent's installation path instead of dist/. | One-command deployment to the correct directory for the selected scope. |
+| P0 | BD-1 | Write all generated output directly to harness-specific agent paths (project scope by default), with each target directory mirroring the exact layout that harness expects. | Skills are immediately usable after build — no separate deploy step. Matches the install-to-path model established by the skills CLI. |
+| P0 | BD-2 | Accept a --target flag (project | user | dist) that reroutes output to project-level agent paths, user-level (global) agent paths, or a dist/ directory for inspection. | One-command targeting for the correct scope; dist/ enables CI artifact inspection without touching live agent paths. |
 
 ## Epic: Validation
 
@@ -43,4 +43,4 @@
 
 | Priority | ID | Capability | Rationale |
 | :--- | :--- | :--- | :--- |
-| P0 | OB-1 | Generate build output that can be diffed against the currently installed state before the user runs --target deploy. | Prevents accidental overwrites; enables review workflow for team environments. |
+| P0 | OB-1 | Generate a diff preview that compares rendered output against whatever currently exists at the target paths, without writing anything. | Prevents accidental overwrites; enables review workflow for team environments. |
