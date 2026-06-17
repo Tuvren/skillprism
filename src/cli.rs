@@ -1,17 +1,19 @@
+#![allow(clippy::redundant_pub_crate)]
+
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
 #[command(name = "skillprism", version, about)]
-pub struct Cli {
+struct Cli {
     #[command(subcommand)]
-    pub command: Command,
+    command: Command,
 
     #[arg(global = true, short = 'v', long = "verbose")]
-    pub verbose: bool,
+    verbose: bool,
 }
 
 #[derive(Subcommand)]
-pub enum Command {
+enum Command {
     Build {
         #[arg(long = "target", default_value = "project")]
         target: TargetScope,
@@ -33,14 +35,14 @@ pub enum Command {
 }
 
 #[derive(ValueEnum, Clone)]
-pub enum TargetScope {
+enum TargetScope {
     Project,
     User,
     Dist,
 }
 
 #[derive(Subcommand)]
-pub enum InitKind {
+enum InitKind {
     Project {
         name: String,
 
@@ -55,7 +57,7 @@ pub enum InitKind {
     },
 }
 
-pub fn run() {
+pub(crate) fn run() {
     let _cli = Cli::parse();
 }
 
