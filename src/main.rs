@@ -5,6 +5,7 @@ mod loader;
 mod registry;
 mod resolver;
 mod types;
+mod validator;
 
 fn main() {
     cli::run();
