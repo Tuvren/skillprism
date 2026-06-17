@@ -1,6 +1,7 @@
 #![deny(clippy::all, clippy::pedantic, clippy::nursery)]
 
 mod cli;
+mod engine;
 mod loader;
 mod registry;
 mod resolver;
