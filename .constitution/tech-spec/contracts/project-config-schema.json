@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project-config-schema.json",
+  "title": "skillprism.yaml",
+  "description": "Project-level configuration file for skillprism (skillprism.yaml). Determines which harnesses to build for and where skills live.",
+  "type": "object",
+  "required": ["harnesses"],
+  "properties": {
+    "harnesses": {
+      "type": "array",
+      "description": "List of harness IDs to build for (e.g., claude, codex, opencode, factory, pi)",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9-]*$"
+      },
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "skills_dir": {
+      "type": "string",
+      "description": "Directory containing skill subdirectories (default: skills)",
+      "default": "skills"
+    },
+    "harnesses_dir": {
+      "type": "string",
+      "description": "Directory for user override harness definitions (default: harnesses)",
+      "default": "harnesses"
+    },
+    "name": {
+      "type": "string",
+      "description": "Optional project name used in manifest generation"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-definition-schema.json",
+  "title": "Harness Definition",
+  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, and sidecar templates.",
+  "type": "object",
+  "required": ["id", "name", "capabilities", "paths"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Canonical harness identifier (e.g., claude, codex, opencode)",
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name (e.g., Claude Code, Codex CLI)"
+    },
+    "version": {
+      "type": "string",
+      "description": "Version of this harness definition (SemVer string)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Feature flags for this harness",
+      "properties": {
+        "supports_subagent": { "type": "boolean" },
+        "requires_sidecar": { "type": "boolean" },
+        "requires_manifest": { "type": "boolean" },
+        "supports_frontmatter_extensions": { "type": "boolean" }
+      },
+      "required": ["supports_subagent"],
+      "additionalProperties": false
+    },
+    "paths": {
+      "type": "object",
+      "description": "Output paths for this harness",
+      "required": ["skill_dir", "skill_filename"],
+      "properties": {
+        "skill_dir": {
+          "type": "string",
+          "description": "Directory name relative to agent's skills root (e.g., skills, agents)"
+        },
+        "skill_filename": {
+          "type": "string",
+          "description": "Skill file name (e.g., SKILL.md, agent.md)"
+        },
+        "manifest_dir": {
+          "type": "string",
+          "description": "Directory for plugin manifest relative to project/user root (e.g., .claude)"
+        },
+        "manifest_filename": {
+          "type": "string",
+          "description": "Plugin manifest filename (e.g., marketplace.json)"
+        },
+        "project_root": {
+          "type": "string",
+          "description": "Project-level agent path relative to project root (e.g., .claude)"
+        },
+        "user_root": {
+          "type": "string",
+          "description": "User-level home path (e.g., ~/.claude)"
+        }
+      },
+      "additionalProperties": false
+    },
+    "macros": {
+      "type": "object",
+      "description": "Named content blocks referenced by templates as {{ harness.<name> }}",
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9_]*$": {
+          "oneOf": [
+            { "type": "string" },
+            {
+              "type": "object",
+              "description": "Macro with a body and optional list of arguments",
+              "properties": {
+                "content": { "type": "string" },
+                "arguments": {
+                  "type": "array",
+                  "items": { "type": "string" },
+                  "uniqueItems": true
+                }
+              },
+              "required": ["content"],
+              "additionalProperties": false
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "functions": {
+      "type": "object",
+      "description": "Custom template functions exposed to templates (e.g., skill_ref)",
+      "patternProperties": {
+        "^[a-z][a-zA-Z0-9_]*$": {
+          "type": "object",
+          "description": "Function definition with a signature description and optional inline template",
+          "properties": {
+            "description": { "type": "string" },
+            "returns": { "type": "string" },
+            "template": { "type": "string" }
+          },
+          "required": ["description"],
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "sidecar": {
+      "type": "object",
+      "description": "Optional sidecar file template generated alongside each skill",
+      "properties": {
+        "filename": { "type": "string" },
+        "template": { "type": "string" },
+        "output_dir": {
+          "type": "string",
+          "description": "Relative directory within the skill output dir (defaults to .)"
+        }
+      },
+      "required": ["filename", "template"],
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": "object",
+      "description": "Optional plugin manifest template",
+      "properties": {
+        "template": { "type": "string" }
+      },
+      "required": ["template"],
+      "additionalProperties": false
+    },
+    "skill_ref_pattern": {
+      "type": "string",
+      "description": "Pattern for referencing other skills (e.g., /{name}, {name}, /skill:{name}). {name} is replaced at runtime."
+    }
+  },
+  "additionalProperties": false
+}

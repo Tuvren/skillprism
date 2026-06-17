@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "skill-yaml-schema.json",
+  "title": "Skill YAML",
+  "description": "Per-skill configuration file (skill.yaml) — defines a single skill's metadata and template variables.",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Skill name (kebab-case, used for directory and skill references)"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief description of what the skill does"
+    },
+    "version": {
+      "type": "string",
+      "description": "Skill version (SemVer string)",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "variables": {
+      "type": "object",
+      "description": "Template variables available to SKILL.md.j2 during rendering. Structure is user-defined.",
+      "additionalProperties": true
+    },
+    "harnesses": {
+      "type": "object",
+      "description": "Per-harness overrides. Keys are harness IDs (e.g., claude, codex).",
+      "patternProperties": {
+        "^[a-z][a-z0-9-]*$": {
+          "type": "object",
+          "description": "Override specific fields for this harness",
+          "properties": {
+            "variables": {
+              "type": "object",
+              "description": "Harness-specific variable overrides (merged with top-level variables, harness wins)",
+              "additionalProperties": true
+            },
+            "macros": {
+              "type": "object",
+              "description": "Harness-specific macro overrides for this skill only",
+              "additionalProperties": { "type": "string" }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["name"],
+  "additionalProperties": false
+}

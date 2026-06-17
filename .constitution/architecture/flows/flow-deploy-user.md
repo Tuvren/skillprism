@@ -1,6 +1,6 @@
 # Flow: Deploy to User Scope
 
-**PRD Capability:** BD-2 — Accept a `--target` flag (project | user) that deploys generated output to the agent's installation path instead of the default project scope.
+**PRD Capability:** BD-2 — Accept a `--target` flag (project | user | dist) that deploys generated output to the agent's installation path instead of the default project scope.
 
 **Primary actors:** Skill Author (Solo), Team Lead
 

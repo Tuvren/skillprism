@@ -1,5 +1,9 @@
 # Architecture Changelog
 
+### v0.1.1 — 2026-06-17
+
+- Fixed BD-2 flag listing in `flows/flow-deploy-user.md`: `(project | user)` → `(project | user | dist)` to match PRD v0.1.1
+
 ## v0.1.0 — Initial Architecture
 
 - Established local-first compilation pipeline (pipe-and-filter) pattern
