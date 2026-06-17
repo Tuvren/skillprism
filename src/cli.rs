@@ -1,5 +1,3 @@
-#![allow(clippy::redundant_pub_crate)]
-
 use clap::{Parser, Subcommand, ValueEnum};
 
 #[derive(Parser)]
@@ -57,6 +55,7 @@ enum InitKind {
     },
 }
 
+#[allow(clippy::redundant_pub_crate)]
 pub(crate) fn run() {
     let _cli = Cli::parse();
 }

@@ -14,6 +14,10 @@ pub struct HarnessRegistry {
 }
 
 impl HarnessRegistry {
+    /// Returns an empty registry with no builtin harnesses loaded.
+    ///
+    /// Use [`with_builtins`](Self::with_builtins) or `Default::default()`
+    /// to include the five standard harnesses (claude, codex, opencode, factory, pi).
     pub const fn new() -> Self {
         Self {
             builtins: BTreeMap::new(),
@@ -83,9 +87,9 @@ impl HarnessRegistry {
             .get(name)
             .or_else(|| self.builtins.get(name))
             .cloned()
-            .ok_or_else(|| ProjectError::MissingField {
-                path: name.to_string(),
-                message: format!("Unknown harness: '{name}'. Available: {}", self.available()),
+            .ok_or_else(|| ProjectError::UnknownHarness {
+                name: name.to_string(),
+                message: format!("Available harnesses: {}", self.available()),
             })
     }
 
@@ -201,11 +205,11 @@ paths:
         let result = registry.resolve("nonexistent");
         assert!(result.is_err());
         match result.unwrap_err() {
-            ProjectError::MissingField { path, message } => {
-                assert_eq!(path, "nonexistent");
-                assert!(message.contains("Unknown harness"));
+            ProjectError::UnknownHarness { name, message } => {
+                assert_eq!(name, "nonexistent");
+                assert!(message.contains("Available harnesses"));
             }
-            e => panic!("expected MissingField error, got {e:?}"),
+            e => panic!("expected UnknownHarness error, got {e:?}"),
         }
     }
 }

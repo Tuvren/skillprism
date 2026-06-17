@@ -28,4 +28,8 @@ pub enum ProjectError {
     #[error("Project configuration not found: {path}")]
     #[diagnostic(help("Create a skillprism.yaml file in the project root"))]
     ConfigNotFound { path: String },
+
+    #[error("Unknown harness: {name}")]
+    #[diagnostic(help("{message}"))]
+    UnknownHarness { name: String, message: String },
 }
