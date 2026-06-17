@@ -30,19 +30,18 @@ impl HarnessRegistry {
     fn load_builtins(&mut self) {
         let harnesses = builtin_sources();
         for (id, yaml) in harnesses {
-            if let Ok(def) = yaml_serde::from_str::<HarnessDefinition>(yaml) {
-                self.builtins.insert(id.to_string(), def);
-            }
+            let def = yaml_serde::from_str::<HarnessDefinition>(yaml)
+                .unwrap_or_else(|e| panic!("builtin harness '{id}': malformed YAML: {e}"));
+            self.builtins.insert(id.to_string(), def);
         }
     }
 
-    pub fn load_user_overrides(&mut self, project_root: &Path) -> Result<(), ProjectError> {
-        let harnesses_dir = project_root.join("harnesses");
+    pub fn load_user_overrides(&mut self, harnesses_dir: &Path) -> Result<(), ProjectError> {
         if !harnesses_dir.exists() {
             return Ok(());
         }
 
-        for entry in std::fs::read_dir(&harnesses_dir).map_err(|e| ProjectError::ConfigRead {
+        for entry in std::fs::read_dir(harnesses_dir).map_err(|e| ProjectError::ConfigRead {
             path: harnesses_dir.to_string_lossy().to_string(),
             source: e,
         })? {
@@ -178,13 +177,17 @@ paths:
         std::fs::write(dir.join("harnesses/opencode.yaml"), override_yaml).unwrap();
 
         let mut registry = HarnessRegistry::with_builtins();
-        registry.load_user_overrides(&dir).unwrap();
+        registry.load_user_overrides(&dir.join("harnesses")).unwrap();
 
         let def = registry.resolve("opencode").unwrap();
         assert_eq!(def.name, "OpenCode Custom");
         assert_eq!(def.paths.project_scope_path, "custom/skills");
 
-        let _ = std::fs::remove_dir_all(&dir);
+        drop_dir(&dir);
+    }
+
+    fn drop_dir(path: &std::path::Path) {
+        let _ = std::fs::remove_dir_all(path);
     }
 
     #[test]
