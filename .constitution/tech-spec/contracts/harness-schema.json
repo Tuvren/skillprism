@@ -27,39 +27,67 @@
         "supports_subagent": { "type": "boolean" },
         "requires_sidecar": { "type": "boolean" },
         "requires_manifest": { "type": "boolean" },
-        "supports_frontmatter_extensions": { "type": "boolean" }
+        "frontmatter_mode": {
+          "type": "string",
+          "enum": ["lenient", "extended"],
+          "description": "How the harness validates SKILL.md frontmatter: lenient (ignores unknowns, accepts spec fields), extended (accepts spec + platform-specific extras)"
+        },
+        "name_max_length": {
+          "type": "integer",
+          "description": "Maximum length for skill name field (default: 64, Codex: 100)",
+          "minimum": 1,
+          "default": 64
+        },
+        "description_max_length": {
+          "type": "integer",
+          "description": "Maximum length for skill description field (spec: 1024, Codex: 500, Claude Code: 1536 combined with when_to_use)",
+          "minimum": 1,
+          "default": 1024
+        },
+        "supports_allowed_tools": {
+          "type": "boolean",
+          "description": "Whether the harness recognizes the allowed-tools field (spec: experimental; Claude Code: fully supported with string, comma-separated, or YAML list format)"
+        },
+        "supports_disable_model_invocation": {
+          "type": "boolean",
+          "description": "Whether the harness recognizes disable-model-invocation to hide from auto-load"
+        },
+        "supports_user_invocable_flag": {
+          "type": "boolean",
+          "description": "Whether the harness recognizes user-invocable to hide from / menu"
+        },
+        "extra_metadata_path": {
+          "type": "string",
+          "description": "Optional per-skill metadata file path relative to skill dir (e.g. agents/openai.yaml for Codex)"
+        }
       },
-      "required": ["supports_subagent"],
+      "required": ["supports_subagent", "frontmatter_mode"],
       "additionalProperties": false
     },
     "paths": {
       "type": "object",
-      "description": "Output paths for this harness",
-      "required": ["skill_dir", "skill_filename"],
+      "description": "Output path configuration for this harness",
+      "required": ["project_scope_path", "user_scope_path", "skill_filename"],
       "properties": {
-        "skill_dir": {
+        "project_scope_path": {
           "type": "string",
-          "description": "Directory name relative to agent's skills root (e.g., skills, agents)"
+          "description": "Project-scoped skill output directory relative to project root (e.g., .claude/skills, .agents/skills, .opencode/skills, .pi/skills, .factory/skills)"
+        },
+        "user_scope_path": {
+          "type": "string",
+          "description": "User-scoped skill output directory relative to home (e.g., ~/.claude/skills, ~/.codex/skills, ~/.config/opencode/skills, ~/.pi/agent/skills, ~/.factory/skills)"
         },
         "skill_filename": {
           "type": "string",
-          "description": "Skill file name (e.g., SKILL.md, agent.md)"
+          "description": "Skill file name (e.g., SKILL.md, skill.mdx for Factory, agent.md)"
         },
-        "manifest_dir": {
+        "manifest_scope_path": {
           "type": "string",
-          "description": "Directory for plugin manifest relative to project/user root (e.g., .claude)"
+          "description": "Directory for plugin manifest relative to scope root (e.g., .claude for Claude plugin). Omit if harness has no manifest system."
         },
         "manifest_filename": {
           "type": "string",
-          "description": "Plugin manifest filename (e.g., marketplace.json)"
-        },
-        "project_root": {
-          "type": "string",
-          "description": "Project-level agent path relative to project root (e.g., .claude)"
-        },
-        "user_root": {
-          "type": "string",
-          "description": "User-level home path (e.g., ~/.claude)"
+          "description": "Plugin manifest filename (e.g., plugin.json, marketplace.json). Omit if harness has no manifest system."
         }
       },
       "additionalProperties": false
@@ -108,32 +136,62 @@
       },
       "additionalProperties": false
     },
-    "sidecar": {
-      "type": "object",
-      "description": "Optional sidecar file template generated alongside each skill",
-      "properties": {
-        "filename": { "type": "string" },
-        "template": { "type": "string" },
-        "output_dir": {
-          "type": "string",
-          "description": "Relative directory within the skill output dir (defaults to .)"
-        }
-      },
-      "required": ["filename", "template"],
-      "additionalProperties": false
+    "sidecars": {
+      "type": "array",
+      "description": "Sidecar file templates generated alongside each skill (zero or more)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string" },
+          "template": { "type": "string" },
+          "output_dir": {
+            "type": "string",
+            "description": "Relative directory within the skill output dir (defaults to .)"
+          }
+        },
+        "required": ["filename", "template"],
+        "additionalProperties": false
+      }
     },
     "manifest": {
       "type": "object",
-      "description": "Optional plugin manifest template",
+      "description": "Optional plugin manifest template with platform-specific format",
       "properties": {
-        "template": { "type": "string" }
+        "format": {
+          "type": "string",
+          "enum": ["claude-plugin", "codex-plugin"],
+          "description": "Which platform manifest format this template targets"
+        },
+        "template": {
+          "type": "string",
+          "description": "Template string rendered with skill variables to produce the manifest entry"
+        }
       },
-      "required": ["template"],
+      "required": ["format", "template"],
       "additionalProperties": false
     },
     "skill_ref_pattern": {
       "type": "string",
       "description": "Pattern for referencing other skills (e.g., /{name}, {name}, /skill:{name}). {name} is replaced at runtime."
+    },
+    "discovery": {
+      "type": "object",
+      "description": "Discovery path support for this harness",
+      "properties": {
+        "project": {
+          "type": "boolean",
+          "description": "Whether the harness discovers skills from project-scoped directories"
+        },
+        "user": {
+          "type": "boolean",
+          "description": "Whether the harness discovers skills from user home-scoped directories"
+        },
+        "plugin": {
+          "type": "boolean",
+          "description": "Whether the harness discovers skills from plugin/package-managed directories"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false

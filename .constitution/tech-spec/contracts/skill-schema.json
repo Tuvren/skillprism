@@ -2,30 +2,120 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "skill-yaml-schema.json",
   "title": "Skill YAML",
-  "description": "Per-skill configuration file (skill.yaml) — defines a single skill's metadata and template variables.",
+  "description": "Per-skill configuration file (skill.yaml) — defines a single skill's metadata and template variables. Note: this is a build-time config file, NOT the output SKILL.md frontmatter. Fields are processed internally; only the rendered template becomes SKILL.md.",
   "type": "object",
   "properties": {
     "name": {
       "type": "string",
-      "description": "Skill name (kebab-case, used for directory and skill references)"
+      "description": "Skill name (lowercase letters, digits, and hyphens only; used for directory and skill references)",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 64
     },
     "description": {
       "type": "string",
-      "description": "Brief description of what the skill does"
+      "description": "Brief description of what the skill does and when to use it",
+      "maxLength": 1024
     },
     "version": {
       "type": "string",
-      "description": "Skill version (SemVer string)",
+      "description": "Skill version (SemVer string, used internally; stripped from rendered output unless mapped via metadata)",
       "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "license": {
+      "type": "string",
+      "description": "License name or reference to a bundled license file (maps to SKILL.md frontmatter)"
+    },
+    "compatibility": {
+      "type": "string",
+      "description": "Environment requirements (max 500 chars). Indicates intended product, system packages, network access, etc. (maps to SKILL.md frontmatter)",
+      "maxLength": 500
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Arbitrary key-value mapping for additional metadata (maps to SKILL.md frontmatter). Keys are strings, values are strings.",
+      "additionalProperties": { "type": "string" }
+    },
+    "allowed-tools": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Pre-approved tools the skill may use. Accepts space/comma-separated string or YAML list (experimental in spec, supported in Claude Code). Maps to SKILL.md frontmatter."
     },
     "variables": {
       "type": "object",
       "description": "Template variables available to SKILL.md.j2 during rendering. Structure is user-defined.",
       "additionalProperties": true
     },
+    "when_to_use": {
+      "type": "string",
+      "description": "Additional trigger phrases or example requests (Claude Code). Appended to description in skill listing."
+    },
+    "argument-hint": {
+      "type": "string",
+      "description": "Autocomplete hint shown after skill name (e.g., [issue-number]) (Claude Code)"
+    },
+    "arguments": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Named positional arguments for $name substitution in skill content (Claude Code). Accepts space-separated string or YAML list."
+    },
+    "disable-model-invocation": {
+      "type": "boolean",
+      "default": false,
+      "description": "When true, prevents agent from automatically loading this skill (Claude Code, Factory, Pi). Use for manual-only workflows."
+    },
+    "user-invocable": {
+      "type": "boolean",
+      "default": true,
+      "description": "When false, hides from / command menu (Claude Code, Factory)"
+    },
+    "disallowed-tools": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Tools removed from agent's available pool while this skill is active (Claude Code). Accepts space/comma-separated string or YAML list."
+    },
+    "model": {
+      "type": "string",
+      "description": "Model override for skill execution (Claude Code). E.g., claude-sonnet-4-20250514."
+    },
+    "effort": {
+      "type": "string",
+      "enum": ["low", "medium", "high", "xhigh", "max"],
+      "description": "Effort level for skill execution (Claude Code)"
+    },
+    "context": {
+      "type": "string",
+      "enum": ["fork"],
+      "description": "When set to fork, runs skill in a separate subagent context (Claude Code)"
+    },
+    "agent": {
+      "type": "string",
+      "description": "Subagent type to use when context is set to fork (Claude Code)"
+    },
+    "hooks": {
+      "type": "object",
+      "description": "Lifecycle hooks scoped to this skill (Claude Code)"
+    },
+    "paths": {
+      "oneOf": [
+        { "type": "string" },
+        { "type": "array", "items": { "type": "string" } }
+      ],
+      "description": "Glob patterns limiting automatic activation (Claude Code)"
+    },
+    "shell": {
+      "type": "string",
+      "enum": ["bash", "powershell"],
+      "description": "Shell for command injection in this skill (Claude Code)"
+    },
     "harnesses": {
       "type": "object",
-      "description": "Per-harness overrides. Keys are harness IDs (e.g., claude, codex).",
+      "description": "Per-harness overrides (build-time config, stripped from rendered output). Keys are harness IDs (e.g., claude, codex).",
       "patternProperties": {
         "^[a-z][a-z0-9-]*$": {
           "type": "object",
@@ -48,6 +138,6 @@
       "additionalProperties": false
     }
   },
-  "required": ["name"],
+  "required": ["name", "description"],
   "additionalProperties": false
 }

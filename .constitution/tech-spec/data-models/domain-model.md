@@ -20,25 +20,66 @@ struct SkillGroup {
 }
 
 /// Top-level project configuration parsed from skillprism.yaml
+/// All fields use #[serde(default)] with sensible defaults:
+/// - skills_dir = PathBuf::from("skills")
+/// - harnesses_dir = PathBuf::from("harnesses")
 struct ProjectConfig {
-    /// Project-level skills directory (default: "skills")
-    skills_dir: PathBuf,
     /// Selected harness IDs (e.g., ["claude", "codex", "opencode"])
     harnesses: Vec<String>,
-    /// Project name (used for manifest generation)
-    name: Option<String>,
+    /// Project-level skills directory (default: "skills")
+    skills_dir: PathBuf,
     /// User harness overrides directory (default: "harnesses")
     harnesses_dir: PathBuf,
+    /// Project name (used for manifest generation)
+    name: Option<String>,
 }
 
 /// A single skill after configuration loading and variable resolution
 struct SkillModel {
     /// Canonical skill name (from skill.yaml or directory name)
+    /// Constraints: 1-64 chars (or per-harness max), lowercase letters/digits/hyphens only,
+    /// no leading/trailing/consecutive hyphens, must match parent directory name
     name: String,
-    /// Description (from skill.yaml)
-    description: Option<String>,
-    /// Version (from skill.yaml)
+    /// Parent directory name (for name-vs-directory validation per Agent Skills spec)
+    directory_name: String,
+    /// Description (from skill.yaml) — what the skill does and when to use it
+    description: String,
+    /// Version (from skill.yaml, used internally; not part of output SKILL.md frontmatter)
     version: Option<String>,
+    /// License (from skill.yaml, maps to SKILL.md frontmatter)
+    license: Option<String>,
+    /// Environment requirements (from skill.yaml, maps to SKILL.md frontmatter)
+    compatibility: Option<String>,
+    /// Arbitrary key-value metadata (from skill.yaml, maps to SKILL.md frontmatter)
+    metadata: BTreeMap<String, String>,
+    /// Pre-approved tools (from skill.yaml, maps to SKILL.md frontmatter, experimental)
+    allowed_tools: Option<String>,
+    /// Additional trigger phrases (Claude Code: when_to_use)
+    when_to_use: Option<String>,
+    /// Autocomplete hint (Claude Code: argument-hint)
+    argument_hint: Option<String>,
+    /// Positional arguments for $name substitution (Claude Code: arguments)
+    arguments: Option<Vec<String>>,
+    /// Prevent automatic loading (Claude Code, Factory, Pi: disable-model-invocation)
+    disable_model_invocation: Option<bool>,
+    /// Hide from / menu (Claude Code, Factory: user-invocable)
+    user_invocable: Option<bool>,
+    /// Tools removed from agent's pool while skill active (Claude Code: disallowed-tools)
+    disallowed_tools: Option<Vec<String>>,
+    /// Model override (Claude Code: model)
+    model_override: Option<String>,
+    /// Effort level (Claude Code: effort)
+    effort: Option<String>,
+    /// Fork context (Claude Code: context)
+    context_fork: bool,
+    /// Subagent type for fork context (Claude Code: agent)
+    agent: Option<String>,
+    /// Lifecycle hooks (Claude Code: hooks)
+    hooks: Option<BTreeMap<String, Value>>,
+    /// Glob patterns for auto-activation (Claude Code: paths)
+    activation_paths: Option<Vec<String>>,
+    /// Shell for command injection (Claude Code: shell)
+    shell: Option<String>,
     /// Resolved variables (group + skill merged, skill wins)
     variables: BTreeMap<String, Value>,
     /// Path to the SKILL.md.j2 template file
@@ -65,6 +106,8 @@ struct HarnessDefinition {
     id: String,
     /// Human-readable name
     name: String,
+    /// Version of this harness definition (SemVer)
+    version: Option<String>,
     /// Capability flags
     capabilities: HarnessCapabilities,
     /// Installation and output paths
@@ -73,28 +116,73 @@ struct HarnessDefinition {
     macros: BTreeMap<String, Macro>,
     /// Custom template functions
     functions: BTreeMap<String, FunctionDef>,
-    /// Optional sidecar definition
-    sidecar: Option<SidecarDef>,
+    /// Sidecar file templates generated alongside each skill (may be multiple)
+    sidecars: Vec<SidecarDef>,
     /// Optional manifest template
     manifest: Option<ManifestDef>,
     /// Pattern for skill references (e.g., "/{name}")
     skill_ref_pattern: Option<String>,
+    /// Discovery path support for this harness
+    discovery: Option<DiscoveryConfig>,
+}
+
+/// Which discovery scopes a harness supports
+struct DiscoveryConfig {
+    project: bool,
+    user: bool,
+    plugin: bool,
+}
+
+/// How the harness validates SKILL.md frontmatter fields
+enum FrontmatterMode {
+    /// Spec fields only, ignores unknown fields
+    /// Platforms: OpenCode, Codex, Pi, Factory
+    Lenient,
+    /// Spec + platform-specific extended fields
+    /// Platforms: Claude Code only
+    Extended,
 }
 
 struct HarnessCapabilities {
     supports_subagent: bool,
     requires_sidecar: bool,
     requires_manifest: bool,
-    supports_frontmatter_extensions: bool,
+    frontmatter_mode: FrontmatterMode,
+    /// Maximum length for skill name field (spec default: 64, Codex: 100)
+    name_max_length: usize,
+    /// Maximum length for skill description field (spec default: 1024, Codex: 500)
+    description_max_length: usize,
+    /// Whether the harness supports the experimental `allowed-tools` field
+    supports_allowed_tools: bool,
+    /// Whether the harness recognizes `disable-model-invocation` (hide from auto-load)
+    supports_disable_model_invocation: bool,
+    /// Whether the harness recognizes `user-invocable` (hide from / menu)
+    supports_user_invocable_flag: bool,
+    /// Optional per-skill metadata file path relative to the skill dir
+    /// e.g. "agents/openai.yaml" for Codex
+    extra_metadata_path: Option<String>,
 }
 
+/// Output path configuration for a single harness
 struct HarnessPaths {
-    skill_dir: String,
+    /// Project-scoped output directory relative to project root
+    /// e.g. ".claude/skills" (Claude), ".agents/skills" (Codex),
+    ///      ".opencode/skills" (OpenCode), ".pi/skills" (Pi),
+    ///      ".factory/skills" (Factory)
+    project_scope_path: String,
+    /// User-scoped output directory relative to home
+    /// e.g. "~/.claude/skills" (Claude), "~/.codex/skills" (Codex),
+    ///      "~/.config/opencode/skills" (OpenCode), "~/.pi/agent/skills" (Pi),
+    ///      "~/.factory/skills" (Factory)
+    user_scope_path: String,
+    /// Skill filename (e.g. "SKILL.md", "agent.md")
     skill_filename: String,
-    manifest_dir: Option<String>,
+    /// Directory for plugin manifest relative to project/user scope root (nullable)
+    /// e.g. ".claude" for Claude plugin manifest
+    manifest_scope_path: Option<String>,
+    /// Plugin manifest filename (nullable)
+    /// e.g. "plugin.json" for Claude, "marketplace.json" for Codex
     manifest_filename: Option<String>,
-    project_root: Option<String>,
-    user_root: Option<String>,
 }
 
 enum Macro {
@@ -116,7 +204,18 @@ struct SidecarDef {
     output_dir: Option<String>,
 }
 
+/// Plugin manifest format identifier
+enum ManifestFormat {
+    /// Claude Code plugin manifest (plugin.json)
+    ClaudePlugin,
+    /// Codex marketplace manifest (marketplace.json or personal-marketplace.json)
+    CodexPlugin,
+}
+
 struct ManifestDef {
+    /// Which platform format this manifest targets
+    format: ManifestFormat,
+    /// Template string rendered with skill variables
     template: String,
 }
 
@@ -144,8 +243,8 @@ struct SkillError {
 struct HarnessOutput {
     /// The rendered SKILL.md content
     skill_content: String,
-    /// Sidecar file content (if harness.requires_sidecar)
-    sidecar: Option<SidecarOutput>,
+    /// Sidecar files generated alongside each skill (zero or more)
+    sidecars: Vec<SidecarOutput>,
     /// Manifest entry for this skill (if harness.requires_manifest)
     manifest_entry: Option<String>,
 }
