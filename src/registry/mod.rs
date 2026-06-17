@@ -60,11 +60,16 @@ impl HarnessRegistry {
                         path: path.to_string_lossy().to_string(),
                         source: e,
                     })?;
-                if let Ok(def) = yaml_serde::from_str::<HarnessDefinition>(&content) {
-                    let id = def.id.clone();
-                    self.builtins.remove(&id);
-                    self.user_overrides.insert(id, def);
-                }
+                let def = yaml_serde::from_str::<HarnessDefinition>(&content).map_err(|_| {
+                    ProjectError::YamlParse {
+                        path: path.to_string_lossy().to_string(),
+                        line: 0,
+                        message: format!("Failed to parse harness override: {}", path.display()),
+                    }
+                })?;
+                let id = def.id.clone();
+                self.builtins.remove(&id);
+                self.user_overrides.insert(id, def);
             }
         }
 
