@@ -30,6 +30,11 @@
       "description": "Environment requirements (max 500 chars). Indicates intended product, system packages, network access, etc. (maps to SKILL.md frontmatter)",
       "maxLength": 500
     },
+    "required-capabilities": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Harness capabilities this skill requires (e.g., subagent, sidecar, manifest, allowed-tools). The Harness Resolver checks these against the selected harness definition and reports MissingCapability errors for any that aren't satisfied."
+    },
     "metadata": {
       "type": "object",
       "description": "Arbitrary key-value mapping for additional metadata (maps to SKILL.md frontmatter). Keys are strings, values are strings.",

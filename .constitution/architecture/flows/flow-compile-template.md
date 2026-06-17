@@ -12,6 +12,7 @@ sequenceDiagram
   participant CLI as CLI Entrypoint
   participant Loader as Project Loader
   participant Registry as Harness Registry
+  participant Resolver as Resolver
   participant Valid8 as Validator
   participant Engine as Template Engine
   participant Router as Output Router
@@ -21,21 +22,26 @@ sequenceDiagram
   CLI->>Loader: load(projectRoot)
   Loader->>FS: read skillprism.yaml, skill.yaml tree
   FS-->>Loader: project config + skill hierarchy
-  Loader->>Registry: resolveHarness(name, userOverrides)
-  Registry-->>Loader: merged HarnessDefinition
-  Loader-->>CLI: resolved ProjectModel
+  Loader-->>CLI: ProjectModel
 
-  CLI->>Valid8: validate(model)
-  Valid8->>Loader: get all skills
-  Valid8->>Registry: check macro references
-  Valid8-->>CLI: validated model (or errors)
+  CLI->>Resolver: resolve(projectModel)
+  Resolver->>Registry: resolve(name) for each harness
+  Registry-->>Resolver: HarnessDefinition[]
+  Resolver-->>CLI: Vec<ResolvedPair>
+
+  CLI->>Valid8: validate(pairs)
+  Valid8->>Valid8: undeclared_variables() via MiniJinja
+  Valid8->>Valid8: scan for harness.<name> refs
+  Valid8-->>CLI: validated (or errors)
 
   CLI->>Engine: render(skill.template, variables, macros)
   Engine-->>CLI: rendered SKILL.md
 
   CLI->>Router: write(rendered, targetScope)
-  Router->>Registry: getInstallationPaths(harness)
-  Router->>FS: atomicWrite(targetPath + skillName/SKILL.md)
+  Router->>Router: resolve path per scope
+  Router->>FS: atomicWrite(.tmp → rename)
   FS-->>Router: confirmed
   Router-->>User: build complete
 ```
+
+(End of file - total 43 lines)

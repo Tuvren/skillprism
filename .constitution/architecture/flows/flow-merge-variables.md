@@ -12,6 +12,7 @@ sequenceDiagram
   participant CLI as CLI Entrypoint
   participant Loader as Project Loader
   participant Registry as Harness Registry
+  participant Resolver as Resolver
   participant Valid8 as Validator
   participant FS as Filesystem
 
@@ -30,9 +31,17 @@ sequenceDiagram
   Loader->>Loader: merge(parent, child) -> {theme: dark, lang: fr, timeout: 30}
   Note over Loader: child wins on collision (lang: fr)
 
-  Loader-->>CLI: resolved model with merged variables
-  CLI->>Valid8: validate(model)
+  Loader-->>CLI: ProjectModel with merged variables
+  CLI->>Resolver: resolve(projectModel)
+  Resolver->>Registry: build resolved pairs
+  Registry-->>Resolver: harness definitions
+  Resolver-->>CLI: Vec<ResolvedPair>
+  CLI->>Valid8: validate(pairs)
+  Valid8->>Valid8: undeclared_variables() via MiniJinja
+  Valid8->>Valid8: scan for harness.<name> refs
   Valid8-->>CLI: validated
 
   CLI->>CLI: continue to render with resolved variables
 ```
+
+(End of file - total 42 lines)

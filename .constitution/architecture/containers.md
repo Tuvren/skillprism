@@ -1,6 +1,6 @@
 # Logical Containers
 
-**Version:** v0.1.0
+**Version:** v0.2.0
 
 ## Container Diagram
 
@@ -15,9 +15,10 @@ C4Container
     Container(cli, "CLI Entrypoint", "CLI arg parser", "Parse args, dispatch to build/validate/init pipeline")
     Container(loader, "Project Loader", "Library", "Discover skill hierarchy, load YAML configs, resolve group-level variables")
     Container(registry, "Harness Registry", "Library", "Manage built-in and user-override harness definitions")
-    Container(validator, "Validator", "Library", "Batch-check all skills for syntax errors, missing macros, undefined variables")
+    Container(resolver, "Harness Resolver", "Library", "Pair each skill with its resolved harness definition, check capability compatibility")
+    Container(validator, "Validator", "Library", "Batch-check all resolved skill-harness pairs for syntax errors, missing macros, undefined variables")
     Container(engine, "Template Engine", "Library", "Render MiniJinja templates with resolved variables and macros")
-    Container(router, "Output Router", "Library", "Resolve target path (project/user/dist), write with safety checks")
+    Container(router, "Output Router", "Library", "Resolve target path (project/user/dist), write with atomic safety")
     Container(scaffolder, "Scaffolder", "Library", "Generate project or skill scaffolding")
   }
 
@@ -30,19 +31,20 @@ C4Container
   Rel(cli, scaffolder, "Dispatches init", "scaffold type, path")
 
   Rel(loader, fs, "Reads", "skillprism.yaml, skill.yaml, harnesses/*.yaml")
-  Rel(loader, registry, "Resolves harness", "harness name")
 
   Rel(registry, fs, "Reads (optional)", "user harness overrides")
 
-  Rel(validator, loader, "Validates", "project model")
-  Rel(validator, registry, "Checks macros against", "resolved harness definitions")
+  Rel(resolver, loader, "Pairs skills with", "project model")
+  Rel(resolver, registry, "Resolves against", "harness registry")
 
-  Rel(engine, validator, "Renders validated", "project model")
-  Rel(engine, registry, "Uses macros from", "resolved harness definitions")
+  Rel(validator, resolver, "Validates", "resolved skill-harness pairs")
+  Rel(validator, fs, "Reads", "template files for validation")
 
-  Rel(router, engine, "Routes rendered output", "harness-specific files")
-  Rel(router, registry, "Resolves paths from", "harness installation paths")
-  Rel(router, fs, "Writes", "skill files, sidecars, manifests")
+  Rel(engine, validator, "Renders validated", "skill-harness pairs")
+  Rel(engine, fs, "Reads", "template files for rendering")
+
+  Rel(router, engine, "Routes rendered output", "harness output per pair")
+  Rel(router, fs, "Writes", "skill files, sidecars, manifests atomically")
 
   Rel(scaffolder, fs, "Creates", "project files")
 ```
@@ -79,35 +81,45 @@ C4Container
 | **Outputs** | Resolved `HarnessDefinition` (built-in + user overrides applied) |
 | **Depends on** | Compiled-in harness data, Project Loader (for user overrides) |
 
+### Harness Resolver
+
+| Field | Value |
+| :--- | :--- |
+| **Logical type** | Library boundary |
+| **Responsibility** | For every skill in the project model, match it to the harness definition referenced in the project config. Check that each skill's `required_capabilities` are satisfied by the harness. Produce resolved pairs (skill + harness definition) for downstream stages. Collect all resolution errors across all skills before returning. |
+| **Inputs** | Project model with skills and configured harness names, Harness Registry |
+| **Outputs** | List of `ResolvedPair` (skill + harness), or list of `ResolveError` |
+| **Depends on** | Project Loader, Harness Registry |
+
 ### Validator
 
 | Field | Value |
 | :--- | :--- |
 | **Logical type** | Library boundary |
-| **Responsibility** | For every skill in the project model: check template syntax by attempting to parse it, verify all macro references resolve against the assigned harness definition, verify all variable references resolve against the skill's resolved variable set. Collect all errors across all skills. Return a validated model if no errors, or a structured error report. |
-| **Inputs** | Project model with resolved variables and harness definitions |
-| **Outputs** | Validated project model (if clean) or structured error list |
-| **Depends on** | Project Loader, Harness Registry, Template Engine (for parse checks) |
+| **Responsibility** | For every resolved skill-harness pair: read the template file and check MiniJinja syntax by attempting to parse it, use MiniJinja's `undeclared_variables()` to find undefined variable references, scan template text for `harness.<macro_name>` refs and verify each resolves against the harness definition. Collect all errors across all pairs. Return valid pairs alongside errors (collect-all-errors pattern). |
+| **Inputs** | List of `ResolvedPair` from Resolver |
+| **Outputs** | `ValidationOutcome` — list of valid pairs + list of `ValidationError` |
+| **Depends on** | Harness Resolver, Filesystem (template reads) |
 
 ### Template Engine
 
 | Field | Value |
 | :--- | :--- |
 | **Logical type** | Library boundary |
-| **Responsibility** | Render a MiniJinja template string with the provided variable context and harness macro definitions. Return the rendered output. |
-| **Inputs** | Template content, variable map, macro map |
-| **Outputs** | Rendered string |
-| **Depends on** | Template rendering engine |
+| **Responsibility** | For a resolved skill-harness pair: read the template, build a MiniJinja context with skill variables (name, description, custom variables) and the `harness` object (id, name, version, macros as strings), register custom helpers (`skill_ref`), and render skill content, sidecars, and manifest entry. |
+| **Inputs** | `ResolvedPair` (skill + harness) |
+| **Outputs** | `HarnessOutput` (skill_content, sidecars, manifest_entry) or `EngineError` |
+| **Depends on** | Harness Resolver, Filesystem (template reads), MiniJinja runtime |
 
 ### Output Router
 
 | Field | Value |
 | :--- | :--- |
 | **Logical type** | Library boundary |
-| **Responsibility** | Resolve the target output scope (project paths vs user home paths vs `dist/`) using the harness definition's installation path table. For each skill and harness, determine the exact output directory and filename. Write the rendered `SKILL.md`, sidecar files, and plugin manifests. Never write outside the resolved scope. Require confirmation before overwriting existing files unless `--force` is set. Perform atomic writes (temp file → rename). |
-| **Inputs** | Rendered files per skill per harness, target scope, skill metadata, harness definitions |
-| **Outputs** | Files written to disk |
-| **Depends on** | Harness Registry (for installation paths), Filesystem |
+| **Responsibility** | Resolve the target output path for a resolved skill-harness pair based on target scope (project paths vs user home paths vs `dist/`) using the harness definition's installation path table. Write the rendered `SKILL.md`, sidecar files, and manifest entries. Copy shared asset directories (references/, scripts/). Perform atomic writes (temp `.tmp` file → `rename`). Create parent directories as needed. |
+| **Inputs** | `ResolvedPair`, `HarnessOutput`, `TargetScope`, project root path |
+| **Outputs** | `WrittenFiles` (skill_path, sidecar_paths) or `RouterError` |
+| **Depends on** | Harness Resolver (for paths), Filesystem |
 
 ### Scaffolder
 
