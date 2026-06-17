@@ -61,6 +61,7 @@ pub struct SkillModel {
     pub hooks: Option<BTreeMap<String, yaml_serde::Value>>,
     pub activation_paths: Option<Vec<String>>,
     pub shell: Option<String>,
+    pub required_capabilities: Vec<String>,
     pub variables: BTreeMap<String, yaml_serde::Value>,
     pub template_path: PathBuf,
     pub asset_dirs: Vec<PathBuf>,

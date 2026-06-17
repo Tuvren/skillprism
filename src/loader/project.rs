@@ -141,6 +141,7 @@ impl ProjectLoader {
             hooks: None,
             activation_paths: None,
             shell: None,
+            required_capabilities: Vec::new(),
             variables: merged_variables.clone(),
             template_path: dir.join("SKILL.md.j2"),
             asset_dirs: Vec::new(),
@@ -184,6 +185,7 @@ impl ProjectLoader {
             skill.hooks = skill_config.hooks;
             skill.activation_paths = skill_config.paths;
             skill.shell = skill_config.shell;
+            skill.required_capabilities = skill_config.required_capabilities.unwrap_or_default();
 
             if let Some(vars) = skill_config.variables {
                 for (k, v) in vars {
@@ -256,6 +258,8 @@ struct SkillYamlRaw {
     hooks: Option<BTreeMap<String, yaml_serde::Value>>,
     paths: Option<Vec<String>>,
     shell: Option<String>,
+    #[serde(rename = "required-capabilities")]
+    required_capabilities: Option<Vec<String>>,
     variables: Option<BTreeMap<String, yaml_serde::Value>>,
 }
 

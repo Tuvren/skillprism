@@ -3,6 +3,7 @@
 mod cli;
 mod loader;
 mod registry;
+mod resolver;
 mod types;
 
 fn main() {
