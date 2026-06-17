@@ -1,5 +1,13 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.2.0 — 2026-06-17 — Epic A Implementation
+
+- Epic A (Foundation) fully implemented: 4 milestones, 9 story points
+- Added `thiserror = "2"` and `serde = "1"` to BOM; enabled `features = ["derive"]` on relevant crates
+- Implemented `src/registry/types.rs` — full `HarnessDefinition` with all fields per harness-schema.json
+- Tightened crate-root clippy to `#![deny(all, pedantic, nursery)]` (exceeds guidelines baseline)
+- No structural API contract deviations from Phase 0/1 TechSpec
+
 ### v0.1.1 — 2026-06-17
 
 - Added ADR-006 (yaml_serde for YAML deserialization) and ADR-007 (miette for error diagnostics)

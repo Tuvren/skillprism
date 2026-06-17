@@ -1,0 +1,28 @@
+id: codex
+name: Codex CLI
+version: 0.1.0
+capabilities:
+  supports_subagent: true
+  requires_sidecar: true
+  requires_manifest: true
+  frontmatter_mode: lenient
+  name_max_length: 100
+  description_max_length: 500
+  supports_allowed_tools: false
+  supports_disable_model_invocation: false
+  supports_user_invocable_flag: false
+  extra_metadata_path: agents/openai.yaml
+paths:
+  project_scope_path: .agents/skills
+  user_scope_path: .codex/skills
+  skill_filename: SKILL.md
+  manifest_scope_path: .agents
+  manifest_filename: marketplace.json
+skill_ref_pattern: /{name}
+discovery:
+  project: true
+  user: true
+  plugin: true
+macros:
+  subagent_guide:
+    content: "## Subagent Instructions\n\nCodex CLI invokes agents in a separate agent orchestration context."
