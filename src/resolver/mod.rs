@@ -115,7 +115,7 @@ fn harness_has_capability(harness: &HarnessDefinition, capability: &str) -> bool
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
     use std::collections::BTreeMap;
@@ -124,7 +124,7 @@ mod tests {
         HarnessRegistry::with_builtins()
     }
 
-    fn test_skill(name: &str, required_capabilities: Vec<String>) -> SkillModel {
+    pub fn test_skill(name: &str, required_capabilities: Vec<String>) -> SkillModel {
         SkillModel {
             name: name.to_string(),
             directory_name: name.to_string(),
