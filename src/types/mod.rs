@@ -1,4 +1,4 @@
-#![allow(clippy::redundant_pub_crate, unused_imports)]
+#![allow(unused_imports)]
 
 mod error;
 mod harness;

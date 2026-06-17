@@ -59,11 +59,14 @@ impl HarnessRegistry {
                         path: path.to_string_lossy().to_string(),
                         source: e,
                     })?;
-                let def = yaml_serde::from_str::<HarnessDefinition>(&content).map_err(|_| {
+                let def = yaml_serde::from_str::<HarnessDefinition>(&content).map_err(|e| {
                     ProjectError::YamlParse {
                         path: path.to_string_lossy().to_string(),
-                        line: 0,
-                        message: format!("Failed to parse harness override: {}", path.display()),
+                        line: e.location().map_or(0, |l| l.line()),
+                        message: format!(
+                            "Failed to parse harness override: {} — {e}",
+                            path.display()
+                        ),
                     }
                 })?;
                 let id = def.id.clone();
@@ -177,7 +180,9 @@ paths:
         std::fs::write(dir.join("harnesses/opencode.yaml"), override_yaml).unwrap();
 
         let mut registry = HarnessRegistry::with_builtins();
-        registry.load_user_overrides(&dir.join("harnesses")).unwrap();
+        registry
+            .load_user_overrides(&dir.join("harnesses"))
+            .unwrap();
 
         let def = registry.resolve("opencode").unwrap();
         assert_eq!(def.name, "OpenCode Custom");
