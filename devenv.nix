@@ -2,10 +2,7 @@
 {
   packages = with pkgs; [ just ];
 
-  languages.rust = {
-    enable = true;
-    channel = "stable";
-  };
+  languages.rust.enable = true;
 
   enterShell = ''
     echo "skillprism dev environment ready"
