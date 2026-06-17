@@ -1,0 +1,10 @@
+[package]
+name = "skillprism"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Build-time compiler for multi-harness agent skills"
+license = "MIT"
+repository = "https://github.com/tuvren/skillprism"
+
+[dependencies]
