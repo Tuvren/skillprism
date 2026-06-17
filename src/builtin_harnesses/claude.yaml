@@ -1,0 +1,29 @@
+id: claude
+name: Claude Code
+version: 0.1.0
+capabilities:
+  supports_subagent: true
+  requires_sidecar: false
+  requires_manifest: true
+  frontmatter_mode: extended
+  name_max_length: 64
+  description_max_length: 1536
+  supports_allowed_tools: true
+  supports_disable_model_invocation: true
+  supports_user_invocable_flag: true
+paths:
+  project_scope_path: .claude/skills
+  user_scope_path: .claude/skills
+  skill_filename: SKILL.md
+  manifest_scope_path: .claude
+  manifest_filename: plugin.json
+skill_ref_pattern: /{name}
+discovery:
+  project: true
+  user: true
+  plugin: false
+macros:
+  hints:
+    content: "## Hints\n\n- Refer to the Agent Skills specification for SKILL.md format\n- Use `when_to_use` to specify trigger phrases\n- Set `user-invocable: false` to hide from `/` menu"
+  subagent_guide:
+    content: "## Subagent Instructions\n\nWhen invoked as a subagent, the skill receives its context through standard Claude Code mechanisms."

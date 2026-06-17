@@ -1,0 +1,25 @@
+id: pi
+name: Pi
+version: 0.1.0
+capabilities:
+  supports_subagent: false
+  requires_sidecar: true
+  requires_manifest: false
+  frontmatter_mode: lenient
+  name_max_length: 64
+  description_max_length: 1024
+  supports_allowed_tools: false
+  supports_disable_model_invocation: true
+  supports_user_invocable_flag: false
+paths:
+  project_scope_path: .pi/skills
+  user_scope_path: .pi/agent/skills
+  skill_filename: SKILL.md
+skill_ref_pattern: /{name}
+discovery:
+  project: true
+  user: true
+  plugin: false
+macros:
+  subagent_guide:
+    content: "Pi does not support subagent skills."

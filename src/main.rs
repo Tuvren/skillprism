@@ -2,6 +2,7 @@
 
 mod cli;
 mod loader;
+mod registry;
 mod types;
 
 fn main() {
