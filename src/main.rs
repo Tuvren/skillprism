@@ -5,6 +5,7 @@ mod engine;
 mod loader;
 mod registry;
 mod resolver;
+mod router;
 mod types;
 mod validator;
 
