@@ -9,3 +9,7 @@ repository = "https://github.com/tuvren/skillprism"
 
 [dependencies]
 clap = { version = "4.6", features = ["derive"] }
+miette = { version = "7.6", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+thiserror = "2"
+yaml_serde = "0.10"
