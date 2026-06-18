@@ -39,7 +39,17 @@ pub fn check_variables(
 fn is_builtin(name: &str) -> bool {
     matches!(
         name,
-        "loop" | "self" | "kwargs" | "varargs" | "namespace" | "super" | "g" | "harness" | "_"
+        "loop"
+            | "self"
+            | "kwargs"
+            | "varargs"
+            | "namespace"
+            | "super"
+            | "g"
+            | "harness"
+            | "_"
+            | "skill_name"
+            | "skill_description"
     )
 }
 
@@ -93,6 +103,17 @@ mod tests {
         let vars = BTreeMap::new();
         let errors = check_variables("{{ harness }}", Path::new("t.j2"), &vars);
         assert!(errors.is_empty(), "harness alone should be builtin");
+    }
+
+    #[test]
+    fn skill_name_and_description_not_reported() {
+        let vars = BTreeMap::new();
+        let errors = check_variables(
+            "{{ skill_name }} {{ skill_description }}",
+            Path::new("t.j2"),
+            &vars,
+        );
+        assert!(errors.is_empty(), "engine-injected builtins should pass");
     }
 
     #[test]
