@@ -42,10 +42,14 @@ enum Command {
     },
 }
 
+/// Target scope for where rendered skill files are written.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
 pub enum TargetScope {
+    /// Write to the project-local skill directory.
     Project,
+    /// Write to the user's home directory.
     User,
+    /// Write to a distribution output directory.
     Dist,
 }
 
@@ -65,6 +69,7 @@ enum InitKind {
     },
 }
 
+/// Entry point for the CLI application.
 #[allow(clippy::redundant_pub_crate)]
 pub(crate) fn run() {
     let cli = Cli::parse();

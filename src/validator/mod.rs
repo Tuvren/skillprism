@@ -11,8 +11,10 @@ use thiserror::Error;
 
 use crate::resolver::ResolvedPair;
 
+/// Errors found during template validation.
 #[derive(Debug, Diagnostic, Error)]
 pub enum ValidationError {
+    /// The template has invalid Jinja2 syntax.
     #[error("[{skill}] {harness}: Template syntax error")]
     #[diagnostic(help("{detail}"))]
     SyntaxError {
@@ -21,6 +23,7 @@ pub enum ValidationError {
         detail: String,
     },
 
+    /// The template references a variable not defined in skill.yaml.
     #[error("[{skill}] {harness}: Undefined template variable `{variable_name}`")]
     #[diagnostic(help(
         "Ensure the variable is defined in skill.yaml or one of its parent group skill.yaml files. Template: {template_path}"
@@ -32,6 +35,7 @@ pub enum ValidationError {
         template_path: String,
     },
 
+    /// The template references a harness macro that is not defined.
     #[error("[{skill}] {harness}: Undefined harness macro `{macro_name}`")]
     #[diagnostic(help(
         "Ensure the macro is defined in the harness definition. Template: {template_path}"
@@ -43,6 +47,7 @@ pub enum ValidationError {
         template_path: String,
     },
 
+    /// The template file could not be read from disk.
     #[error("[{skill}] {harness}: Failed to read template file")]
     #[diagnostic(help("{detail}"))]
     TemplateRead {
@@ -60,6 +65,7 @@ pub struct ValidationOutcome {
     pub errors: Vec<ValidationError>,
 }
 
+/// Runs validation checks on resolved skill-harness pairs.
 pub struct Validator;
 
 impl Validator {

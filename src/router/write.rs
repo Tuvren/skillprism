@@ -4,6 +4,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Atomically writes content to a file by writing to a temp file then renaming.
 pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -16,6 +17,7 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     Ok(())
 }
 
+/// Copies asset directories (references, scripts) to the skill output directory.
 pub fn copy_assets(source_dirs: &[impl AsRef<Path>], target_dir: &Path) -> io::Result<()> {
     for src in source_dirs {
         let src = src.as_ref();

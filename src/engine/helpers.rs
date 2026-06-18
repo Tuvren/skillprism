@@ -1,5 +1,6 @@
 use minijinja::Environment;
 
+/// Registers custom Jinja2 helper functions into the rendering environment.
 pub fn register_helpers(env: &mut Environment) {
     env.add_function("skill_ref", skill_ref);
 }

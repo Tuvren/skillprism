@@ -5,6 +5,7 @@ use std::path::{Path, PathBuf};
 use crate::cli::TargetScope;
 use crate::registry::HarnessDefinition;
 
+/// Resolves the full path to the rendered skill file for a given scope.
 pub fn resolve_skill_path(
     project_root: &Path,
     harness: &HarnessDefinition,
@@ -28,6 +29,7 @@ pub fn resolve_skill_path(
     base.join(skill_name).join(&harness.paths.skill_filename)
 }
 
+/// Resolves the full path to the manifest file, if one is defined.
 pub fn resolve_manifest_path(
     project_root: &Path,
     harness: &HarnessDefinition,
@@ -45,6 +47,7 @@ pub fn resolve_manifest_path(
     Some(base_dir.join(filename))
 }
 
+/// Resolves the full path to a sidecar file within the skill output directory.
 pub fn resolve_sidecar_path(
     skill_output_dir: &Path,
     sidecar_output_dir: Option<&str>,
@@ -56,6 +59,7 @@ pub fn resolve_sidecar_path(
     )
 }
 
+/// Returns the output directory for a skill (parent of the skill file path).
 pub fn skill_output_dir(
     project_root: &Path,
     harness: &HarnessDefinition,

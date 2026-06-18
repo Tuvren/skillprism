@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::registry::MacroDef;
 
+/// Checks that all `harness.<name>` references in the template are defined.
 pub fn check_macros(
     template_content: &str,
     template_path: &Path,
@@ -54,9 +55,12 @@ fn is_harness_builtin(name: &str) -> bool {
     matches!(name, "id" | "name" | "version" | "skill_ref_pattern")
 }
 
+/// A harness macro reference that was used but not defined.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UndefinedMacro {
+    /// Name of the undefined macro.
     pub macro_name: String,
+    /// Path to the template containing the undefined reference.
     pub template_path: String,
 }
 

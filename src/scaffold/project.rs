@@ -2,6 +2,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Scaffolds a new skillprism project with default directory structure and config.
 pub fn scaffold_project(dir: &Path, name: &str) -> io::Result<()> {
     fs::create_dir_all(dir)?;
 

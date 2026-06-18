@@ -6,14 +6,19 @@ use thiserror::Error;
 use crate::registry::{HarnessDefinition, HarnessRegistry};
 use crate::types::{ProjectError, ProjectModel, SkillModel};
 
+/// A resolved skill-harness pair ready for validation or rendering.
 #[derive(Debug, Clone)]
 pub struct ResolvedPair {
+    /// The skill being rendered.
     pub skill: SkillModel,
+    /// The harness the skill is rendered for.
     pub harness: HarnessDefinition,
 }
 
+/// Errors that occur during skill-harness resolution.
 #[derive(Debug, Diagnostic, Error)]
 pub enum ResolveError {
+    /// The named harness was not found in the registry.
     #[error("Unknown harness `{harness_name}` for skill `{skill_name}`")]
     #[diagnostic(help("Available harnesses: {available}"))]
     UnknownHarness {
@@ -22,6 +27,7 @@ pub enum ResolveError {
         available: String,
     },
 
+    /// The skill requires a capability the harness does not support.
     #[error(
         "Skill `{skill_name}` requires capability `{capability}` but harness `{harness_name}` does not support it"
     )]
@@ -35,10 +41,12 @@ pub enum ResolveError {
     },
 }
 
+/// Resolves skills to their target harnesses, producing renderable pairs.
 #[derive(Debug, Default)]
 pub struct HarnessResolver;
 
 impl HarnessResolver {
+    /// Resolves all skills in a project against the project's configured harnesses.
     pub fn resolve_project(
         model: &ProjectModel,
         registry: &HarnessRegistry,
@@ -62,6 +70,7 @@ impl HarnessResolver {
         }
     }
 
+    /// Resolves a single skill against a named harness.
     pub fn resolve_skill_harness(
         skill: &SkillModel,
         harness_name: &str,

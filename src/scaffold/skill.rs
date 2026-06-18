@@ -2,6 +2,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Scaffolds a new skill directory with a starter skill.yaml and SKILL.md.j2 template.
 pub fn scaffold_skill(project_root: &Path, name: &str, _targets: &[String]) -> io::Result<()> {
     let skill_dir = project_root.join("skills").join(name);
     fs::create_dir_all(&skill_dir)?;

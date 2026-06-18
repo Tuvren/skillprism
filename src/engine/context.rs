@@ -3,6 +3,10 @@ use std::collections::BTreeMap;
 use crate::registry::{HarnessDefinition, MacroDef};
 use crate::resolver::ResolvedPair;
 
+/// Builds the template rendering context from a resolved skill-harness pair.
+///
+/// Populates `skill_name`, `skill_description`, skill variables, and the
+/// `harness` object (including macros) for use in Jinja2 templates.
 pub fn build_context(pair: &ResolvedPair) -> BTreeMap<String, minijinja::Value> {
     let mut ctx = BTreeMap::new();
 

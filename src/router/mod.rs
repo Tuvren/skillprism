@@ -16,8 +16,10 @@ use crate::resolver::ResolvedPair;
 pub use paths::*;
 pub use write::*;
 
+/// Errors that occur during file writing or diffing in the router.
 #[derive(Debug, Diagnostic, Error)]
 pub enum RouterError {
+    /// Failed to write a rendered file to disk.
     #[error("[{skill}] {harness}: Failed to write `{path}`")]
     #[diagnostic(help("{detail}"))]
     WriteError {
@@ -27,6 +29,7 @@ pub enum RouterError {
         detail: String,
     },
 
+    /// Failed to copy asset directories alongside the skill.
     #[error("[{skill}] {harness}: Failed to copy assets to `{path}`")]
     #[diagnostic(help("{detail}"))]
     AssetCopyError {
@@ -36,6 +39,7 @@ pub enum RouterError {
         detail: String,
     },
 
+    /// A user-scope file already exists and was skipped.
     #[error("[{skill}] {harness}: Skipped `{path}` (user-scope file exists)")]
     #[diagnostic(help("Use --force to overwrite user-scope files, or remove the file manually"))]
     SkippedFile {
@@ -45,14 +49,19 @@ pub enum RouterError {
     },
 }
 
+/// Routes rendered skill output to the correct file system locations.
 pub struct Router;
 
+/// Result of writing a skill's output files.
 pub struct WriteResult {
+    /// Files that were successfully written.
     pub written: WrittenFiles,
+    /// Paths of files that were skipped (user-scope exists without --force).
     pub skipped: Vec<String>,
 }
 
 impl Router {
+    /// Writes rendered skill output to disk at the resolved path.
     pub fn write(
         pair: &ResolvedPair,
         output: &HarnessOutput,
@@ -197,6 +206,7 @@ impl Router {
         Ok(Some(path))
     }
 
+    /// Computes diffs for all files that would be written.
     pub fn diff(
         pair: &ResolvedPair,
         output: &HarnessOutput,
@@ -261,14 +271,21 @@ impl Router {
     }
 }
 
+/// Paths of files written during a build operation.
 pub struct WrittenFiles {
+    /// Path to the rendered skill file.
     pub skill_path: std::path::PathBuf,
+    /// Paths to any sidecar files written.
     pub sidecar_paths: Vec<std::path::PathBuf>,
+    /// Path to the manifest file, if one was produced.
     pub manifest_path: Option<std::path::PathBuf>,
 }
 
+/// A single file's diff output for the --diff mode.
 pub struct DiffEntry {
+    /// Path the diff applies to.
     pub path: std::path::PathBuf,
+    /// Computed diff output.
     pub diff: diff::DiffOutput,
 }
 

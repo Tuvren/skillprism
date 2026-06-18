@@ -3,18 +3,27 @@ use std::path::Path;
 
 use similar::{ChangeTag, TextDiff};
 
+/// Output of a unified diff computation.
 pub struct DiffOutput {
+    /// Header line (e.g. "--- a/file\n+++ b/file").
     pub header: String,
+    /// Colored diff hunks.
     pub hunks: String,
+    /// Summary statistics for the diff.
     pub stats: DiffStats,
 }
 
+/// Statistics summarizing a diff's changes.
 pub struct DiffStats {
+    /// Number of added lines.
     pub additions: usize,
+    /// Number of deleted lines.
     pub deletions: usize,
+    /// Whether this is a new file (no pre-existing content).
     pub is_new_file: bool,
 }
 
+/// Computes a unified diff between existing file content and rendered output.
 pub fn compute_diff(existing: Option<&str>, rendered: &str, path_display: &str) -> DiffOutput {
     existing.map_or_else(
         || new_file_diff(rendered, path_display),
@@ -88,6 +97,7 @@ fn compute_unified_diff(old: &str, new: &str, path_display: &str) -> DiffOutput 
     }
 }
 
+/// Reads an existing file from disk, returning `None` if it does not exist.
 pub fn read_existing(path: &Path) -> Option<String> {
     std::fs::read_to_string(path).ok()
 }

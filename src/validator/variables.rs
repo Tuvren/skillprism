@@ -3,6 +3,7 @@ use std::path::Path;
 
 use minijinja::Environment;
 
+/// Checks that all template variables are defined in skill.yaml or built-in.
 pub fn check_variables(
     template_content: &str,
     template_path: &Path,
@@ -53,9 +54,12 @@ fn is_builtin(name: &str) -> bool {
     )
 }
 
+/// A template variable that was used but not defined in skill.yaml.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UndefinedVariable {
+    /// Name of the undefined variable.
     pub variable_name: String,
+    /// Path to the template containing the undefined reference.
     pub template_path: String,
 }
 

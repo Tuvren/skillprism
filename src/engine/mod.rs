@@ -15,22 +15,32 @@ use crate::resolver::ResolvedPair;
 pub use context::build_context;
 pub use helpers::register_helpers;
 
+/// Output produced by rendering a skill template through a harness.
 #[derive(Debug, Clone)]
 pub struct HarnessOutput {
+    /// The rendered content of the skill's main template file.
     pub skill_content: String,
+    /// Sidecar files produced alongside the main skill file.
     pub sidecars: Vec<SidecarOutput>,
+    /// Optional rendered manifest entry (e.g. plugin.json).
     pub manifest_entry: Option<String>,
 }
 
+/// A sidecar file produced during skill rendering.
 #[derive(Debug, Clone)]
 pub struct SidecarOutput {
+    /// Filename of the sidecar (e.g. "config.yaml").
     pub filename: String,
+    /// Rendered content of the sidecar.
     pub content: String,
+    /// Optional subdirectory within the skill output directory.
     pub output_dir: Option<String>,
 }
 
+/// Errors that occur during template rendering in the engine.
 #[derive(Debug, Diagnostic, Error)]
 pub enum EngineError {
+    /// Failed to read a template file from disk.
     #[error("[{skill}] {harness}: Failed to read template `{path}`")]
     #[diagnostic(help("{detail}"))]
     TemplateRead {
@@ -40,6 +50,7 @@ pub enum EngineError {
         detail: String,
     },
 
+    /// The template failed to render (syntax error or missing variable).
     #[error("[{skill}] {harness}: Template rendering failed")]
     #[diagnostic(help("{detail}"))]
     RenderError {
@@ -48,6 +59,7 @@ pub enum EngineError {
         detail: String,
     },
 
+    /// Multiple harnesses registered a template with the same name.
     #[error(
         "[{skill}] {harness}: Collision — template `{template_name}` registered by multiple harnesses"
     )]
@@ -59,9 +71,11 @@ pub enum EngineError {
     },
 }
 
+/// The rendering engine that processes skill templates through harnesses.
 pub struct Engine;
 
 impl Engine {
+    /// Renders a skill template using the resolved harness, producing output files.
     pub fn render(pair: &ResolvedPair) -> Result<HarnessOutput, EngineError> {
         let content = fs::read_to_string(&pair.skill.template_path).map_err(|e| {
             EngineError::TemplateRead {
