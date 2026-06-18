@@ -300,6 +300,8 @@ struct WrittenFiles {
     skill_path: PathBuf,
     /// Absolute paths of any sidecar files written
     sidecar_paths: Vec<PathBuf>,
+    /// Absolute path of the written manifest file (if the harness defines one and an entry was generated)
+    manifest_path: Option<PathBuf>,
 }
 
 /// Errors during file routing and writing

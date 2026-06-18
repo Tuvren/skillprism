@@ -79,20 +79,25 @@ impl Router {
             })?;
         }
 
-        if let Some(ref manifest_content) = output.manifest_entry {
-            if let Some(manifest_path) =
+        let manifest_path = if let Some(ref manifest_content) = output.manifest_entry {
+            if let Some(path) =
                 paths::resolve_manifest_path(project_root, &pair.harness, target)
             {
-                atomic_write(&manifest_path, manifest_content).map_err(|e| {
+                atomic_write(&path, manifest_content).map_err(|e| {
                     RouterError::WriteError {
                         skill: skill_name.clone(),
                         harness: harness_id.clone(),
-                        path: manifest_path.to_string_lossy().to_string(),
+                        path: path.to_string_lossy().to_string(),
                         detail: e.to_string(),
                     }
                 })?;
+                Some(path)
+            } else {
+                None
             }
-        }
+        } else {
+            None
+        };
 
         if !pair.skill.asset_dirs.is_empty() {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
@@ -118,6 +123,7 @@ impl Router {
                     )
                 })
                 .collect(),
+            manifest_path,
         })
     }
 }
@@ -125,6 +131,7 @@ impl Router {
 pub struct WrittenFiles {
     pub skill_path: std::path::PathBuf,
     pub sidecar_paths: Vec<std::path::PathBuf>,
+    pub manifest_path: Option<std::path::PathBuf>,
 }
 
 #[cfg(test)]
@@ -232,6 +239,37 @@ mod tests {
             written_content(&result.sidecar_paths[0]),
             "key: value"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn writes_manifest_entry() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_manifest");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "content").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+
+        let pair =
+            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "rendered".to_string(),
+            sidecars: vec![],
+            manifest_entry: Some(r#"{"name":"my-agent"}"#.to_string()),
+        };
+
+        let result = Router::write(&pair, &output, &dir, &TargetScope::Project).unwrap();
+        assert!(result.manifest_path.is_some());
+        let manifest = result.manifest_path.unwrap();
+        assert_eq!(manifest, dir.join(".claude/plugin.json"));
+        assert!(manifest.exists());
+        assert_eq!(written_content(&manifest), r#"{"name":"my-agent"}"#);
 
         let _ = fs::remove_dir_all(&dir);
     }
