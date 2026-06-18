@@ -1,5 +1,15 @@
 # Tasks Changelog
 
+## v0.4.0 — Epic C Complete
+
+- **Epic C (Developer Experience)** fully implemented and archived
+- 3 tickets completed: DX-C001, DX-C002, DX-C003
+- 10 story points delivered
+- Active backlog reduced to 0 story points
+- New features: `--diff` preview mode, `--force` flag, scaffold commands
+- New modules: `scaffold`, `router/diff`
+- Added rustdoc for all public items and README.md
+
 ## v0.3.0 — Epic B Complete
 
 - **Epic B (Pipeline)** fully implemented and archived

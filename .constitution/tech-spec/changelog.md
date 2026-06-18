@@ -1,5 +1,20 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.4.0 — 2026-06-17 — Epic C Implementation
+
+- Epic C (Developer Experience) fully implemented: 3 milestones, 10 story points
+- Added `similar = "2.7"` with `text` feature for diff computation
+- Implemented `src/router/diff.rs` — unified diff with ANSI color highlighting
+- Implemented CLI pipeline wiring: load → resolve → validate → render → route
+- Added `--diff` flag for preview mode (colored unified diffs without writing)
+- Added `--force` flag to skip user-scope file safety checks
+- Added `src/scaffold/` module for `init project` and `init skill` commands
+- `TargetScope` made `Copy` for efficient pass-by-value
+- Added `WriteResult` type with `written` and `skipped` tracking
+- Added `SkippedFile` variant to `RouterError`
+- Added rustdoc for all public items
+- Added README.md with installation, quickstart, and development sections
+
 ### v0.3.0 — 2026-06-17 — Epic B Implementation
 
 - Epic B (Pipeline) fully implemented: 4 milestones, 16 story points
