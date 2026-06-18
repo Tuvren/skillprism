@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 
 use crate::cli::TargetScope;
@@ -60,6 +58,7 @@ pub fn resolve_sidecar_path(
 }
 
 /// Returns the output directory for a skill (parent of the skill file path).
+#[allow(dead_code)]
 pub fn skill_output_dir(
     project_root: &Path,
     harness: &HarnessDefinition,

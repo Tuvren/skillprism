@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod diff;
 mod paths;
 mod write;
@@ -37,15 +35,6 @@ pub enum RouterError {
         harness: String,
         path: String,
         detail: String,
-    },
-
-    /// A user-scope file already exists and was skipped.
-    #[error("[{skill}] {harness}: Skipped `{path}` (user-scope file exists)")]
-    #[diagnostic(help("Use --force to overwrite user-scope files, or remove the file manually"))]
-    SkippedFile {
-        skill: String,
-        harness: String,
-        path: String,
     },
 }
 
@@ -193,7 +182,7 @@ impl Router {
                 path.display()
             );
             skipped.push(path.to_string_lossy().to_string());
-            return Ok(Some(path));
+            return Ok(None);
         }
 
         atomic_write(&path, manifest_content).map_err(|e| RouterError::WriteError {
@@ -272,6 +261,7 @@ impl Router {
 }
 
 /// Paths of files written during a build operation.
+#[allow(dead_code)]
 pub struct WrittenFiles {
     /// Path to the rendered skill file.
     pub skill_path: std::path::PathBuf,

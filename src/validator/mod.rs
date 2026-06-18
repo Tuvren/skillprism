@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod macros;
 mod syntax;
 mod variables;

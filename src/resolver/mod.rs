@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use miette::Diagnostic;
 use thiserror::Error;
 

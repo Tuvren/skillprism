@@ -4,6 +4,10 @@ use std::path::Path;
 use similar::{ChangeTag, TextDiff};
 
 /// Output of a unified diff computation.
+///
+/// This is a **display-only** format intended for colored terminal preview.
+/// It does not include `@@` hunk headers or context lines and is not
+/// compatible with standard unified diff parsers or patch tools.
 pub struct DiffOutput {
     /// Header line (e.g. "--- a/file\n+++ b/file").
     pub header: String,

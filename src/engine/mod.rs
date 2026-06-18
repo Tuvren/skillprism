@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod context;
 mod helpers;
 
@@ -64,6 +62,7 @@ pub enum EngineError {
         "[{skill}] {harness}: Collision — template `{template_name}` registered by multiple harnesses"
     )]
     #[diagnostic(help("Ensure harness templates have unique names"))]
+    #[allow(dead_code)]
     TemplateCollision {
         skill: String,
         harness: String,

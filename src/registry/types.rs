@@ -1,4 +1,5 @@
 #![allow(clippy::struct_excessive_bools)]
+#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 

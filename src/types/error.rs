@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -27,6 +25,7 @@ pub enum ProjectError {
     /// A required field is missing from the configuration.
     #[error("Missing required field in {path}")]
     #[diagnostic(help("{message}"))]
+    #[allow(dead_code)]
     MissingField { path: String, message: String },
 
     /// The skillprism.yaml project config file was not found.
