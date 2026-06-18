@@ -137,7 +137,7 @@ fn run_build(
         eprintln!("[build] validated {} pairs", outcome.valid.len());
     }
 
-    let mut files_written = 0usize;
+    let mut files_changed = 0usize;
     let mut files_unchanged = 0usize;
     let mut files_skipped = 0usize;
 
@@ -167,24 +167,24 @@ fn run_build(
                     println!("{}{}", entry.diff.header, entry.diff.hunks);
                 }
                 if !entry.diff.hunks.is_empty() || entry.diff.stats.is_new_file {
-                    files_written += 1;
+                    files_changed += 1;
                 }
             }
         } else {
             let result =
                 Router::write(pair, &output, &project_root, target, force).into_diagnostic()?;
-            files_written += 1 + result.written.sidecar_paths.len();
+            files_changed += 1 + result.written.sidecar_paths.len();
             if result.written.manifest_path.is_some() {
-                files_written += 1;
+                files_changed += 1;
             }
             files_skipped += result.skipped.len();
         }
     }
 
     if diff {
-        println!("{files_written} file(s) changed, {files_unchanged} file(s) unchanged");
+        println!("{files_changed} file(s) changed, {files_unchanged} file(s) unchanged");
     } else if verbose {
-        eprintln!("[build] wrote {files_written} file(s)");
+        eprintln!("[build] wrote {files_changed} file(s)");
     }
 
     if files_skipped > 0 {

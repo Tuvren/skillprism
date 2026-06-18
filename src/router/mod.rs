@@ -92,7 +92,8 @@ impl Router {
         let manifest_path =
             Self::write_manifest(pair, output, project_root, target, force, &mut skipped)?;
 
-        if !pair.skill.asset_dirs.is_empty() {
+        let skill_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
+        if !pair.skill.asset_dirs.is_empty() && !skill_skipped {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
                 RouterError::AssetCopyError {
                     skill: skill_name.clone(),
