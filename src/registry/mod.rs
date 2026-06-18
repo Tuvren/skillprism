@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod types;
 
 use std::collections::BTreeMap;
@@ -8,6 +6,7 @@ use std::path::Path;
 use crate::types::ProjectError;
 pub use types::*;
 
+/// Registry of known harness definitions, supporting builtins and user overrides.
 pub struct HarnessRegistry {
     builtins: BTreeMap<String, HarnessDefinition>,
     user_overrides: BTreeMap<String, HarnessDefinition>,
@@ -25,6 +24,7 @@ impl HarnessRegistry {
         }
     }
 
+    /// Creates a registry with the five built-in harnesses loaded.
     pub fn with_builtins() -> Self {
         let mut registry = Self::new();
         registry.load_builtins();
@@ -40,6 +40,7 @@ impl HarnessRegistry {
         }
     }
 
+    /// Loads user-provided harness YAML files from a directory, overriding builtins.
     pub fn load_user_overrides(&mut self, harnesses_dir: &Path) -> Result<(), ProjectError> {
         if !harnesses_dir.exists() {
             return Ok(());
@@ -82,6 +83,7 @@ impl HarnessRegistry {
         Ok(())
     }
 
+    /// Resolves a harness by name, preferring user overrides over builtins.
     pub fn resolve(&self, name: &str) -> Result<HarnessDefinition, ProjectError> {
         self.user_overrides
             .get(name)
@@ -93,6 +95,7 @@ impl HarnessRegistry {
             })
     }
 
+    /// Returns a comma-separated list of available harness names.
     pub fn available(&self) -> String {
         let mut names: Vec<&str> = self
             .builtins

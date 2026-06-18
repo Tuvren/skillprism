@@ -1,13 +1,13 @@
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 use std::path::Path;
 
 use crate::types::{ProjectConfig, ProjectError, ProjectModel, SkillModel};
 
+/// Loads a skillprism project from disk, discovering all skills.
 pub struct ProjectLoader;
 
 impl ProjectLoader {
+    /// Loads the project configuration and discovers all skills from the given root.
     pub fn load(project_root: &Path) -> Result<ProjectModel, ProjectError> {
         let config_path = project_root.join("skillprism.yaml");
         let config = Self::load_config(&config_path)?;

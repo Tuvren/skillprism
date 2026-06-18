@@ -1,6 +1,7 @@
 use minijinja::Environment;
 use std::path::Path;
 
+/// Validates that a template has valid Jinja2 syntax.
 pub fn check_syntax(template_content: &str, template_path: &Path) -> Result<(), String> {
     let mut env = Environment::new();
     let name = template_path.to_string_lossy();

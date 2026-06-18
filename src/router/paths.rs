@@ -1,15 +1,14 @@
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 
 use crate::cli::TargetScope;
 use crate::registry::HarnessDefinition;
 
+/// Resolves the full path to the rendered skill file for a given scope.
 pub fn resolve_skill_path(
     project_root: &Path,
     harness: &HarnessDefinition,
     skill_name: &str,
-    target: &TargetScope,
+    target: TargetScope,
 ) -> PathBuf {
     let scope_path = match target {
         TargetScope::Project => PathBuf::from(&harness.paths.project_scope_path),
@@ -28,10 +27,11 @@ pub fn resolve_skill_path(
     base.join(skill_name).join(&harness.paths.skill_filename)
 }
 
+/// Resolves the full path to the manifest file, if one is defined.
 pub fn resolve_manifest_path(
     project_root: &Path,
     harness: &HarnessDefinition,
-    target: &TargetScope,
+    target: TargetScope,
 ) -> Option<PathBuf> {
     let scope_path = harness.paths.manifest_scope_path.as_ref()?;
     let filename = harness.paths.manifest_filename.as_ref()?;
@@ -45,6 +45,7 @@ pub fn resolve_manifest_path(
     Some(base_dir.join(filename))
 }
 
+/// Resolves the full path to a sidecar file within the skill output directory.
 pub fn resolve_sidecar_path(
     skill_output_dir: &Path,
     sidecar_output_dir: Option<&str>,
@@ -56,11 +57,13 @@ pub fn resolve_sidecar_path(
     )
 }
 
+/// Returns the output directory for a skill (parent of the skill file path).
+#[allow(dead_code)]
 pub fn skill_output_dir(
     project_root: &Path,
     harness: &HarnessDefinition,
     skill_name: &str,
-    target: &TargetScope,
+    target: TargetScope,
 ) -> PathBuf {
     resolve_skill_path(project_root, harness, skill_name, target)
         .parent()
@@ -81,44 +84,36 @@ mod tests {
     use crate::registry::HarnessRegistry;
 
     fn claude_harness() -> HarnessDefinition {
-        HarnessRegistry::with_builtins()
-            .resolve("claude")
-            .unwrap()
+        HarnessRegistry::with_builtins().resolve("claude").unwrap()
     }
 
     #[test]
     fn project_scope_path() {
         let root = Path::new("/projects/my-skills");
-        let path = resolve_skill_path(root, &claude_harness(), "test-agent", &TargetScope::Project);
-        assert_eq!(
-            path,
-            root.join(".claude/skills/test-agent/SKILL.md")
-        );
+        let path = resolve_skill_path(root, &claude_harness(), "test-agent", TargetScope::Project);
+        assert_eq!(path, root.join(".claude/skills/test-agent/SKILL.md"));
     }
 
     #[test]
     fn user_scope_path() {
         let root = Path::new("/tmp/project");
-        let path = resolve_skill_path(root, &claude_harness(), "my-agent", &TargetScope::User);
+        let path = resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User);
         assert!(path.ends_with(".claude/skills/my-agent/SKILL.md"));
     }
 
     #[test]
     fn dist_scope_path() {
         let root = Path::new("/tmp/project");
-        let path = resolve_skill_path(root, &claude_harness(), "my-agent", &TargetScope::Dist);
+        let path = resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::Dist);
         assert_eq!(path, root.join("dist/claude/my-agent/SKILL.md"));
     }
 
     #[test]
     fn manifest_path_for_harness_with_manifest() {
         let root = Path::new("/tmp/project");
-        let path = resolve_manifest_path(root, &claude_harness(), &TargetScope::Project);
+        let path = resolve_manifest_path(root, &claude_harness(), TargetScope::Project);
         assert!(path.is_some());
-        assert_eq!(
-            path.unwrap(),
-            root.join(".claude/plugin.json")
-        );
+        assert_eq!(path.unwrap(), root.join(".claude/plugin.json"));
     }
 
     #[test]

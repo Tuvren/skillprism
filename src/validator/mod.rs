@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 mod macros;
 mod syntax;
 mod variables;
@@ -11,8 +9,10 @@ use thiserror::Error;
 
 use crate::resolver::ResolvedPair;
 
+/// Errors found during template validation.
 #[derive(Debug, Diagnostic, Error)]
 pub enum ValidationError {
+    /// The template has invalid Jinja2 syntax.
     #[error("[{skill}] {harness}: Template syntax error")]
     #[diagnostic(help("{detail}"))]
     SyntaxError {
@@ -21,8 +21,11 @@ pub enum ValidationError {
         detail: String,
     },
 
+    /// The template references a variable not defined in skill.yaml.
     #[error("[{skill}] {harness}: Undefined template variable `{variable_name}`")]
-    #[diagnostic(help("Ensure the variable is defined in skill.yaml or one of its parent group skill.yaml files. Template: {template_path}"))]
+    #[diagnostic(help(
+        "Ensure the variable is defined in skill.yaml or one of its parent group skill.yaml files. Template: {template_path}"
+    ))]
     UndefinedVariable {
         skill: String,
         harness: String,
@@ -30,8 +33,11 @@ pub enum ValidationError {
         template_path: String,
     },
 
+    /// The template references a harness macro that is not defined.
     #[error("[{skill}] {harness}: Undefined harness macro `{macro_name}`")]
-    #[diagnostic(help("Ensure the macro is defined in the harness definition. Template: {template_path}"))]
+    #[diagnostic(help(
+        "Ensure the macro is defined in the harness definition. Template: {template_path}"
+    ))]
     UndefinedMacro {
         skill: String,
         harness: String,
@@ -39,6 +45,7 @@ pub enum ValidationError {
         template_path: String,
     },
 
+    /// The template file could not be read from disk.
     #[error("[{skill}] {harness}: Failed to read template file")]
     #[diagnostic(help("{detail}"))]
     TemplateRead {
@@ -56,6 +63,7 @@ pub struct ValidationOutcome {
     pub errors: Vec<ValidationError>,
 }
 
+/// Runs validation checks on resolved skill-harness pairs.
 pub struct Validator;
 
 impl Validator {
@@ -100,11 +108,7 @@ impl Validator {
             return;
         }
 
-        let var_errors = variables::check_variables(
-            &content,
-            template_path,
-            &pair.skill.variables,
-        );
+        let var_errors = variables::check_variables(&content, template_path, &pair.skill.variables);
         for uvar in var_errors {
             errors.push(ValidationError::UndefinedVariable {
                 skill: skill_name.clone(),
@@ -114,11 +118,7 @@ impl Validator {
             });
         }
 
-        let macro_errors = macros::check_macros(
-            &content,
-            template_path,
-            &pair.harness.macros,
-        );
+        let macro_errors = macros::check_macros(&content, template_path, &pair.harness.macros);
         for umacro in macro_errors {
             errors.push(ValidationError::UndefinedMacro {
                 skill: skill_name.clone(),
@@ -164,7 +164,11 @@ mod tests {
     use std::collections::BTreeMap;
     use std::path::Path;
 
-    fn test_skill(name: &str, template_content: &str, vars: BTreeMap<String, yaml_serde::Value>) -> SkillModel {
+    fn test_skill(
+        name: &str,
+        template_content: &str,
+        vars: BTreeMap<String, yaml_serde::Value>,
+    ) -> SkillModel {
         let dir = std::env::temp_dir()
             .join("skillprism_test")
             .join("validator")

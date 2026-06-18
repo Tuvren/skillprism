@@ -1,9 +1,8 @@
-#![allow(dead_code)]
-
 use std::fs;
 use std::io;
 use std::path::Path;
 
+/// Atomically writes content to a file by writing to a temp file then renaming.
 pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
@@ -16,19 +15,15 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     Ok(())
 }
 
-pub fn copy_assets(
-    source_dirs: &[impl AsRef<Path>],
-    target_dir: &Path,
-) -> io::Result<()> {
+/// Copies asset directories (references, scripts) to the skill output directory.
+pub fn copy_assets(source_dirs: &[impl AsRef<Path>], target_dir: &Path) -> io::Result<()> {
     for src in source_dirs {
         let src = src.as_ref();
         if !src.exists() {
             continue;
         }
 
-        let dir_name = src
-            .file_name()
-            .expect("asset dir should have a name");
+        let dir_name = src.file_name().expect("asset dir should have a name");
 
         let dst = target_dir.join(dir_name);
         copy_dir_recursive(src, &dst)?;
