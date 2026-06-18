@@ -49,17 +49,7 @@ fn extract_harness_ref(expr: &str) -> Option<&str> {
 }
 
 fn is_harness_builtin(name: &str) -> bool {
-    matches!(
-        name,
-        "id"
-            | "name"
-            | "version"
-            | "skill_ref_pattern"
-            | "paths"
-            | "capabilities"
-            | "functions"
-            | "discovery"
-    )
+    matches!(name, "id" | "name" | "version" | "skill_ref_pattern")
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,7 +95,7 @@ mod tests {
     #[test]
     fn builtin_harness_fields_not_reported() {
         let errors = check_macros(
-            "{{ harness.id }} {{ harness.name }} {{ harness.paths }}",
+            "{{ harness.id }} {{ harness.name }}",
             Path::new("t.j2"),
             &empty_macros(),
         );
@@ -138,12 +128,13 @@ mod tests {
     }
 
     #[test]
-    fn no_false_positive_on_nested() {
+    fn nested_harness_ref_reported_as_undefined() {
         let errors = check_macros(
             "{{ harness.capabilities.supports_subagent }}",
             Path::new("t.j2"),
             &empty_macros(),
         );
-        assert!(errors.is_empty());
+        assert_eq!(errors.len(), 1);
+        assert_eq!(errors[0].macro_name, "capabilities");
     }
 }
