@@ -48,7 +48,9 @@ pub enum EngineError {
         detail: String,
     },
 
-    #[error("[{skill}] {harness}: Collision — template `{template_name}` registered by multiple harnesses")]
+    #[error(
+        "[{skill}] {harness}: Collision — template `{template_name}` registered by multiple harnesses"
+    )]
     #[diagnostic(help("Ensure harness templates have unique names"))]
     TemplateCollision {
         skill: String,
@@ -83,11 +85,13 @@ impl Engine {
                 detail: e.to_string(),
             })?;
 
-        let tmpl = env.get_template(&name).map_err(|e| EngineError::RenderError {
-            skill: pair.skill.name.clone(),
-            harness: pair.harness.id.clone(),
-            detail: e.to_string(),
-        })?;
+        let tmpl = env
+            .get_template(&name)
+            .map_err(|e| EngineError::RenderError {
+                skill: pair.skill.name.clone(),
+                harness: pair.harness.id.clone(),
+                detail: e.to_string(),
+            })?;
 
         let skill_content = tmpl.render(&ctx).map_err(|e| EngineError::RenderError {
             skill: pair.skill.name.clone(),
@@ -102,13 +106,13 @@ impl Engine {
         })?;
 
         let manifest_entry = if let Some(ref manifest) = pair.harness.manifest {
-            Some(render_manifest(manifest, &ctx).map_err(|e| {
-                EngineError::RenderError {
+            Some(
+                render_manifest(manifest, &ctx).map_err(|e| EngineError::RenderError {
                     skill: pair.skill.name.clone(),
                     harness: pair.harness.id.clone(),
                     detail: format!("Manifest rendering failed: {e}"),
-                }
-            })?)
+                })?,
+            )
         } else {
             None
         };
@@ -166,8 +170,8 @@ fn render_manifest(
 mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
-    use crate::resolver::tests::test_skill;
     use crate::resolver::HarnessResolver;
+    use crate::resolver::tests::test_skill;
     use crate::types::SkillModel;
     use std::path::Path;
 
@@ -198,8 +202,7 @@ mod tests {
     ) -> Result<HarnessOutput, EngineError> {
         let registry = HarnessRegistry::with_builtins();
         let skill = create_skill_with_template(skill_name, template, BTreeMap::new());
-        let pair =
-            HarnessResolver::resolve_skill_harness(&skill, harness_name, &registry).unwrap();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, harness_name, &registry).unwrap();
         Engine::render(&pair)
     }
 
@@ -218,20 +221,14 @@ mod tests {
         );
         let registry = HarnessRegistry::with_builtins();
         let skill = create_skill_with_template("styled", "{{ theme }}", vars);
-        let pair =
-            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = Engine::render(&pair).unwrap();
         assert_eq!(output.skill_content, "dark");
     }
 
     #[test]
     fn renders_harness_macro() {
-        let output = render_pair(
-            "test-macro",
-            "{{ harness.hints }}",
-            "claude",
-        )
-        .unwrap();
+        let output = render_pair("test-macro", "{{ harness.hints }}", "claude").unwrap();
         assert!(output.skill_content.contains("Agent Skills specification"));
     }
 
@@ -240,8 +237,7 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let mut skill = test_skill("no-exist", vec![]);
         skill.template_path = Path::new("/nonexistent/template.j2").to_path_buf();
-        let pair =
-            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let result = Engine::render(&pair);
         assert!(result.is_err());
         match result.unwrap_err() {
@@ -254,8 +250,7 @@ mod tests {
     fn render_syntax_error_reported() {
         let registry = HarnessRegistry::with_builtins();
         let skill = create_skill_with_template("broken", "{{ broken", BTreeMap::new());
-        let pair =
-            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let result = Engine::render(&pair);
         assert!(result.is_err());
         match result.unwrap_err() {

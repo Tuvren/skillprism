@@ -39,7 +39,9 @@ fn extract_harness_ref(expr: &str) -> Option<&str> {
         let prefix = expr[..dot_pos].trim();
         if prefix == "harness" {
             let rest = expr[dot_pos + 1..].trim();
-            let name = rest.split(|c: char| !c.is_alphanumeric() && c != '_').next()?;
+            let name = rest
+                .split(|c: char| !c.is_alphanumeric() && c != '_')
+                .next()?;
             if !name.is_empty() {
                 return Some(name);
             }
@@ -73,21 +75,13 @@ mod tests {
             "header".to_string(),
             MacroDef::Inline("# Header".to_string()),
         );
-        let errors = check_macros(
-            "{{ harness.header }}",
-            Path::new("t.j2"),
-            &macros,
-        );
+        let errors = check_macros("{{ harness.header }}", Path::new("t.j2"), &macros);
         assert!(errors.is_empty());
     }
 
     #[test]
     fn undefined_macro_reported() {
-        let errors = check_macros(
-            "{{ harness.missing }}",
-            Path::new("t.j2"),
-            &empty_macros(),
-        );
+        let errors = check_macros("{{ harness.missing }}", Path::new("t.j2"), &empty_macros());
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].macro_name, "missing");
     }
@@ -115,10 +109,7 @@ mod tests {
     #[test]
     fn multiple_harness_refs_all_checked() {
         let mut macros = BTreeMap::new();
-        macros.insert(
-            "header".to_string(),
-            MacroDef::Inline("H".to_string()),
-        );
+        macros.insert("header".to_string(), MacroDef::Inline("H".to_string()));
         let errors = check_macros(
             "{{ harness.header }} {{ harness.footer }} {{ harness.missing }}",
             Path::new("t.j2"),

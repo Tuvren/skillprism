@@ -119,7 +119,10 @@ mod tests {
     #[test]
     fn partial_variables_resolved() {
         let mut vars = BTreeMap::new();
-        vars.insert("theme".to_string(), yaml_serde::Value::String("dark".into()));
+        vars.insert(
+            "theme".to_string(),
+            yaml_serde::Value::String("dark".into()),
+        );
         let errors = check_variables("{{ theme }} {{ missing }}", Path::new("t.j2"), &vars);
         assert_eq!(errors.len(), 1);
         assert_eq!(errors[0].variable_name, "missing");

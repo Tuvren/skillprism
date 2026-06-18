@@ -6,10 +6,7 @@ use crate::resolver::ResolvedPair;
 pub fn build_context(pair: &ResolvedPair) -> BTreeMap<String, minijinja::Value> {
     let mut ctx = BTreeMap::new();
 
-    ctx.insert(
-        "skill_name".to_string(),
-        pair.skill.name.clone().into(),
-    );
+    ctx.insert("skill_name".to_string(), pair.skill.name.clone().into());
     ctx.insert(
         "skill_description".to_string(),
         pair.skill.description.clone().into(),
@@ -55,12 +52,9 @@ mod tests {
     fn context_includes_skill_name() {
         let registry = HarnessRegistry::with_builtins();
         let skill = crate::resolver::tests::test_skill("my-agent", vec![]);
-        let pair = crate::resolver::HarnessResolver::resolve_skill_harness(
-            &skill,
-            "claude",
-            &registry,
-        )
-        .unwrap();
+        let pair =
+            crate::resolver::HarnessResolver::resolve_skill_harness(&skill, "claude", &registry)
+                .unwrap();
         let ctx = build_context(&pair);
         assert_eq!(
             ctx.get("skill_name").and_then(|v| v.as_str()),
@@ -72,12 +66,9 @@ mod tests {
     fn context_includes_harness_object() {
         let registry = HarnessRegistry::with_builtins();
         let skill = crate::resolver::tests::test_skill("test", vec![]);
-        let pair = crate::resolver::HarnessResolver::resolve_skill_harness(
-            &skill,
-            "opencode",
-            &registry,
-        )
-        .unwrap();
+        let pair =
+            crate::resolver::HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry)
+                .unwrap();
         let ctx = build_context(&pair);
         let harness = ctx.get("harness").unwrap();
         let id_key = minijinja::Value::from("id");
@@ -103,16 +94,10 @@ mod tests {
         );
         let mut skill = crate::resolver::tests::test_skill("styled", vec![]);
         skill.variables = vars;
-        let pair = crate::resolver::HarnessResolver::resolve_skill_harness(
-            &skill,
-            "claude",
-            &registry,
-        )
-        .unwrap();
+        let pair =
+            crate::resolver::HarnessResolver::resolve_skill_harness(&skill, "claude", &registry)
+                .unwrap();
         let ctx = build_context(&pair);
-        assert_eq!(
-            ctx.get("theme").and_then(|v| v.as_str()),
-            Some("dark")
-        );
+        assert_eq!(ctx.get("theme").and_then(|v| v.as_str()), Some("dark"));
     }
 }

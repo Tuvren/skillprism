@@ -25,7 +25,9 @@ pub enum ResolveError {
     #[error(
         "Skill `{skill_name}` requires capability `{capability}` but harness `{harness_name}` does not support it"
     )]
-    #[diagnostic(help("Remove the required-capability from the skill, or use a different harness"))]
+    #[diagnostic(help(
+        "Remove the required-capability from the skill, or use a different harness"
+    ))]
     MissingCapability {
         skill_name: String,
         harness_name: String,
@@ -107,9 +109,7 @@ fn harness_has_capability(harness: &HarnessDefinition, capability: &str) -> bool
         "disable_model_invocation" | "disable-model-invocation" => {
             harness.capabilities.supports_disable_model_invocation
         }
-        "user_invocable" | "user-invocable" => {
-            harness.capabilities.supports_user_invocable_flag
-        }
+        "user_invocable" | "user-invocable" => harness.capabilities.supports_user_invocable_flag,
         _ => false,
     }
 }
@@ -159,8 +159,7 @@ pub mod tests {
         let registry = test_registry();
         let skill = test_skill("my-agent", vec![]);
 
-        let pair =
-            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
 
         assert_eq!(pair.harness.id, "claude");
         assert_eq!(pair.skill.name, "my-agent");
@@ -187,8 +186,7 @@ pub mod tests {
         let registry = test_registry();
         let skill = test_skill("sub-agent", vec!["subagent".to_string()]);
 
-        let pair =
-            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         assert_eq!(pair.harness.id, "claude");
     }
 
@@ -197,13 +195,10 @@ pub mod tests {
         let registry = test_registry();
         let skill = test_skill("custom-agent", vec!["allowed_tools".to_string()]);
 
-        let result =
-            HarnessResolver::resolve_skill_harness(&skill, "pi", &registry);
+        let result = HarnessResolver::resolve_skill_harness(&skill, "pi", &registry);
         assert!(result.is_err());
         match result.unwrap_err() {
-            ResolveError::MissingCapability {
-                ref capability, ..
-            } => {
+            ResolveError::MissingCapability { ref capability, .. } => {
                 assert_eq!(capability, "allowed_tools");
             }
             e @ ResolveError::UnknownHarness { .. } => {
@@ -215,10 +210,7 @@ pub mod tests {
     #[test]
     fn resolve_project_returns_all_pairs() {
         let registry = test_registry();
-        let skills = vec![
-            test_skill("skill-a", vec![]),
-            test_skill("skill-b", vec![]),
-        ];
+        let skills = vec![test_skill("skill-a", vec![]), test_skill("skill-b", vec![])];
         let model = ProjectModel {
             config: crate::types::ProjectConfig {
                 harnesses: vec!["claude".to_string(), "opencode".to_string()],

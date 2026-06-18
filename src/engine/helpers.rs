@@ -23,8 +23,7 @@ mod tests {
     fn skill_ref_works_in_template() {
         let mut env = Environment::new();
         register_helpers(&mut env);
-        env.add_template("t.j2", "{{ skill_ref(name) }}")
-            .unwrap();
+        env.add_template("t.j2", "{{ skill_ref(name) }}").unwrap();
         let tmpl = env.get_template("t.j2").unwrap();
         let result = tmpl
             .render(minijinja::context! { name => "my-agent" })

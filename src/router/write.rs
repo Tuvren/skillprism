@@ -16,19 +16,14 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     Ok(())
 }
 
-pub fn copy_assets(
-    source_dirs: &[impl AsRef<Path>],
-    target_dir: &Path,
-) -> io::Result<()> {
+pub fn copy_assets(source_dirs: &[impl AsRef<Path>], target_dir: &Path) -> io::Result<()> {
     for src in source_dirs {
         let src = src.as_ref();
         if !src.exists() {
             continue;
         }
 
-        let dir_name = src
-            .file_name()
-            .expect("asset dir should have a name");
+        let dir_name = src.file_name().expect("asset dir should have a name");
 
         let dst = target_dir.join(dir_name);
         copy_dir_recursive(src, &dst)?;
