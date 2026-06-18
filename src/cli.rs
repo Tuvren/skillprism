@@ -42,7 +42,7 @@ enum Command {
     },
 }
 
-#[derive(ValueEnum, Clone, Copy)]
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
 pub enum TargetScope {
     Project,
     User,
@@ -134,6 +134,7 @@ fn run_build(
 
     let mut files_written = 0usize;
     let mut files_unchanged = 0usize;
+    let mut files_skipped = 0usize;
 
     for pair in &outcome.valid {
         let output = Engine::render(pair).into_diagnostic()?;
@@ -165,11 +166,13 @@ fn run_build(
                 }
             }
         } else {
-            let result = Router::write(pair, &output, &project_root, target).into_diagnostic()?;
-            files_written += 1 + result.sidecar_paths.len();
-            if result.manifest_path.is_some() {
+            let result =
+                Router::write(pair, &output, &project_root, target, force).into_diagnostic()?;
+            files_written += 1 + result.written.sidecar_paths.len();
+            if result.written.manifest_path.is_some() {
                 files_written += 1;
             }
+            files_skipped += result.skipped.len();
         }
     }
 
@@ -179,7 +182,10 @@ fn run_build(
         eprintln!("[build] wrote {files_written} file(s)");
     }
 
-    let _ = force;
+    if files_skipped > 0 {
+        eprintln!("{files_skipped} file(s) skipped (use --force to overwrite)");
+    }
+
     Ok(())
 }
 
