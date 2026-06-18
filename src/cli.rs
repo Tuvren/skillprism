@@ -149,6 +149,7 @@ fn run_build(
                     );
                     println!("{}", entry.diff.hunks);
                 } else if entry.diff.hunks.is_empty() {
+                    println!("{}: no changes", entry.path.display());
                     files_unchanged += 1;
                 } else {
                     println!(

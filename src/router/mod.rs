@@ -356,4 +356,128 @@ mod tests {
 
         let _ = fs::remove_dir_all(&dir);
     }
+
+    #[test]
+    fn diff_new_file_returns_single_entry() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_diff_new");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "rendered content".to_string(),
+            sidecars: vec![],
+            manifest_entry: None,
+        };
+
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].diff.stats.is_new_file);
+        assert_eq!(entries[0].diff.stats.additions, 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_changed_file_shows_diff() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_diff_changed");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old content").unwrap();
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new content".to_string(),
+            sidecars: vec![],
+            manifest_entry: None,
+        };
+
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        assert_eq!(entries.len(), 1);
+        assert!(!entries[0].diff.stats.is_new_file);
+        assert_eq!(entries[0].diff.stats.additions, 1);
+        assert_eq!(entries[0].diff.stats.deletions, 1);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_unchanged_file_returns_empty_hunks() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_diff_unchanged");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "same content").unwrap();
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "same content".to_string(),
+            sidecars: vec![],
+            manifest_entry: None,
+        };
+
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        assert_eq!(entries.len(), 1);
+        assert!(entries[0].diff.hunks.is_empty());
+        assert_eq!(entries[0].diff.stats.additions, 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_includes_sidecar_entries() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_diff_sidecar");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/agent")).unwrap();
+        fs::write(dir.join("skills/agent/SKILL.md.j2"), "main").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("agent", vec![]);
+        skill.template_path = dir.join("skills/agent/SKILL.md.j2");
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "main".to_string(),
+            sidecars: vec![SidecarOutput {
+                filename: "config.yaml".to_string(),
+                content: "key: value".to_string(),
+                output_dir: None,
+            }],
+            manifest_entry: None,
+        };
+
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].diff.stats.is_new_file);
+        assert!(entries[1].diff.stats.is_new_file);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
 }

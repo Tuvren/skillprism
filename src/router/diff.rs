@@ -1,3 +1,4 @@
+use std::fmt::Write as _;
 use std::path::Path;
 
 use similar::{ChangeTag, TextDiff};
@@ -16,17 +17,26 @@ pub struct DiffStats {
 
 pub fn compute_diff(existing: Option<&str>, rendered: &str, path_display: &str) -> DiffOutput {
     existing.map_or_else(
-        || DiffOutput {
-            header: format!("--- /dev/null\n+++ {path_display}\n"),
-            hunks: format!("+{rendered}"),
-            stats: DiffStats {
-                additions: rendered.lines().count(),
-                deletions: 0,
-                is_new_file: true,
-            },
-        },
+        || new_file_diff(rendered, path_display),
         |old| compute_unified_diff(old, rendered, path_display),
     )
+}
+
+fn new_file_diff(rendered: &str, path_display: &str) -> DiffOutput {
+    let mut hunks = String::new();
+    for line in rendered.lines() {
+        let _ = writeln!(hunks, "\x1b[32m+{line}\x1b[0m");
+    }
+    let additions = rendered.lines().count();
+    DiffOutput {
+        header: format!("\x1b[1m--- /dev/null\x1b[0m\n\x1b[1m+++ {path_display}\x1b[0m\n"),
+        hunks,
+        stats: DiffStats {
+            additions,
+            deletions: 0,
+            is_new_file: true,
+        },
+    }
 }
 
 fn compute_unified_diff(old: &str, new: &str, path_display: &str) -> DiffOutput {
@@ -37,19 +47,21 @@ fn compute_unified_diff(old: &str, new: &str, path_display: &str) -> DiffOutput 
 
     for op in diff.ops() {
         for change in diff.iter_changes(op) {
-            let sign = match change.tag() {
+            let (sign, color) = match change.tag() {
                 ChangeTag::Delete => {
                     deletions += 1;
-                    '-'
+                    ('-', "\x1b[31m")
                 }
                 ChangeTag::Insert => {
                     additions += 1;
-                    '+'
+                    ('+', "\x1b[32m")
                 }
                 ChangeTag::Equal => continue,
             };
-            hunks.push(sign);
-            hunks.push_str(change.value());
+            let value = change.value();
+            for line in value.lines() {
+                let _ = writeln!(hunks, "{color}{sign}{line}\x1b[0m");
+            }
         }
     }
 
@@ -66,7 +78,7 @@ fn compute_unified_diff(old: &str, new: &str, path_display: &str) -> DiffOutput 
     }
 
     DiffOutput {
-        header: format!("--- a/{path_display}\n+++ b/{path_display}\n"),
+        header: format!("\x1b[1m--- a/{path_display}\x1b[0m\n\x1b[1m+++ b/{path_display}\x1b[0m\n"),
         hunks,
         stats: DiffStats {
             additions,
@@ -88,10 +100,19 @@ mod tests {
     fn new_file_shows_full_addition() {
         let output = compute_diff(None, "hello world\n", "test/SKILL.md");
         assert!(output.header.contains("/dev/null"));
-        assert!(output.hunks.contains("+hello world\n"));
+        assert!(output.hunks.contains("+hello world"));
         assert!(output.stats.is_new_file);
         assert_eq!(output.stats.additions, 1);
         assert_eq!(output.stats.deletions, 0);
+    }
+
+    #[test]
+    fn new_file_multi_line_prefixed_per_line() {
+        let output = compute_diff(None, "line1\nline2\nline3\n", "test/SKILL.md");
+        assert!(output.hunks.contains("+line1"));
+        assert!(output.hunks.contains("+line2"));
+        assert!(output.hunks.contains("+line3"));
+        assert_eq!(output.stats.additions, 3);
     }
 
     #[test]
@@ -120,7 +141,7 @@ mod tests {
     #[test]
     fn empty_old_content_shows_all_additions() {
         let output = compute_diff(Some(""), "new content\n", "test/SKILL.md");
-        assert!(output.hunks.contains("+new content\n"));
+        assert!(output.hunks.contains("+new content"));
         assert_eq!(output.stats.additions, 1);
         assert_eq!(output.stats.deletions, 0);
     }
