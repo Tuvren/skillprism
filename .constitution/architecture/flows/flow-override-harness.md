@@ -21,18 +21,16 @@ sequenceDiagram
   Loader->>FS: scan harnesses/*.yaml
   FS-->>Loader: [claude.yaml, custom-foo.yaml]
 
-  Loader->>Registry: registerOverride("claude", claudeOverrideYaml)
-  Registry->>Registry: merge(builtinClaude, userOverride)
-  Note over Registry: user fields win, builtin fills gaps
+  Loader->>Registry: load_user_overrides([claude.yaml, custom-foo.yaml])
+  Registry->>Registry: for each, merge with builtin if exists, else add as-is
+  Note over Registry: claude merges with builtin, custom-foo added as-is
 
-  Loader->>Registry: registerCustom("custom-foo", customFooYaml)
-  Registry->>Registry: add(customFooYaml)
-  Note over Registry: no builtin to merge, added as-is
-
-  CLI->>Registry: getHarness("claude")
+  CLI->>Registry: resolve("claude")
   Registry-->>CLI: overridden definition
-  CLI->>Registry: getHarness("custom-foo")
+  CLI->>Registry: resolve("custom-foo")
   Registry-->>CLI: custom definition
 
   CLI->>CLI: build proceeds with overridden + custom harnesses
 ```
+
+(End of file - total 38 lines)

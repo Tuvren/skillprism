@@ -12,6 +12,7 @@ keywords = ["agent", "claude", "codex", "skills", "template"]
 [dependencies]
 clap = { version = "4.6", features = ["derive"] }
 miette = { version = "7.6", features = ["derive"] }
+minijinja = { version = "2.20", features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 yaml_serde = "0.10"

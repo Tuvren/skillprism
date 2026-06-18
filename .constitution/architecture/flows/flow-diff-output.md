@@ -17,7 +17,7 @@ sequenceDiagram
   User->>CLI: skillprism build --diff
   CLI->>CLI: parse --diff flag
 
-  CLI->>CLI: load, validate, render (omitted for brevity)
+  CLI->>CLI: load, resolve, validate, render (omitted for brevity)
 
   CLI->>Router: diffOutput(renderedFiles, targetScope=project)
 
@@ -38,3 +38,5 @@ sequenceDiagram
   Note over Router: No filesystem writes occur
   Note over CLI: User inspects diff before running build without --diff
 ```
+
+(End of file - total 40 lines)

@@ -12,29 +12,35 @@ sequenceDiagram
   participant CLI as CLI Entrypoint
   participant Loader as Project Loader
   participant Registry as Harness Registry
+  participant Resolver as Resolver
   participant Valid8 as Validator
   participant FS as Filesystem
 
   User->>CLI: skillprism build
   CLI->>Loader: load(projectRoot)
-  Loader-->>CLI: project model
+  Loader-->>CLI: ProjectModel
 
-  CLI->>Valid8: validate(model)
+  CLI->>Resolver: resolve(projectModel)
+  Resolver->>Registry: build resolved pairs
+  Registry-->>Resolver: harness definitions
+  Resolver-->>CLI: Vec<ResolvedPair>
 
-  loop over every skill
+  CLI->>Valid8: validate(pairs)
+
+  loop over every ResolvedPair
+    Valid8->>Valid8: undeclared_variables() via MiniJinja
+    Valid8->>Valid8: scan for harness.<name> refs
     Valid8->>Valid8: check template syntax
-    Valid8->>Registry: check macro "{{ macros.foo }}" exists
-    Registry-->>Valid8: undefined: foo
-    Valid8->>Valid8: check variable "{{ bar }}" is defined
-    Valid8->>Valid8: check variable "{{ baz }}" references are resolvable
   end
 
   alt errors found
-    Valid8-->>CLI: ErrorList [err1: line 12 unknown macro "foo", err2: line 45 unknown var "bar"]
+    Valid8-->>CLI: ErrorList [err1: line 12 unknown macro, err2: line 45 undefined variable "bar"]
     CLI-->>User: Build failed — 2 errors
     CLI->>CLI: exit code 1
   else no errors
-    Valid8-->>CLI: validated model
+    Valid8-->>CLI: validated
     CLI->>CLI: continue to render
   end
 ```
+
+(End of file - total 43 lines)

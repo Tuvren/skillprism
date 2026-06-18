@@ -37,22 +37,20 @@ struct ProjectConfig {
 /// A single skill after configuration loading and variable resolution
 struct SkillModel {
     /// Canonical skill name (from skill.yaml or directory name)
-    /// Constraints: 1-64 chars (or per-harness max), lowercase letters/digits/hyphens only,
-    /// no leading/trailing/consecutive hyphens, must match parent directory name
     name: String,
     /// Parent directory name (for name-vs-directory validation per Agent Skills spec)
     directory_name: String,
-    /// Description (from skill.yaml) — what the skill does and when to use it
+    /// Description (from skill.yaml)
     description: String,
-    /// Version (from skill.yaml, used internally; not part of output SKILL.md frontmatter)
+    /// Version (from skill.yaml, used internally)
     version: Option<String>,
     /// License (from skill.yaml, maps to SKILL.md frontmatter)
     license: Option<String>,
-    /// Environment requirements (from skill.yaml, maps to SKILL.md frontmatter)
+    /// Environment requirements (from skill.yaml)
     compatibility: Option<String>,
-    /// Arbitrary key-value metadata (from skill.yaml, maps to SKILL.md frontmatter)
+    /// Arbitrary key-value metadata (from skill.yaml)
     metadata: BTreeMap<String, String>,
-    /// Pre-approved tools (from skill.yaml, maps to SKILL.md frontmatter, experimental)
+    /// Pre-approved tools (from skill.yaml, experimental)
     allowed_tools: Option<String>,
     /// Additional trigger phrases (Claude Code: when_to_use)
     when_to_use: Option<String>,
@@ -86,15 +84,14 @@ struct SkillModel {
     template_path: PathBuf,
     /// Paths to shared asset directories (references/, scripts/)
     asset_dirs: Vec<PathBuf>,
-    /// Output files for each harness (populated by engine)
-    rendered: BTreeMap<String, HarnessOutput>,
+    /// Required harness capabilities this skill depends on
+    required_capabilities: Vec<String>,
 }
 
-/// The resolved project model — output of ProjectLoader, input to Validator
+/// The resolved project model — output of ProjectLoader
 struct ProjectModel {
     config: ProjectConfig,
     skills: Vec<SkillModel>,
-    user_harness_defs: Vec<HarnessDefinition>,
     project_root: PathBuf,
 }
 
@@ -133,15 +130,11 @@ struct DiscoveryConfig {
     plugin: bool,
 }
 
-/// How the harness validates SKILL.md frontmatter fields
-enum FrontmatterMode {
-    /// Spec fields only, ignores unknown fields
-    /// Platforms: OpenCode, Codex, Pi, Factory
-    Lenient,
-    /// Spec + platform-specific extended fields
-    /// Platforms: Claude Code only
-    Extended,
-}
+/// Frontmatter validation mode (stored as String in code for simpler deserialization)
+/// Expected values: "lenient" (default), "extended"
+/// lenient: Only spec fields, ignores unknown fields (OpenCode, Codex, Pi, Factory)
+/// extended: Spec + platform-specific extended fields (Claude Code)
+type FrontmatterMode = String;
 
 struct HarnessCapabilities {
     supports_subagent: bool,
@@ -204,13 +197,9 @@ struct SidecarDef {
     output_dir: Option<String>,
 }
 
-/// Plugin manifest format identifier
-enum ManifestFormat {
-    /// Claude Code plugin manifest (plugin.json)
-    ClaudePlugin,
-    /// Codex marketplace manifest (marketplace.json or personal-marketplace.json)
-    CodexPlugin,
-}
+/// Plugin manifest format identifier (stored as String for simpler deserialization)
+/// Expected: "claude-plugin" (plugin.json), "codex-plugin" (marketplace.json)
+type ManifestFormat = String;
 
 struct ManifestDef {
     /// Which platform format this manifest targets
@@ -219,22 +208,53 @@ struct ManifestDef {
     template: String,
 }
 
+// ─── Resolver ────────────────────────────────────────────────────────────────
+
+/// A paired skill + harness definition — the carrier type
+/// flowing from Resolver through Validator to Engine and Router.
+struct ResolvedPair {
+    skill: SkillModel,
+    harness: HarnessDefinition,
+}
+
+/// Structured error during harness resolution
+#[derive(thiserror::Error)]
+enum ResolveError {
+    /// No harness found matching the requested name
+    UnknownHarness {
+        skill_name: String,
+        harness_name: String,
+        available: Vec<String>,
+    },
+    /// A required capability is missing from the harness
+    MissingCapability {
+        skill_name: String,
+        harness_name: String,
+        capability: String,
+    },
+}
+
 // ─── Validator ───────────────────────────────────────────────────────────────
 
-/// Structured error for a single skill
-#[derive(miette::Diagnostic, thiserror::Error)]
-struct SkillError {
-    /// The skill name
-    skill: String,
-    /// Source file path
-    #[source_code]
-    src: SourceCode,
-    /// Offending line
-    #[label]
-    span: SourceSpan,
-    /// Human-readable message
-    #[help]
-    message: String,
+/// Validated outcome: valid pairs continue, errors collected for reporting
+struct ValidationOutcome {
+    /// Pairs that passed all validation checks
+    valid: Vec<ResolvedPair>,
+    /// Errors collected across all skills (collect-all-errors pattern)
+    errors: Vec<ValidationError>,
+}
+
+/// Structured error during template validation
+#[derive(thiserror::Error)]
+enum ValidationError {
+    /// MiniJinja syntax parse failure
+    SyntaxError { skill: String, harness: String, detail: String },
+    /// Reference to an undefined variable
+    UndefinedVariable { skill: String, harness: String, variable: String },
+    /// Reference to an undefined harness macro
+    UndefinedMacro { skill: String, harness: String, macro_name: String },
+    /// Failed to read template file from disk
+    TemplateRead { skill: String, harness: String, path: String, detail: String },
 }
 
 // ─── Template Engine ─────────────────────────────────────────────────────────
@@ -245,7 +265,7 @@ struct HarnessOutput {
     skill_content: String,
     /// Sidecar files generated alongside each skill (zero or more)
     sidecars: Vec<SidecarOutput>,
-    /// Manifest entry for this skill (if harness.requires_manifest)
+    /// Manifest entry for this skill (if harness has manifest defined)
     manifest_entry: Option<String>,
 }
 
@@ -255,20 +275,40 @@ struct SidecarOutput {
     output_dir: Option<String>,
 }
 
-// ─── Output Router ───────────────────────────────────────────────────────────
-
-/// Resolved target path for a single file write
-struct ResolvedTarget {
-    /// Absolute output path (e.g., /home/user/project/.claude/skills/my-skill/SKILL.md)
-    path: PathBuf,
-    /// Content to write
-    content: String,
-    /// Whether a file already exists at this path
-    exists: bool,
+/// Errors during template rendering
+#[derive(thiserror::Error)]
+enum EngineError {
+    /// Failed to read template file
+    TemplateRead { skill: String, harness: String, path: String },
+    /// MiniJinja render failure
+    RenderError { skill: String, harness: String, detail: String },
+    /// Name collision between content block and sidecar
+    TemplateCollision { skill: String, harness: String, detail: String },
 }
+
+// ─── Output Router ───────────────────────────────────────────────────────────
 
 enum TargetScope {
     Project,
     User,
     Dist,
+}
+
+/// Result of a successful write operation
+struct WrittenFiles {
+    /// Absolute path of the written skill file
+    skill_path: PathBuf,
+    /// Absolute paths of any sidecar files written
+    sidecar_paths: Vec<PathBuf>,
+    /// Absolute path of the written manifest file (if the harness defines one and an entry was generated)
+    manifest_path: Option<PathBuf>,
+}
+
+/// Errors during file routing and writing
+#[derive(thiserror::Error)]
+enum RouterError {
+    /// Failed to write a file to disk
+    WriteError { skill: String, harness: String, path: String, detail: String },
+    /// Failed to copy asset directories
+    AssetCopyError { skill: String, harness: String, path: String, detail: String },
 }

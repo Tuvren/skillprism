@@ -169,7 +169,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("harnesses")).unwrap();
 
-        let override_yaml = r#"
+        let override_yaml = r"
 id: opencode
 name: OpenCode Custom
 version: 0.1.0
@@ -180,7 +180,7 @@ paths:
   project_scope_path: custom/skills
   user_scope_path: custom/skills
   skill_filename: SKILL.md
-"#;
+";
         std::fs::write(dir.join("harnesses/opencode.yaml"), override_yaml).unwrap();
 
         let mut registry = HarnessRegistry::with_builtins();

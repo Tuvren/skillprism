@@ -1,5 +1,17 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.3.0 — 2026-06-17 — Epic B Implementation
+
+- Epic B (Pipeline) fully implemented: 4 milestones, 16 story points
+- Added `minijinja = "2.20"` with `json` feature and `serde_json` to BOM
+- Implemented `src/resolver/` — `HarnessResolver`, `ResolvedPair`, `ResolveError`
+- Implemented `src/validator/` — syntax, variables, macros checkers, collect-all-errors pattern
+- Implemented `src/engine/` — MiniJinja rendering, context building, helpers (skill_ref)
+- Implemented `src/router/` — path resolution, atomic writes, asset copying
+- Added `required_capabilities` field to SkillModel and skill.yaml parsing
+- `TargetScope` made `pub` for cross-module access
+- No structural API contract deviations from Phase 2 TechSpec
+
 ### v0.2.0 — 2026-06-17 — Epic A Implementation
 
 - Epic A (Foundation) fully implemented: 4 milestones, 9 story points

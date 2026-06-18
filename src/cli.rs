@@ -33,7 +33,7 @@ enum Command {
 }
 
 #[derive(ValueEnum, Clone)]
-enum TargetScope {
+pub enum TargetScope {
     Project,
     User,
     Dist,

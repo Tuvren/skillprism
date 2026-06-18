@@ -22,12 +22,14 @@ sequenceDiagram
 
   Note over Registry: At runtime
   User->>CLI: skillprism build
-  CLI->>Registry: getHarness("claude")
+  CLI->>Registry: resolve("claude")
   Registry->>Registry: lookup compiled-in definitions
   Registry-->>CLI: resolved HarnessDefinition for claude
 
-  CLI->>Registry: getHarness("opencode")
+  CLI->>Registry: resolve("opencode")
   Registry-->>CLI: resolved HarnessDefinition for opencode
 
   CLI->>CLI: continue build with all 5 harnesses
 ```
+
+(End of file - total 33 lines)

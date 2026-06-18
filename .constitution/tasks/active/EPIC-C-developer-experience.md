@@ -2,6 +2,12 @@
 
 Acronym: **DX** | Story Points: **10**
 
+> **Discovered follow-ups from Epic B audit (not yet ticketed):**
+> 1. **Manifest aggregation bug** — Engine generates manifest entries per-skill, Router writes each to the same path (last-write-wins). Manifests like `plugin.json` must aggregate ALL skills for a given harness. Requires moving manifest generation out of per-skill `Engine::render()` to a batch aggregation step.
+> 2. **Pipeline not wired from CLI** — `cli::run()` parses args and discards them. No build/validate pipeline dispatch exists. Build command executes no stages.
+> 3. **User harness overrides never loaded** — `HarnessRegistry::load_user_overrides()` is never called during a real build. ProjectLoader doesn't pass `config.harnesses_dir` to the registry.
+> 4. **Temp file naming edge case** — `path.with_extension("tmp")` replaces the original extension instead of appending `.tmp`. Could cause collisions for extensionless files.
+
 ---
 
 #### DX-C001 Diff Preview Mode

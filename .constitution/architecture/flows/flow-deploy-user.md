@@ -11,13 +11,14 @@ sequenceDiagram
   actor User
   participant CLI as CLI Entrypoint
   participant Registry as Harness Registry
+  participant Resolver as Resolver
   participant Router as Output Router
   participant FS as Filesystem
 
   User->>CLI: skillprism build --target user
   CLI->>CLI: parse --target user
 
-  CLI->>CLI: load, validate, render (omitted for brevity)
+  CLI->>CLI: load, resolve, validate, render (omitted for brevity)
 
   alt --force not set AND files exist at target
     CLI->>Router: checkExisting(targetPaths)
@@ -28,16 +29,16 @@ sequenceDiagram
   end
 
   CLI->>Router: writeAll(renderedFiles, target=user)
-
-  Router->>Registry: getInstallationPath("claude", scope=user)
-  Registry-->>Router: ~/.claude/skills/
+  Router->>Router: resolve path per scope
+  Note over Router: harness.paths.user_scope_path resolves to ~/.claude/skills/
 
   Router->>FS: atomicWrite(~/.claude/skills/my-skill/SKILL.md)
 
-  Router->>Registry: getInstallationPath("opencode", scope=user)
-  Registry-->>Router: ~/.config/opencode/skills/
+  Note over Router: harness.paths.user_scope_path resolves to ~/.config/opencode/skills/
 
   Router->>FS: atomicWrite(~/.config/opencode/skills/my-skill/SKILL.md)
 
   Router-->>User: deploy complete — 5 harnesses globally installed
 ```
+
+(End of file - total 45 lines)

@@ -1,5 +1,13 @@
 # Tasks Changelog
 
+## v0.3.0 — Epic B Complete
+
+- **Epic B (Pipeline)** fully implemented and archived
+- 4 tickets completed: PIPE-B001, PIPE-B002, PIPE-B003, PIPE-B004
+- 16 story points delivered
+- Active backlog reduced to 10 story points (Epic C)
+- New modules: `resolver`, `validator`, `engine`, `router`
+
 ## v0.2.0 — Epic A Complete
 
 - **Epic A (Foundation)** fully implemented and archived

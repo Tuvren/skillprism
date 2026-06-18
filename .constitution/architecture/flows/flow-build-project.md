@@ -11,6 +11,7 @@ sequenceDiagram
   actor User
   participant CLI as CLI Entrypoint
   participant Registry as Harness Registry
+  participant Resolver as Resolver
   participant Engine as Template Engine
   participant Router as Output Router
   participant FS as Filesystem
@@ -18,17 +19,16 @@ sequenceDiagram
   User->>CLI: skillprism build
   Note over CLI: default scope = project
 
-  CLI->>CLI: load, validate, render (omitted for brevity)
+  CLI->>CLI: load, resolve, validate, render (omitted for brevity)
 
   CLI->>Router: writeAll(renderedFiles, target=project)
-  Router->>Registry: getInstallationPath("claude", scope=project)
-  Registry-->>Router: ./.claude/skills/
+  Router->>Router: resolve path per scope
+  Note over Router: harness.paths.project_scope_path resolves to ./.claude/skills/
 
   Router->>FS: atomicWrite(./.claude/skills/my-skill/SKILL.md)
   Router->>FS: atomicWrite(./.claude/skills/my-skill/references/guide.md)
 
-  Router->>Registry: getInstallationPath("opencode", scope=project)
-  Registry-->>Router: ./.agents/skills/
+  Note over Router: harness.paths.project_scope_path resolves to ./.agents/skills/
 
   Router->>FS: atomicWrite(./.agents/skills/my-skill/SKILL.md)
 
@@ -37,3 +37,5 @@ sequenceDiagram
 
   Router-->>User: build complete — 5 harnesses, 3 skills, 15 files
 ```
+
+(End of file - total 41 lines)

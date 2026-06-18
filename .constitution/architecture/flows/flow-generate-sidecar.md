@@ -11,27 +11,30 @@ sequenceDiagram
   actor User
   participant CLI as CLI Entrypoint
   participant Registry as Harness Registry
+  participant Resolver as Resolver
   participant Engine as Template Engine
   participant Router as Output Router
   participant FS as Filesystem
 
   User->>CLI: skillprism build
-  CLI->>CLI: load, validate (omitted for brevity)
+  CLI->>CLI: load, resolve, validate (omitted for brevity)
 
   CLI->>Engine: render(skill.template, variables, macros)
   Engine-->>CLI: rendered SKILL.md
 
-  CLI->>Registry: getSidecarTemplate(harnessName)
-  Registry-->>CLI: sidecarTemplate (e.g., "agents/{skill}.yaml.j2")
+  CLI->>CLI: harness.sidecars — inline sidecar templates from harness definition
+  Note over CLI: sidecar templates are a field on the resolved HarnessDefinition
 
   CLI->>Engine: render(sidecarTemplate, skillContext, variables)
   Engine-->>CLI: rendered sidecar content
 
   CLI->>Router: writeSidecar(content, harness, skill)
-  Router->>Registry: getSidecarPath(harness, skillName)
-  Registry-->>Router: e.g., agents/my-skill.yaml
-  Router->>FS: atomicWrite(path, content)
+  Router->>Router: harness.paths.sidecar(skillName)
+  Note over Router: resolves to e.g., agents/my-skill.yaml
+  Router->>FS: atomicWrite(.tmp → rename, content)
   FS-->>Router: sidecar written
 
   Router-->>User: build complete
 ```
+
+(End of file - total 39 lines)
