@@ -75,22 +75,16 @@ impl Router {
                 skill_path.display()
             );
             skipped.push(skill_path.to_string_lossy().to_string());
-            return Ok(WriteResult {
-                written: WrittenFiles {
-                    skill_path,
-                    sidecar_paths: Vec::new(),
-                    manifest_path: None,
-                },
-                skipped,
-            });
+        } else {
+            atomic_write(&skill_path, &output.skill_content).map_err(|e| {
+                RouterError::WriteError {
+                    skill: skill_name.clone(),
+                    harness: harness_id.clone(),
+                    path: skill_path.to_string_lossy().to_string(),
+                    detail: e.to_string(),
+                }
+            })?;
         }
-
-        atomic_write(&skill_path, &output.skill_content).map_err(|e| RouterError::WriteError {
-            skill: skill_name.clone(),
-            harness: harness_id.clone(),
-            path: skill_path.to_string_lossy().to_string(),
-            detail: e.to_string(),
-        })?;
 
         let sidecar_paths =
             Self::write_sidecars(pair, output, &skill_dir, target, force, &mut skipped)?;
