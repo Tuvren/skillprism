@@ -256,7 +256,6 @@ impl Router {
 }
 
 /// Paths of files written during a build operation.
-#[allow(dead_code)]
 pub struct WrittenFiles {
     /// Path to the rendered skill file.
     pub skill_path: std::path::PathBuf,

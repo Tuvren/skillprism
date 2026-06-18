@@ -173,7 +173,13 @@ fn run_build(
         } else {
             let result =
                 Router::write(pair, &output, &project_root, target, force).into_diagnostic()?;
-            files_changed += 1 + result.written.sidecar_paths.len();
+            let skill_skipped = result
+                .skipped
+                .contains(&result.written.skill_path.to_string_lossy().to_string());
+            if !skill_skipped {
+                files_changed += 1;
+            }
+            files_changed += result.written.sidecar_paths.len();
             if result.written.manifest_path.is_some() {
                 files_changed += 1;
             }
