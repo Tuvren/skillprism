@@ -11,7 +11,7 @@ Acronym: **SCAFF** | Story Points: **7**
 - **Type:** Feature
 - **Effort:** 2
 - **Dependencies:** None
-- **Description:** Add a `--harnesses` flag to `init project` that accepts a comma-separated list of harness IDs instead of hardcoding `claude, opencode`. Default remains `claude, opencode` when flag is omitted. Update the generated `skillprism.yaml` to include only the specified harnesses.
+- **Description:** Add a `--harnesses` flag to `init project` that accepts a comma-separated list of harness IDs instead of hardcoding `claude, opencode`. Default remains `claude, opencode` when flag is omitted. Update the generated `skillprism.yaml` to include only the specified harnesses. Also rename the existing `init skill --targets` flag to `--harnesses` for naming consistency across both init subcommands.
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Given running init project --harnesses claude,codex,pi

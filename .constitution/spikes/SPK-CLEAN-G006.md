@@ -12,7 +12,12 @@
 - **Option A — Stay on yaml_serde:** Lowest risk short-term. The fork is functional for current needs. Risk: if unmaintained, may block future Rust editions.
 - **Option B — Migrate to serde_yml:** Drop-in replacement candidate. Same serde-based API. Requires vetting API compatibility for `Location`, error types, and `Value` type.
 
-## 4. Execution Directives
-- **Chosen Option:** *[To be determined by spike findings]*
-- **Why it fits:** *[TBD]*
+## 4. Recommendation
+- **Chosen Option:** *[migrate now | defer | don't migrate]*
+- **Rationale:** *[to be determined by spike findings]*
+- **Migration Effort Estimate:** *[hours or SP]*
+
+## 5. Execution Directives
+- **Chosen Option:** *[mirrors section 4]*
+- **Why it fits:** *[to be determined by spike findings]*
 - **Downstream Backlog Impact:** If migration is chosen, a follow-up implementation ticket should be added to the active backlog.

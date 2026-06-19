@@ -9,7 +9,7 @@
 
 SAFE-D004–D009 are independent after SAFE-D003. SAFE-D006 (collision detection) is independent of SAFE-D001 (path traversal) — they address different concerns. SCAFF-E001–E004 are independent of each other. TEST-F002 depends on TEST-F001. CLEAN-G001–G008 are independent of each other once TEST is green. RELS-H001–H004 are independent once CLEAN is clean.
 
-- **Parallel Windows:** SAFE-D004–D009 (5 tickets), SCAFF-E001–E004 (4 tickets), CLEAN-G001–G008 (8 tickets), RELS-H001–H004 (4 tickets)
+- **Parallel Windows:** SAFE-D004–D009 (6 tickets), SCAFF-E001–E004 (4 tickets), CLEAN-G001–G008 (8 tickets), RELS-H001–H004 (4 tickets)
 
 ## Build Order Diagram
 
@@ -21,6 +21,7 @@ flowchart LR
   SAFE-D003 --> SAFE-D005["D SAFE-D005 Verbose Variables"]
   SAFE-D003 --> SAFE-D007["D SAFE-D007 Source Mapping"]
   SAFE-D003 --> SAFE-D008["D SAFE-D008 Missing Assets"]
+  SAFE-D003 --> SAFE-D006["D SAFE-D006 Path Collision"]
   SAFE-D003 --> SAFE-D009["D SAFE-D009 home_dir Error"]
 
   SAFE-D009 --> SCAFF-E001["E SCAFF-E001 Scaffold Enhancements"]
