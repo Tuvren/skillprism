@@ -20,6 +20,8 @@ Acronym: **CLEAN** | Story Points: **9**
   And the code compiles cleanly
   ```
 
+---
+
 #### CLEAN-G002 Remove Dead MissingField Variant
 
 - **Type:** Chore
@@ -33,6 +35,8 @@ Acronym: **CLEAN** | Story Points: **9**
   Then no dead_code warnings are suppressed for MissingField
   ```
 
+---
+
 #### CLEAN-G003 Remove Dead skill_output_dir Function
 
 - **Type:** Chore
@@ -45,6 +49,8 @@ Acronym: **CLEAN** | Story Points: **9**
   When compiling
   Then no dead_code warnings are suppressed for skill_output_dir
   ```
+
+---
 
 #### CLEAN-G004 Fix Module-Level Allow in project.rs
 
@@ -60,6 +66,8 @@ Acronym: **CLEAN** | Story Points: **9**
   And clippy passes with -D warnings
   ```
 
+---
+
 #### CLEAN-G005 Fix Module-Level Allow in registry/types.rs
 
 - **Type:** Chore
@@ -73,6 +81,8 @@ Acronym: **CLEAN** | Story Points: **9**
   Then only justified allow attributes remain
   And no dead_code suppression exists at module level
   ```
+
+---
 
 #### CLEAN-G006 Spike: Evaluate yaml_serde → serde_yml Migration
 
@@ -89,6 +99,8 @@ Acronym: **CLEAN** | Story Points: **9**
   And a clear recommendation (migrate now, defer, or don't migrate)
   ```
 
+---
+
 #### CLEAN-G007 Fix Module-Level Allow in loader/mod.rs
 
 - **Type:** Chore
@@ -102,6 +114,8 @@ Acronym: **CLEAN** | Story Points: **9**
   Then no module-level #[allow(...)] attributes remain
   And clippy passes with -D warnings
   ```
+
+---
 
 #### CLEAN-G008 Fix Module-Level Allow in types/mod.rs
 

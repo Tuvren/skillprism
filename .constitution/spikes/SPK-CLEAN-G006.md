@@ -12,6 +12,16 @@
 - **Option A — Stay on yaml_serde:** Lowest risk short-term. The fork is functional for current needs. Risk: if unmaintained, may block future Rust editions.
 - **Option B — Migrate to serde_yml:** Drop-in replacement candidate. Same serde-based API. Requires vetting API compatibility for `Location`, error types, and `Value` type.
 
+### 3.1 API Compatibility Matrix
+
+| Concern | yaml_serde 0.10 | serde_yml (latest) | Compatible? |
+|---------|-----------------|--------------------|-------------|
+| `Deserialize` trait derive | — | — | *to verify* |
+| `from_str<T: Deserialize>` | — | — | *to verify* |
+| `Value` type | — | — | *to verify* |
+| Error type (`Location`, `line()`) | — | — | *to verify* |
+| Serde `Deserializer` impl | — | — | *to verify* |
+
 ## 4. Recommendation
 - **Chosen Option:** *[migrate now | defer | don't migrate]*
 - **Rationale:** *[to be determined by spike findings]*

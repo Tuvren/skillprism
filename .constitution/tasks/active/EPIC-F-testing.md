@@ -27,6 +27,8 @@ Acronym: **TEST** | Story Points: **8**
   Then diff output is printed to stdout without modifying any files
   ```
 
+---
+
 #### TEST-F002 CI Pipeline (GitHub Actions)
 
 - **Type:** Chore
@@ -44,6 +46,8 @@ Acronym: **TEST** | Story Points: **8**
   When the workflow completes
   Then a passing badge is displayed in the README
   ```
+
+---
 
 #### TEST-F003 Pre-commit Hooks
 

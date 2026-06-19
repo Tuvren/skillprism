@@ -20,6 +20,8 @@ Acronym: **RELS** | Story Points: **5**
   And the copyright holder matches the repository owner
   ```
 
+---
+
 #### RELS-H002 Shell Completions
 
 - **Type:** Feature
@@ -36,6 +38,8 @@ Acronym: **RELS** | Story Points: **5**
   When inspecting the bash completion output
   Then it includes the build, validate, and init subcommands
   ```
+
+---
 
 #### RELS-H003 Add --dry-run Alias for --diff
 
@@ -54,6 +58,8 @@ Acronym: **RELS** | Story Points: **5**
   When inspecting
   Then both --dry-run and --diff are listed
   ```
+
+---
 
 #### RELS-H004 .gitignore Polish
 

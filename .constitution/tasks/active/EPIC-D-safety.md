@@ -23,6 +23,8 @@ Acronym: **SAFE** | Story Points: **16**
   Then the path resolves normally within the project root
   ```
 
+---
+
 #### SAFE-D002 Interactive Overwrite Confirmation
 
 - **Type:** Feature
@@ -39,6 +41,8 @@ Acronym: **SAFE** | Story Points: **16**
   When existing files are encountered
   Then files are overwritten without prompting
   ```
+
+---
 
 #### SAFE-D003 Signal Handling
 
@@ -59,6 +63,8 @@ Acronym: **SAFE** | Story Points: **16**
   And exit code is 143
   ```
 
+---
+
 #### SAFE-D004 Verbose Output with Phase Timing
 
 - **Type:** Feature
@@ -72,6 +78,8 @@ Acronym: **SAFE** | Story Points: **16**
   Then each phase prints its elapsed time in milliseconds
   ```
 
+---
+
 #### SAFE-D005 Verbose Resolved Variable Listing
 
 - **Type:** Feature
@@ -84,6 +92,8 @@ Acronym: **SAFE** | Story Points: **16**
   When a skill has inherited parent variables
   Then the final resolved variables are printed in verbose output
   ```
+
+---
 
 #### SAFE-D006 Path Collision Detection
 
@@ -103,6 +113,8 @@ Acronym: **SAFE** | Story Points: **16**
   Then writing proceeds normally
   ```
 
+---
+
 #### SAFE-D007 Source Line/Column in Render Errors
 
 - **Type:** Feature
@@ -120,6 +132,8 @@ Acronym: **SAFE** | Story Points: **16**
   Then the error message includes the variable name and source location
   ```
 
+---
+
 #### SAFE-D008 Missing Asset Directory Warning
 
 - **Type:** Feature
@@ -133,6 +147,8 @@ Acronym: **SAFE** | Story Points: **16**
   Then a warning is printed with the skill name and missing path
   And the build continues successfully
   ```
+
+---
 
 #### SAFE-D009 home_dir Fallback Returns Error
 

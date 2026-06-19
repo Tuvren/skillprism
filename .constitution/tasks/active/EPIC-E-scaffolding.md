@@ -23,6 +23,8 @@ Acronym: **SCAFF** | Story Points: **7**
   Then skillprism.yaml contains the default harnesses (claude, opencode)
   ```
 
+---
+
 #### SCAFF-E002 init project Creates Sample Skill
 
 - **Type:** Feature
@@ -37,6 +39,8 @@ Acronym: **SCAFF** | Story Points: **7**
   And the sample template demonstrates at least {{ skill_name }} and {{ harness.id }}
   ```
 
+---
+
 #### SCAFF-E003 init Skill Creates Asset Directories
 
 - **Type:** Feature
@@ -49,6 +53,8 @@ Acronym: **SCAFF** | Story Points: **7**
   When the skill is scaffolded
   Then the skill directory contains references/ and scripts/ subdirectories
   ```
+
+---
 
 #### SCAFF-E004 init harness Command
 

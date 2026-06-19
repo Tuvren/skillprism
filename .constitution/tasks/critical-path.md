@@ -24,8 +24,9 @@ flowchart LR
   SAFE-D003 --> SAFE-D006["D SAFE-D006 Path Collision"]
   SAFE-D003 --> SAFE-D009["D SAFE-D009 home_dir Error"]
 
-  SAFE-D009 --> SCAFF-E001["E SCAFF-E001 Scaffold Enhancements"]
-  SAFE-D009 --> TEST-F001["F TEST-F001 Integration Tests"]
+  SAFE-D009 --> SAFE_DONE["✅ SAFE Complete (epic gate)"]
+  SAFE_DONE --> SCAFF_E["E SCAFF-E001-E004"]
+  SAFE_DONE --> TEST_F["F TEST-F001 Integration Tests"]
 
   TEST-F001 --> TEST-F002["F TEST-F002 CI Pipeline"]
   TEST-F002 --> TEST-F003["F TEST-F003 Pre-commit Hooks"]
