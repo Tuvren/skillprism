@@ -97,6 +97,7 @@ fn run_build(
     force: bool,
     verbose: bool,
 ) -> Result<(), miette::Report> {
+    install_signal_handlers();
     let project_root = find_project_root()?;
     if verbose {
         eprintln!("[build] project root: {}", project_root.display());
@@ -297,6 +298,35 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             Ok(())
         }
     }
+}
+
+fn install_signal_handlers() {
+    let result = ctrlc::set_handler(|| {
+        eprintln!("\nSIGINT received — abandoning in-progress writes");
+        std::process::exit(130);
+    });
+
+    if let Err(e) = result {
+        eprintln!("Warning: failed to install SIGINT handler: {e}");
+    }
+
+    #[cfg(unix)]
+    {
+        extern "C" fn sigterm_handler(_: i32) {
+            eprintln!("SIGTERM received — abandoning in-progress writes");
+            std::process::exit(143);
+        }
+
+        const SIGTERM: i32 = 15;
+        unsafe {
+            let _ = signal(SIGTERM, sigterm_handler as *const () as usize);
+        }
+    }
+}
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn signal(sig: i32, handler: usize) -> usize;
 }
 
 fn find_project_root() -> Result<PathBuf, miette::Report> {
