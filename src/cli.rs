@@ -175,9 +175,16 @@ fn run_build(
             print_diff_entry(entry, &mut result);
         }
     } else if !diff && !manifest_entries.is_empty() {
-        let written = Router::write_aggregated_manifests(&manifest_entries, target, force)
-            .into_diagnostic()?;
+        let mut manifest_skipped = Vec::new();
+        let written = Router::write_aggregated_manifests(
+            &manifest_entries,
+            target,
+            force,
+            &mut manifest_skipped,
+        )
+        .into_diagnostic()?;
         result.changed += written.len();
+        result.skipped += manifest_skipped.len();
     }
 
     if diff {

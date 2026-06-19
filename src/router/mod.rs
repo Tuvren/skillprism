@@ -133,6 +133,7 @@ impl Router {
         entries: &[ManifestEntry],
         target: TargetScope,
         force: bool,
+        skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
 
@@ -143,6 +144,7 @@ impl Router {
                     "Warning: skipping manifest `{}` (user-scope file exists, use --force to overwrite)",
                     path.display()
                 );
+                skipped.push(path.to_string_lossy().to_string());
                 continue;
             }
 
@@ -456,8 +458,13 @@ mod tests {
             },
         ];
 
-        let written = Router::write_aggregated_manifests(&entries, TargetScope::Project, false)
-            .unwrap();
+        let written = Router::write_aggregated_manifests(
+            &entries,
+            TargetScope::Project,
+            false,
+            &mut Vec::new(),
+        )
+        .unwrap();
         assert_eq!(written.len(), 1);
         assert!(manifest_path.exists());
 
@@ -685,8 +692,13 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
-        let written =
-            Router::write_aggregated_manifests(&[], TargetScope::Project, false).unwrap();
+        let written = Router::write_aggregated_manifests(
+            &[],
+            TargetScope::Project,
+            false,
+            &mut Vec::new(),
+        )
+        .unwrap();
         assert!(written.is_empty());
 
         let _ = fs::remove_dir_all(&dir);
@@ -710,7 +722,7 @@ mod tests {
         fs::write(&manifest_path, r#"[{"name":"old-skill"}]"#).unwrap();
 
         let entries = vec![ManifestEntry {
-            path: manifest_path.clone(),
+            path: manifest_path,
             content: r#"{"name":"new-skill"}"#.to_string(),
         }];
 
