@@ -2,10 +2,8 @@ pub mod diff;
 mod paths;
 mod write;
 
-use std::path::Path;
-
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -38,6 +36,16 @@ pub enum RouterError {
         harness: String,
         path: String,
         detail: String,
+    },
+
+    /// A resolved output path escapes its allowed scope (path traversal).
+    #[error("[{skill}] {harness}: Path traversal detected — `{resolved}` escapes scope `{allowed_base}`")]
+    #[diagnostic(help("Harness installation paths must not contain `..` traversal that escapes the intended scope"))]
+    PathTraversal {
+        skill: String,
+        harness: String,
+        resolved: String,
+        allowed_base: String,
     },
 }
 
@@ -76,7 +84,7 @@ impl Router {
         let skill_name = &pair.skill.name;
         let harness_id = &pair.harness.id;
 
-        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target);
+        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target)?;
         let skill_dir = skill_path
             .parent()
             .expect("skill path has parent")
@@ -172,7 +180,14 @@ impl Router {
     ) -> Vec<DiffEntry> {
         let skill_name = &pair.skill.name;
 
-        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target);
+        let skill_path = match resolve_skill_path(project_root, &pair.harness, skill_name, target)
+        {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Warning: {e:?}");
+                return Vec::new();
+            }
+        };
         let skill_dir = skill_path
             .parent()
             .expect("skill path has parent")

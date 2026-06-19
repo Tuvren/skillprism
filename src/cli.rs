@@ -147,6 +147,7 @@ fn run_build(
             if let Some(path) = crate::router::resolve_manifest_path(
                 &project_root, &pair.harness, target,
             ) {
+                let path = path.into_diagnostic()?;
                 manifest_entries.push(ManifestEntry { path, content: entry });
             }
         }
