@@ -4,6 +4,9 @@ mod write;
 
 use std::path::Path;
 
+use std::collections::BTreeMap;
+use std::path::PathBuf;
+
 use miette::Diagnostic;
 use thiserror::Error;
 
@@ -38,6 +41,15 @@ pub enum RouterError {
     },
 }
 
+/// A single manifest entry produced by rendering a skill through a harness.
+#[derive(Debug, Clone)]
+pub struct ManifestEntry {
+    /// The resolved path where the manifest file should be written.
+    pub path: PathBuf,
+    /// The rendered content of this entry (e.g., a JSON object).
+    pub content: String,
+}
+
 /// Routes rendered skill output to the correct file system locations.
 pub struct Router;
 
@@ -50,7 +62,10 @@ pub struct WriteResult {
 }
 
 impl Router {
-    /// Writes rendered skill output to disk at the resolved path.
+    /// Writes rendered skill output (skill file + sidecars) to disk at the resolved path.
+    ///
+    /// Manifest files are NOT written here — they are batch-processed via
+    /// [`write_aggregated_manifests`](Self::write_aggregated_manifests) after all skills are rendered.
     pub fn write(
         pair: &ResolvedPair,
         output: &HarnessOutput,
@@ -89,9 +104,6 @@ impl Router {
         let sidecar_paths =
             Self::write_sidecars(pair, output, &skill_dir, target, force, &mut skipped)?;
 
-        let manifest_path =
-            Self::write_manifest(pair, output, project_root, target, force, &mut skipped)?;
-
         let skill_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
         if !pair.skill.asset_dirs.is_empty() && !skill_skipped {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
@@ -108,89 +120,48 @@ impl Router {
             written: WrittenFiles {
                 skill_path,
                 sidecar_paths,
-                manifest_path,
             },
             skipped,
         })
     }
 
-    fn write_sidecars(
-        pair: &ResolvedPair,
-        output: &HarnessOutput,
-        skill_dir: &Path,
+    /// Writes aggregated manifest files from collected per-skill entries.
+    ///
+    /// For JSON-format manifests, entries are aggregated into a JSON array.
+    /// Manifests are grouped by unique (resolved path) — each group produces one file.
+    pub fn write_aggregated_manifests(
+        entries: &[ManifestEntry],
         target: TargetScope,
         force: bool,
-        skipped: &mut Vec<String>,
-    ) -> Result<Vec<std::path::PathBuf>, RouterError> {
-        let skill_name = &pair.skill.name;
-        let harness_id = &pair.harness.id;
-        let mut sidecar_paths = Vec::new();
+    ) -> Result<Vec<PathBuf>, RouterError> {
+        let mut written = Vec::new();
 
-        for sidecar in &output.sidecars {
-            let sidecar_path = paths::resolve_sidecar_path(
-                skill_dir,
-                sidecar.output_dir.as_deref(),
-                &sidecar.filename,
-            );
-
-            if !force && target == TargetScope::User && sidecar_path.exists() {
+        let grouped = group_manifest_entries(entries);
+        for (path, group) in &grouped {
+            if !force && target == TargetScope::User && path.exists() {
                 eprintln!(
-                    "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
-                    sidecar_path.display()
+                    "Warning: skipping manifest `{}` (user-scope file exists, use --force to overwrite)",
+                    path.display()
                 );
-                skipped.push(sidecar_path.to_string_lossy().to_string());
                 continue;
             }
 
-            atomic_write(&sidecar_path, &sidecar.content).map_err(|e| RouterError::WriteError {
-                skill: skill_name.clone(),
-                harness: harness_id.clone(),
-                path: sidecar_path.to_string_lossy().to_string(),
+            let aggregated = aggregate_json_entries(group);
+            atomic_write(path, &aggregated).map_err(|e| RouterError::WriteError {
+                skill: "manifest".to_string(),
+                harness: "aggregated".to_string(),
+                path: path.to_string_lossy().to_string(),
                 detail: e.to_string(),
             })?;
-            sidecar_paths.push(sidecar_path);
+            written.push(path.clone());
         }
 
-        Ok(sidecar_paths)
+        Ok(written)
     }
 
-    fn write_manifest(
-        pair: &ResolvedPair,
-        output: &HarnessOutput,
-        project_root: &Path,
-        target: TargetScope,
-        force: bool,
-        skipped: &mut Vec<String>,
-    ) -> Result<Option<std::path::PathBuf>, RouterError> {
-        let skill_name = &pair.skill.name;
-        let harness_id = &pair.harness.id;
-        let Some(ref manifest_content) = output.manifest_entry else {
-            return Ok(None);
-        };
-        let Some(path) = paths::resolve_manifest_path(project_root, &pair.harness, target) else {
-            return Ok(None);
-        };
-
-        if !force && target == TargetScope::User && path.exists() {
-            eprintln!(
-                "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
-                path.display()
-            );
-            skipped.push(path.to_string_lossy().to_string());
-            return Ok(None);
-        }
-
-        atomic_write(&path, manifest_content).map_err(|e| RouterError::WriteError {
-            skill: skill_name.clone(),
-            harness: harness_id.clone(),
-            path: path.to_string_lossy().to_string(),
-            detail: e.to_string(),
-        })?;
-
-        Ok(Some(path))
-    }
-
-    /// Computes diffs for all files that would be written.
+    /// Computes diff entries for all files that would be written (skill + sidecars, no manifest).
+    ///
+    /// Manifest diffs are computed separately via [`diff_manifests`](Self::diff_manifests).
     pub fn diff(
         pair: &ResolvedPair,
         output: &HarnessOutput,
@@ -236,23 +207,108 @@ impl Router {
             });
         }
 
-        if let Some(ref manifest_content) = output.manifest_entry {
-            if let Some(path) = paths::resolve_manifest_path(project_root, &pair.harness, target) {
-                let existing = diff::read_existing(&path);
-                let diff_output = diff::compute_diff(
-                    existing.as_deref(),
-                    manifest_content,
-                    &path.to_string_lossy(),
-                );
-                entries.push(DiffEntry {
-                    path,
-                    diff: diff_output,
-                });
-            }
-        }
-
         entries
     }
+
+    /// Computes diff entries for aggregated manifest files.
+    pub fn diff_manifests(
+        entries: &[ManifestEntry],
+    ) -> Vec<DiffEntry> {
+        let grouped = group_manifest_entries(entries);
+        let mut result = Vec::new();
+
+        for (path, group) in &grouped {
+            let aggregated = aggregate_json_entries(group);
+            let existing = diff::read_existing(path);
+            let diff_output = diff::compute_diff(
+                existing.as_deref(),
+                &aggregated,
+                &path.to_string_lossy(),
+            );
+            result.push(DiffEntry {
+                path: path.clone(),
+                diff: diff_output,
+            });
+        }
+
+        result
+    }
+
+    fn write_sidecars(
+        pair: &ResolvedPair,
+        output: &HarnessOutput,
+        skill_dir: &Path,
+        target: TargetScope,
+        force: bool,
+        skipped: &mut Vec<String>,
+    ) -> Result<Vec<PathBuf>, RouterError> {
+        let skill_name = &pair.skill.name;
+        let harness_id = &pair.harness.id;
+        let mut sidecar_paths = Vec::new();
+
+        for sidecar in &output.sidecars {
+            let sidecar_path = paths::resolve_sidecar_path(
+                skill_dir,
+                sidecar.output_dir.as_deref(),
+                &sidecar.filename,
+            );
+
+            if !force && target == TargetScope::User && sidecar_path.exists() {
+                eprintln!(
+                    "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
+                    sidecar_path.display()
+                );
+                skipped.push(sidecar_path.to_string_lossy().to_string());
+                continue;
+            }
+
+            atomic_write(&sidecar_path, &sidecar.content).map_err(|e| RouterError::WriteError {
+                skill: skill_name.clone(),
+                harness: harness_id.clone(),
+                path: sidecar_path.to_string_lossy().to_string(),
+                detail: e.to_string(),
+            })?;
+            sidecar_paths.push(sidecar_path);
+        }
+
+        Ok(sidecar_paths)
+    }
+}
+
+/// Groups manifest entries by their resolved file path.
+fn group_manifest_entries(entries: &[ManifestEntry]) -> BTreeMap<PathBuf, Vec<String>> {
+    let mut grouped: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+    for entry in entries {
+        grouped
+            .entry(entry.path.clone())
+            .or_default()
+            .push(entry.content.clone());
+    }
+    grouped
+}
+
+/// Aggregates manifest entries into a JSON array.
+///
+/// Each entry is expected to be a JSON object string.
+/// The result is a JSON array containing all entries.
+fn aggregate_json_entries(entries: &[String]) -> String {
+    if entries.is_empty() {
+        return "[]".to_string();
+    }
+
+    let mut result = String::from("[\n");
+    for (i, entry) in entries.iter().enumerate() {
+        if i > 0 {
+            result.push_str(",\n");
+        }
+        for line in entry.lines() {
+            result.push_str("  ");
+            result.push_str(line);
+            result.push('\n');
+        }
+    }
+    result.push(']');
+    result
 }
 
 /// Paths of files written during a build operation.
@@ -261,8 +317,6 @@ pub struct WrittenFiles {
     pub skill_path: std::path::PathBuf,
     /// Paths to any sidecar files written.
     pub sidecar_paths: Vec<std::path::PathBuf>,
-    /// Path to the manifest file, if one was produced.
-    pub manifest_path: Option<std::path::PathBuf>,
 }
 
 /// A single file's diff output for the --diff mode.
@@ -306,7 +360,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "my-agent-rendered".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
@@ -338,7 +391,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "content".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
@@ -372,7 +424,6 @@ mod tests {
                 content: "key: value".to_string(),
                 output_dir: None,
             }],
-            manifest_entry: None,
         };
 
         let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
@@ -386,31 +437,35 @@ mod tests {
     }
 
     #[test]
-    fn writes_manifest_entry() {
+    fn aggregates_manifest_entries_into_json_array() {
         let dir = std::env::temp_dir()
             .join("skillprism_test")
-            .join("router_manifest");
+            .join("router_manifest_agg");
         let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
-        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "content").unwrap();
+        fs::create_dir_all(&dir).unwrap();
 
-        let registry = HarnessRegistry::with_builtins();
-        let mut skill = test_skill("my-agent", vec![]);
-        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        let manifest_path = dir.join("plugin.json");
+        let entries = vec![
+            ManifestEntry {
+                path: manifest_path.clone(),
+                content: r#"{"name":"skill-a"}"#.to_string(),
+            },
+            ManifestEntry {
+                path: manifest_path.clone(),
+                content: r#"{"name":"skill-b"}"#.to_string(),
+            },
+        ];
 
-        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-        let output = HarnessOutput {
-            skill_content: "rendered".to_string(),
-            sidecars: vec![],
-            manifest_entry: Some(r#"{"name":"my-agent"}"#.to_string()),
-        };
+        let written = Router::write_aggregated_manifests(&entries, TargetScope::Project, false)
+            .unwrap();
+        assert_eq!(written.len(), 1);
+        assert!(manifest_path.exists());
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
-        assert!(result.written.manifest_path.is_some());
-        let manifest = result.written.manifest_path.unwrap();
-        assert_eq!(manifest, dir.join(".claude/plugin.json"));
-        assert!(manifest.exists());
-        assert_eq!(written_content(&manifest), r#"{"name":"my-agent"}"#);
+        let content = fs::read_to_string(&manifest_path).unwrap();
+        assert!(content.contains("skill-a"));
+        assert!(content.contains("skill-b"));
+        assert!(content.starts_with('['));
+        assert!(content.ends_with(']'));
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -436,7 +491,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "content".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
@@ -466,7 +520,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "rendered content".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
@@ -497,7 +550,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "new content".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
@@ -529,7 +581,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "same content".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
@@ -561,7 +612,6 @@ mod tests {
                 content: "key: value".to_string(),
                 output_dir: None,
             }],
-            manifest_entry: None,
         };
 
         let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
@@ -590,7 +640,6 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "rendered".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
@@ -618,13 +667,36 @@ mod tests {
         let output = HarnessOutput {
             skill_content: "rendered".to_string(),
             sidecars: vec![],
-            manifest_entry: None,
         };
 
         let result = Router::write(&pair, &output, &dir, TargetScope::Project, true).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
         assert_eq!(written_content(&result.written.skill_path), "rendered");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_manifests_shows_aggregated_diff() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_diff_manifest");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let manifest_path = dir.join("plugin.json");
+        fs::write(&manifest_path, r#"[{"name":"old-skill"}]"#).unwrap();
+
+        let entries = vec![ManifestEntry {
+            path: manifest_path.clone(),
+            content: r#"{"name":"new-skill"}"#.to_string(),
+        }];
+
+        let diffs = Router::diff_manifests(&entries);
+        assert_eq!(diffs.len(), 1);
+        assert!(!diffs[0].diff.stats.is_new_file);
+        assert!(diffs[0].diff.stats.additions > 0 || diffs[0].diff.stats.deletions > 0);
 
         let _ = fs::remove_dir_all(&dir);
     }

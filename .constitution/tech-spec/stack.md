@@ -18,7 +18,7 @@
 | Template engine | `minijinja` | 2.20.x | Chosen by PRD; authored by Jinja2 creator Armin Ronacher; designed for text/YAML codegen; parse-only mode for validation without side effects |
 | YAML deserialization | `yaml_serde` | 0.10.x | Serde-based YAML parsing; actively maintained fork of the deprecated `serde_yaml` by The YAML Organization |
 | Error diagnostics | `miette` | 7.6.x | Structured error reporting with source spans, file/line references, and rich terminal output; satisfies the PRD's actionable-error constraint |
-| Snapshot testing | `insta` | 1.48.x | Snapshot-based approval tests for rendered template output; authored by same maintainer as MiniJinja |
+| Diff computation | `similar` | 2.7.x | Colored unified diffs for `--diff` mode; features = ["text"] |
 
 ## Tooling
 
@@ -26,7 +26,7 @@
 | :--- | :--- | :--- | :--- |
 | Code formatting | `rustfmt` | Bundled | Project-wide consistent formatting enforced in CI |
 | Linting | `clippy` | Bundled | Enforce `#![deny(clippy::all, clippy::pedantic)]` in CI; allowlist exceptions per module where justified |
-| Testing | `cargo test` + `insta` | Bundled | Unit tests per pipeline stage + snapshot tests for template rendering |
+| Testing | `cargo test` | Bundled | Unit tests per pipeline stage; inline assertions for template rendering |
 | CI (future) | GitHub Actions | N/A | No CI configured for v0.1; `cargo build` && `cargo test` && `cargo clippy` will be the standard gate |
 
 ## Compatibility Policy

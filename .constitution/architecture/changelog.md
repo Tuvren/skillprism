@@ -1,5 +1,12 @@
 # Architecture Changelog
 
+### v0.2.1 — 2026-06-18 — Manifest Aggregation Fix
+
+- Fixed manifest aggregation bug: manifest entries now collected per-skill and batch-aggregated into a JSON array after all skills are rendered
+- Manifest writing moved from per-skill `Router::write()` to batch `Router::write_aggregated_manifests()`
+- Engine now exposes `render_manifest_entry()` as a standalone method separate from `render()`
+- Manifest `ManifestDef.template` now renders a single entry (not the full file); aggregation wraps entries in appropriate format
+
 ### v0.2.0 — 2026-06-17 — Epic B Implementation
 
 - **Epic B (Pipeline)** fully implemented: 4 containers built (Resolver, Validator, Engine, Router)

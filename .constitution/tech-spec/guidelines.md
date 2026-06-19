@@ -20,30 +20,28 @@ skillprism/
 ├── rust-toolchain.toml     # MSRV pin (1.85, edition 2024)
 ├── src/
 │   ├── main.rs             # CLI entrypoint (clap dispatch)
-│   ├── cli.rs              # Command/flag definitions (clap derive)
+│   ├── cli.rs              # Command/flag definitions (clap derive) + pipeline dispatch
 │   ├── loader/
-│   │   ├── mod.rs          # Project Loader — discover skills, parse YAML
-│   │   ├── project.rs      # skillprism.yaml parsing
-│   │   ├── skill.rs        # skill.yaml parsing & variable merge
-│   │   └── discover.rs     # Directory tree walker
+│   │   ├── mod.rs          # Module exports + public API
+│   │   └── project.rs      # Project discovery, YAML parsing, variable merge
 │   ├── registry/
 │   │   ├── mod.rs          # Harness Registry — built-in + user overrides
-│   │   ├── builtin.rs      # Compiled-in harness definitions
-│   │   ├── merge.rs        # Override merge logic
-│   │   └── types.rs        # HarnessDefinition struct
+│   │   └── types.rs        # HarnessDefinition + all sub-types
+│   ├── resolver/
+│   │   └── mod.rs          # Harness Resolver — skill-harness pairing + capability checks
 │   ├── validator/
 │   │   ├── mod.rs          # Validator — batch check all skills
 │   │   ├── syntax.rs       # MiniJinja parse-only check
 │   │   ├── macros.rs       # Macro reference resolution
 │   │   └── variables.rs    # Variable reference resolution
 │   ├── engine/
-│   │   ├── mod.rs          # Template Engine — MiniJinja rendering
+│   │   ├── mod.rs          # Template Engine — MiniJinja rendering + manifest entries
 │   │   ├── context.rs      # Build template context (harness, skill, helpers)
 │   │   └── helpers.rs      # Custom MiniJinja functions (skill_ref, etc.)
 │   ├── router/
-│   │   ├── mod.rs          # Output Router — path resolution & writing
+│   │   ├── mod.rs          # Output Router — path resolution, writing, diffs, manifests
 │   │   ├── paths.rs        # Target scope path resolution
-│   │   ├── write.rs        # Atomic writes (temp → rename)
+│   │   ├── write.rs        # Atomic writes (temp → rename) + asset copy
 │   │   └── diff.rs         # Diff computation against installed files
 │   ├── scaffold/
 │   │   ├── mod.rs          # Scaffolder — init command handlers
@@ -51,8 +49,8 @@ skillprism/
 │   │   └── skill.rs        # Single skill scaffold (SC-2)
 │   ├── types/
 │   │   ├── mod.rs          # Shared domain types
-│   │   ├── project.rs      # ProjectModel, SkillModel
-│   │   ├── harness.rs      # HarnessDefinition
+│   │   ├── project.rs      # ProjectModel, SkillModel, SkillGroup
+│   │   ├── harness.rs      # Re-exports HarnessDefinition from registry
 │   │   └── error.rs        # Unified error types (miette)
 │   └── builtin_harnesses/  # Compiled-in harness YAML (embedded via include_str!)
 │       ├── claude.yaml
@@ -60,9 +58,6 @@ skillprism/
 │       ├── opencode.yaml
 │       ├── factory.yaml
 │       └── pi.yaml
-├── tests/
-│   ├── integration/        # Integration tests (full pipeline)
-│   └── snapshots/          # insta snapshot test output (auto-managed)
 └── harnesses/              # Users' override directory (documented, not shipped)
 ```
 
@@ -90,7 +85,6 @@ skillprism/
 ### Testing
 
 - Unit tests co-located with source (`#[cfg(test)] mod tests` in each module)
-- Snapshot tests (`insta`) for every template rendering scenario — one snapshot per harness per template
 - Integration tests in `tests/integration/` exercise the full build pipeline against a fixtures directory
 - CLI tests use `clap::Command::try_get_matches` or `assert_cmd` for end-to-end flag validation
 

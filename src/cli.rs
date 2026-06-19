@@ -7,7 +7,7 @@ use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
 use crate::resolver::HarnessResolver;
-use crate::router::Router;
+use crate::router::{ManifestEntry, Router};
 use crate::validator::Validator;
 
 #[derive(Parser)]
@@ -137,67 +137,90 @@ fn run_build(
         eprintln!("[build] validated {} pairs", outcome.valid.len());
     }
 
-    let mut files_changed = 0usize;
-    let mut files_unchanged = 0usize;
-    let mut files_skipped = 0usize;
+    let mut result = BuildResult::default();
+    let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
 
     for pair in &outcome.valid {
         let output = Engine::render(pair).into_diagnostic()?;
 
+        if let Some(entry) = Engine::render_manifest_entry(pair) {
+            if let Some(path) = crate::router::resolve_manifest_path(
+                &project_root, &pair.harness, target,
+            ) {
+                manifest_entries.push(ManifestEntry { path, content: entry });
+            }
+        }
+
         if diff {
             let entries = Router::diff(pair, &output, &project_root, target);
             for entry in &entries {
-                if entry.diff.stats.is_new_file {
-                    println!(
-                        "Diff for {}: new file (+{} lines)",
-                        entry.path.display(),
-                        entry.diff.stats.additions
-                    );
-                    println!("{}", entry.diff.hunks);
-                } else if entry.diff.hunks.is_empty() {
-                    println!("{}: no changes", entry.path.display());
-                    files_unchanged += 1;
-                } else {
-                    println!(
-                        "Diff for {}: +{}/-{} lines",
-                        entry.path.display(),
-                        entry.diff.stats.additions,
-                        entry.diff.stats.deletions
-                    );
-                    println!("{}{}", entry.diff.header, entry.diff.hunks);
-                }
-                if !entry.diff.hunks.is_empty() || entry.diff.stats.is_new_file {
-                    files_changed += 1;
-                }
+                print_diff_entry(entry, &mut result);
             }
         } else {
-            let result =
+            let write_result =
                 Router::write(pair, &output, &project_root, target, force).into_diagnostic()?;
-            let skill_skipped = result
+            let skill_skipped = write_result
                 .skipped
-                .contains(&result.written.skill_path.to_string_lossy().to_string());
+                .contains(&write_result.written.skill_path.to_string_lossy().to_string());
             if !skill_skipped {
-                files_changed += 1;
+                result.changed += 1;
             }
-            files_changed += result.written.sidecar_paths.len();
-            if result.written.manifest_path.is_some() {
-                files_changed += 1;
-            }
-            files_skipped += result.skipped.len();
+            result.changed += write_result.written.sidecar_paths.len();
+            result.skipped += write_result.skipped.len();
         }
     }
 
-    if diff {
-        println!("{files_changed} file(s) changed, {files_unchanged} file(s) unchanged");
-    } else if verbose {
-        eprintln!("[build] wrote {files_changed} file(s)");
+    if diff && !manifest_entries.is_empty() {
+        for entry in &Router::diff_manifests(&manifest_entries) {
+            print_diff_entry(entry, &mut result);
+        }
+    } else if !diff && !manifest_entries.is_empty() {
+        let written = Router::write_aggregated_manifests(&manifest_entries, target, force)
+            .into_diagnostic()?;
+        result.changed += written.len();
     }
 
-    if files_skipped > 0 {
-        eprintln!("{files_skipped} file(s) skipped (use --force to overwrite)");
+    if diff {
+        println!("{} file(s) changed, {} file(s) unchanged", result.changed, result.unchanged);
+    } else if verbose {
+        eprintln!("[build] wrote {} file(s)", result.changed);
+    }
+    if result.skipped > 0 {
+        eprintln!("{} file(s) skipped (use --force to overwrite)", result.skipped);
     }
 
     Ok(())
+}
+
+#[derive(Default)]
+struct BuildResult {
+    changed: usize,
+    unchanged: usize,
+    skipped: usize,
+}
+
+fn print_diff_entry(entry: &crate::router::DiffEntry, result: &mut BuildResult) {
+    if entry.diff.stats.is_new_file {
+        println!(
+            "Diff for {}: new file (+{} lines)",
+            entry.path.display(),
+            entry.diff.stats.additions
+        );
+        println!("{}", entry.diff.hunks);
+        result.changed += 1;
+    } else if entry.diff.hunks.is_empty() {
+        println!("{}: no changes", entry.path.display());
+        result.unchanged += 1;
+    } else {
+        println!(
+            "Diff for {}: +{}/-{} lines",
+            entry.path.display(),
+            entry.diff.stats.additions,
+            entry.diff.stats.deletions
+        );
+        println!("{}{}", entry.diff.header, entry.diff.hunks);
+        result.changed += 1;
+    }
 }
 
 fn run_validate(path: &str) -> Result<(), miette::Report> {

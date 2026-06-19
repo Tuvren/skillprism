@@ -23,6 +23,14 @@ discovery:
   project: true
   user: true
   plugin: true
+manifest:
+  format: json
+  template: |
+    {
+      "name": "{{ skill_name }}",
+      "description": "{{ skill_description }}",
+      "skill_ref": "{{ skill_ref(skill_name) }}"
+    }
 macros:
   subagent_guide:
     content: "## Subagent Instructions\n\nCodex CLI invokes agents in a separate agent orchestration context."
