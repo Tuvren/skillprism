@@ -130,8 +130,16 @@ impl Engine {
     pub fn render_manifest_entry(pair: &ResolvedPair) -> Option<String> {
         let manifest = pair.harness.manifest.as_ref()?;
         let ctx = build_context(pair);
-        let entry = render_manifest(manifest, &ctx).ok()?;
-        Some(entry)
+        match render_manifest(manifest, &ctx) {
+            Ok(entry) => Some(entry),
+            Err(e) => {
+                eprintln!(
+                    "Warning: [{}] {}: manifest entry not rendered — {e}",
+                    pair.skill.name, pair.harness.id,
+                );
+                None
+            }
+        }
     }
 
 }

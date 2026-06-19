@@ -678,6 +678,27 @@ mod tests {
     }
 
     #[test]
+    fn write_aggregated_manifests_empty_entries() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_manifest_empty");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let written =
+            Router::write_aggregated_manifests(&[], TargetScope::Project, false).unwrap();
+        assert!(written.is_empty());
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn diff_manifests_empty_entries() {
+        let diffs = Router::diff_manifests(&[]);
+        assert!(diffs.is_empty());
+    }
+
+    #[test]
     fn diff_manifests_shows_aggregated_diff() {
         let dir = std::env::temp_dir()
             .join("skillprism_test")
