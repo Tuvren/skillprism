@@ -137,6 +137,10 @@ fn run_build(
         eprintln!("[{t}] validate {} pairs", outcome.valid.len(), t = fmt_duration(t2.elapsed()));
     }
 
+    if verbose {
+        log_verbose_variables(&outcome.valid);
+    }
+
     let t3 = Instant::now();
     let mut result = BuildResult::default();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
@@ -360,6 +364,23 @@ fn install_signal_handlers() {
 #[cfg(unix)]
 unsafe extern "C" {
     fn signal(sig: i32, handler: usize) -> usize;
+}
+
+fn log_verbose_variables(valid: &[crate::resolver::ResolvedPair]) {
+    for pair in valid {
+        let pair_name = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+        if pair.skill.variables.is_empty() {
+            eprintln!("  {pair_name}: (no variables)");
+        } else {
+            let vars: Vec<String> = pair
+                .skill
+                .variables
+                .iter()
+                .map(|(k, v)| format!("{k}={v:?}"))
+                .collect();
+            eprintln!("  {pair_name}: {}", vars.join(", "));
+        }
+    }
 }
 
 fn fmt_duration(d: std::time::Duration) -> String {
