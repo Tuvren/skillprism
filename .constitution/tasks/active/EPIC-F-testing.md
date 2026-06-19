@@ -1,9 +1,8 @@
-# Epic F — Testing & CI (TEST)
+# Epic F — Testing & CI
 
-**Acronym:** TEST
-**Total Effort:** 8 SP
-**Dependencies:** Epic D (SAFE) — safety gaps should be resolved before adding integration tests
-**Goal:** Create the integration test infrastructure, CI pipeline, and pre-commit hooks that were documented in the tech-spec but never built.
+Acronym: **TEST** | Story Points: **8**
+
+**Dependencies:** Epic D (SAFE) — path traversal fix should be in place before integration tests exercise path resolution
 
 ---
 

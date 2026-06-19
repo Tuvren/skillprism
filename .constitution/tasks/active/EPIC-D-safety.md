@@ -1,9 +1,8 @@
-# Epic D — Safety & Robustness (SAFE)
+# Epic D — Safety & Robustness
 
-**Acronym:** SAFE
-**Total Effort:** 16 SP
-**Dependencies:** None (foundation for all subsequent epics)
-**Goal:** Implement 9 documented-but-unbuilt safety and robustness items from architecture/resilience.md and risks.md. These were specified in the constitution but never coded.
+Acronym: **SAFE** | Story Points: **16**
+
+**Note:** 7 of 9 items are directly documented in architecture/resilience.md and risks.md. SAFE-D008 and SAFE-D009 were derived from code inspection of implicit fallback behavior.
 
 ---
 

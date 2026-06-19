@@ -5,9 +5,9 @@
 - **Total Active Story Points:** 45
 - **Active Epics:** D (SAFE, 16 SP), E (SCAFF, 7 SP), F (TEST, 8 SP), G (CLEAN, 9 SP), H (RELS, 5 SP)
 - **Completed:** Epic A (Foundation) — 9 points, Epic B (Pipeline) — 16 points, Epic C (DX) — 10 points = 35 total delivered
-- **Critical Path:** SAFE-D001 → SAFE-D006 → SAFE-D002 → SAFE-D003 → (SAFE-D004–D009) → (SCAFF-E001–E004) → TEST-F001 → TEST-F002 → TEST-F003 → (CLEAN-G001–G008) → (RELS-H001–H004)
+- **Critical Path:** SAFE-D001 → SAFE-D002 → SAFE-D003 → (SAFE-D004–D009) → (SCAFF-E001–E004) → TEST-F001 → TEST-F002 → TEST-F003 → (CLEAN-G001–G008) → (RELS-H001–H004)
 
-SAFE-D006 and SAFE-D002 can be worked in parallel after SAFE-D001. SAFE-D004–D009 are independent after SAFE-D003. SCAFF-E001–E004 are independent of each other. TEST-F002 depends on TEST-F001. CLEAN-G001–G008 are independent of each other once TEST is green. RELS-H001–H004 are independent once CLEAN is clean.
+SAFE-D004–D009 are independent after SAFE-D003. SAFE-D006 (collision detection) is independent of SAFE-D001 (path traversal) — they address different concerns. SCAFF-E001–E004 are independent of each other. TEST-F002 depends on TEST-F001. CLEAN-G001–G008 are independent of each other once TEST is green. RELS-H001–H004 are independent once CLEAN is clean.
 
 - **Parallel Windows:** SAFE-D004–D009 (5 tickets), SCAFF-E001–E004 (4 tickets), CLEAN-G001–G008 (8 tickets), RELS-H001–H004 (4 tickets)
 
@@ -15,8 +15,7 @@ SAFE-D006 and SAFE-D002 can be worked in parallel after SAFE-D001. SAFE-D004–D
 
 ```mermaid
 flowchart LR
-  SAFE-D001["D SAFE-D001 Path Traversal"] --> SAFE-D006["D SAFE-D006 Collision Detection"]
-  SAFE-D001 --> SAFE-D002["D SAFE-D002 Overwrite Confirm"]
+  SAFE-D001["D SAFE-D001 Path Traversal"] --> SAFE-D002["D SAFE-D002 Overwrite Confirm"]
   SAFE-D002 --> SAFE-D003["D SAFE-D003 Signal Handling"]
   SAFE-D003 --> SAFE-D004["D SAFE-D004 Verbose Timing"]
   SAFE-D003 --> SAFE-D005["D SAFE-D005 Verbose Variables"]

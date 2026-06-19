@@ -1,9 +1,8 @@
-# Epic E — Scaffolding Enhancements (SCAFF)
+# Epic E — Scaffolding Enhancements
 
-**Acronym:** SCAFF
-**Total Effort:** 7 SP
-**Dependencies:** None (isolated to scaffold module; no pipeline dependencies)
-**Goal:** Bring the `init` commands in line with the PRD specification and add missing capabilities. Current scaffold was a minimal P1 implementation; this fills the gaps.
+Acronym: **SCAFF** | Story Points: **7**
+
+**Dependencies:** None (execution ordering only — placed after SAFE for sequencing, no code-level dependency)
 
 ---
 

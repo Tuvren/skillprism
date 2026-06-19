@@ -1,9 +1,8 @@
-# Epic G — Code Quality (CLEAN)
+# Epic G — Code Quality
 
-**Acronym:** CLEAN
-**Total Effort:** 9 SP
-**Dependencies:** Epic F (TEST) — CI should be in place before cleanup to catch regressions
-**Goal:** Remove dead code variants, narrow lint suppressants from module-level to targeted, and evaluate a dependency migration risk.
+Acronym: **CLEAN** | Story Points: **9**
+
+**Dependencies:** Epic F (TEST) — CI should be green before cleanup to catch regressions from refactoring
 
 ---
 

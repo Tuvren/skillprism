@@ -1,9 +1,8 @@
-# Epic H — Release Readiness (RELS)
+# Epic H — Release Readiness
 
-**Acronym:** RELS
-**Total Effort:** 5 SP
-**Dependencies:** Epic G (CLEAN) — code quality should be clean before release
-**Goal:** Add the final polish items needed for a stable v1.0 release: license, shell completions, missing CLI alias, and gitignore hygiene.
+Acronym: **RELS** | Story Points: **5**
+
+**Dependencies:** Epic G (CLEAN) — code quality should be clean before release artifact generation
 
 ---
 
