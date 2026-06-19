@@ -3,6 +3,7 @@ mod paths;
 mod write;
 
 use std::collections::BTreeMap;
+use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
@@ -69,6 +70,49 @@ pub struct WriteResult {
     pub skipped: Vec<String>,
 }
 
+/// User response to an overwrite prompt.
+#[derive(Debug, PartialEq, Eq)]
+enum OverwriteChoice {
+    Yes,
+    No,
+    SkipAll,
+    Abort,
+}
+
+/// Prompts the user for overwrite confirmation on stderr, reads choice from stdin.
+///
+/// Returns `None` if stdin is not a terminal (non-interactive).
+fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
+    if !io::stdin().is_terminal() {
+        return None;
+    }
+
+    loop {
+        eprint!(
+            "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
+            path.display()
+        );
+        let _ = io::stderr().flush();
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(0) => return Some(OverwriteChoice::Abort),
+            Err(_) => return None,
+            Ok(_) => {}
+        }
+
+        match input.trim().to_lowercase().as_str() {
+            "y" | "yes" => return Some(OverwriteChoice::Yes),
+            "n" | "no" => return Some(OverwriteChoice::No),
+            "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
+            "a" | "abort" => return Some(OverwriteChoice::Abort),
+            _ => {
+                eprintln!("Please answer y/n/s/a.");
+            }
+        }
+    }
+}
+
 impl Router {
     /// Writes rendered skill output (skill file + sidecars) to disk at the resolved path.
     ///
@@ -80,6 +124,7 @@ impl Router {
         project_root: &Path,
         target: TargetScope,
         force: bool,
+        skip_all: &mut bool,
     ) -> Result<WriteResult, RouterError> {
         let skill_name = &pair.skill.name;
         let harness_id = &pair.harness.id;
@@ -92,12 +137,34 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if !force && target == TargetScope::User && skill_path.exists() {
-            eprintln!(
-                "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
-                skill_path.display()
-            );
-            skipped.push(skill_path.to_string_lossy().to_string());
+        if !force && skill_path.exists() {
+            if *skip_all {
+                skipped.push(skill_path.to_string_lossy().to_string());
+            } else {
+                match prompt_overwrite(&skill_path) {
+                    Some(OverwriteChoice::Yes) => {
+                        atomic_write(&skill_path, &output.skill_content).map_err(|e| {
+                            RouterError::WriteError {
+                                skill: skill_name.clone(),
+                                harness: harness_id.clone(),
+                                path: skill_path.to_string_lossy().to_string(),
+                                detail: e.to_string(),
+                            }
+                        })?;
+                    }
+                    Some(OverwriteChoice::No) | None => {
+                        skipped.push(skill_path.to_string_lossy().to_string());
+                    }
+                    Some(OverwriteChoice::SkipAll) => {
+                        *skip_all = true;
+                        skipped.push(skill_path.to_string_lossy().to_string());
+                    }
+                    Some(OverwriteChoice::Abort) => {
+                        eprintln!("Aborting build.");
+                        std::process::exit(1);
+                    }
+                }
+            }
         } else {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
@@ -110,7 +177,7 @@ impl Router {
         }
 
         let sidecar_paths =
-            Self::write_sidecars(pair, output, &skill_dir, target, force, &mut skipped)?;
+            Self::write_sidecars(pair, output, &skill_dir, target, force, skip_all, &mut skipped)?;
 
         let skill_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
         if !pair.skill.asset_dirs.is_empty() && !skill_skipped {
@@ -139,21 +206,36 @@ impl Router {
     /// Manifests are grouped by unique (resolved path) — each group produces one file.
     pub fn write_aggregated_manifests(
         entries: &[ManifestEntry],
-        target: TargetScope,
+        _target: TargetScope,
         force: bool,
+        skip_all: &mut bool,
         skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
 
         let grouped = group_manifest_entries(entries);
         for (path, group) in &grouped {
-            if !force && target == TargetScope::User && path.exists() {
-                eprintln!(
-                    "Warning: skipping manifest `{}` (user-scope file exists, use --force to overwrite)",
-                    path.display()
-                );
-                skipped.push(path.to_string_lossy().to_string());
-                continue;
+            if !force && path.exists() {
+                if *skip_all {
+                    skipped.push(path.to_string_lossy().to_string());
+                    continue;
+                }
+                match prompt_overwrite(path) {
+                    Some(OverwriteChoice::Yes) => {}
+                    Some(OverwriteChoice::No) | None => {
+                        skipped.push(path.to_string_lossy().to_string());
+                        continue;
+                    }
+                    Some(OverwriteChoice::SkipAll) => {
+                        *skip_all = true;
+                        skipped.push(path.to_string_lossy().to_string());
+                        continue;
+                    }
+                    Some(OverwriteChoice::Abort) => {
+                        eprintln!("Aborting build.");
+                        std::process::exit(1);
+                    }
+                }
             }
 
             let aggregated = aggregate_json_entries(group);
@@ -255,8 +337,9 @@ impl Router {
         pair: &ResolvedPair,
         output: &HarnessOutput,
         skill_dir: &Path,
-        target: TargetScope,
+        _target: TargetScope,
         force: bool,
+        skip_all: &mut bool,
         skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let skill_name = &pair.skill.name;
@@ -270,13 +353,27 @@ impl Router {
                 &sidecar.filename,
             );
 
-            if !force && target == TargetScope::User && sidecar_path.exists() {
-                eprintln!(
-                    "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
-                    sidecar_path.display()
-                );
-                skipped.push(sidecar_path.to_string_lossy().to_string());
-                continue;
+            if !force && sidecar_path.exists() {
+                if *skip_all {
+                    skipped.push(sidecar_path.to_string_lossy().to_string());
+                    continue;
+                }
+                match prompt_overwrite(&sidecar_path) {
+                    Some(OverwriteChoice::Yes) => {}
+                    Some(OverwriteChoice::No) | None => {
+                        skipped.push(sidecar_path.to_string_lossy().to_string());
+                        continue;
+                    }
+                    Some(OverwriteChoice::SkipAll) => {
+                        *skip_all = true;
+                        skipped.push(sidecar_path.to_string_lossy().to_string());
+                        continue;
+                    }
+                    Some(OverwriteChoice::Abort) => {
+                        eprintln!("Aborting build.");
+                        std::process::exit(1);
+                    }
+                }
             }
 
             atomic_write(&sidecar_path, &sidecar.content).map_err(|e| RouterError::WriteError {
@@ -379,7 +476,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert_eq!(
             result.written.skill_path,
             dir.join(".claude/skills/my-agent/SKILL.md")
@@ -410,7 +507,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(
             result.written.skill_path.exists(),
             "directory should be created"
@@ -443,7 +540,7 @@ mod tests {
             }],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(result.written.sidecar_paths[0].exists());
         assert_eq!(
             written_content(&result.written.sidecar_paths[0]),
@@ -477,6 +574,7 @@ mod tests {
             &entries,
             TargetScope::Project,
             false,
+            &mut false,
             &mut Vec::new(),
         )
         .unwrap();
@@ -515,7 +613,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
 
         let dest_refs = dir.join(".claude/skills/test-skill/references/guide.md");
         assert!(dest_refs.exists());
@@ -664,7 +762,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
 
@@ -691,7 +789,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
         assert_eq!(written_content(&result.written.skill_path), "rendered");
@@ -711,6 +809,7 @@ mod tests {
             &[],
             TargetScope::Project,
             false,
+            &mut false,
             &mut Vec::new(),
         )
         .unwrap();
@@ -745,6 +844,95 @@ mod tests {
         assert_eq!(diffs.len(), 1);
         assert!(!diffs[0].diff.stats.is_new_file);
         assert!(diffs[0].diff.stats.additions > 0 || diffs[0].diff.stats.deletions > 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn existing_file_skipped_in_non_interactive_mode() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_skip_existing");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new".to_string(),
+            sidecars: vec![],
+        };
+
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(written_content(&result.written.skill_path), "old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn skip_all_prevents_prompt_for_existing_file() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_skip_all_flag");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new".to_string(),
+            sidecars: vec![],
+        };
+
+        let mut skip_all = true;
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut skip_all).unwrap();
+        assert!(skip_all);
+        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(written_content(&result.written.skill_path), "old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn force_overwrites_existing_file() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_force_overwrite");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "overwritten".to_string(),
+            sidecars: vec![],
+        };
+
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        assert!(result.skipped.is_empty());
+        assert_eq!(written_content(&result.written.skill_path), "overwritten");
 
         let _ = fs::remove_dir_all(&dir);
     }

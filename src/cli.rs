@@ -139,6 +139,7 @@ fn run_build(
 
     let mut result = BuildResult::default();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
+    let mut skip_all = false;
 
     for pair in &outcome.valid {
         let output = Engine::render(pair).into_diagnostic()?;
@@ -159,7 +160,7 @@ fn run_build(
             }
         } else {
             let write_result =
-                Router::write(pair, &output, &project_root, target, force).into_diagnostic()?;
+                Router::write(pair, &output, &project_root, target, force, &mut skip_all).into_diagnostic()?;
             let skill_skipped = write_result
                 .skipped
                 .contains(&write_result.written.skill_path.to_string_lossy().to_string());
@@ -181,6 +182,7 @@ fn run_build(
             &manifest_entries,
             target,
             force,
+            &mut skip_all,
             &mut manifest_skipped,
         )
         .into_diagnostic()?;
@@ -194,7 +196,11 @@ fn run_build(
         eprintln!("[build] wrote {} file(s)", result.changed);
     }
     if result.skipped > 0 {
-        eprintln!("{} file(s) skipped (use --force to overwrite)", result.skipped);
+        if skip_all {
+            eprintln!("{} file(s) skipped", result.skipped);
+        } else {
+            eprintln!("{} file(s) skipped (use --force to overwrite)", result.skipped);
+        }
     }
 
     Ok(())
