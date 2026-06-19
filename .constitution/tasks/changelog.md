@@ -1,5 +1,18 @@
 # Tasks Changelog
 
+## v0.5.0 — Stable Release Planning
+
+- **5 new epics planned (D/E/F/G/H)** for stable v1.0 readiness
+- 28 active tickets written: 9 Safety, 4 Scaffolding, 3 Testing, 8 Code Quality, 4 Release
+- 45 total active story points
+- Execution sequence follows alphabetical epic order: D (SAFE) → E (SCAFF) → F (TEST) → G (CLEAN) → H (RELS)
+- Epic D addresses 9 documented-but-unbuilt items from architecture/resilience.md and risks.md
+- Epic E enhances init project/skill/harness scaffolding to match PRD spec
+- Epic F creates integration test suite and CI pipeline
+- Epic G removes dead code and cleans up lint suppressants
+- Epic H adds release artifacts (LICENSE, completions, --dry-run, .gitignore)
+- Post-audit correction: added CLEAN-G007 (loader/mod.rs lint) and CLEAN-G008 (types/mod.rs lint) — 2 module-level allows missed in original scan
+
 ## v0.4.0 — Epic C Complete
 
 - **Epic C (Developer Experience)** fully implemented and archived
