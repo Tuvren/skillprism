@@ -20,8 +20,6 @@ pub struct HarnessOutput {
     pub skill_content: String,
     /// Sidecar files produced alongside the main skill file.
     pub sidecars: Vec<SidecarOutput>,
-    /// Optional rendered manifest entry (e.g. plugin.json).
-    pub manifest_entry: Option<String>,
 }
 
 /// A sidecar file produced during skill rendering.
@@ -118,24 +116,32 @@ impl Engine {
             detail: format!("Sidecar rendering failed: {e}"),
         })?;
 
-        let manifest_entry = if let Some(ref manifest) = pair.harness.manifest {
-            Some(
-                render_manifest(manifest, &ctx).map_err(|e| EngineError::RenderError {
-                    skill: pair.skill.name.clone(),
-                    harness: pair.harness.id.clone(),
-                    detail: format!("Manifest rendering failed: {e}"),
-                })?,
-            )
-        } else {
-            None
-        };
-
         Ok(HarnessOutput {
             skill_content,
             sidecars,
-            manifest_entry,
         })
     }
+
+    /// Renders a single manifest entry for a resolved skill-harness pair.
+    ///
+    /// Returns `None` if the harness does not define a manifest template.
+    /// The rendered entry is a single item (e.g., a JSON object) that will be
+    /// aggregated with entries from other skills into the final manifest file.
+    pub fn render_manifest_entry(pair: &ResolvedPair) -> Option<String> {
+        let manifest = pair.harness.manifest.as_ref()?;
+        let ctx = build_context(pair);
+        match render_manifest(manifest, &ctx) {
+            Ok(entry) => Some(entry),
+            Err(e) => {
+                eprintln!(
+                    "Warning: [{}] {}: manifest entry not rendered — {e}",
+                    pair.skill.name, pair.harness.id,
+                );
+                None
+            }
+        }
+    }
+
 }
 
 fn render_sidecars(
@@ -243,6 +249,26 @@ mod tests {
     fn renders_harness_macro() {
         let output = render_pair("test-macro", "{{ harness.hints }}", "claude").unwrap();
         assert!(output.skill_content.contains("Agent Skills specification"));
+    }
+
+    #[test]
+    fn renders_manifest_entry_for_harness_with_manifest() {
+        let registry = HarnessRegistry::with_builtins();
+        let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let entry = Engine::render_manifest_entry(&pair);
+        assert!(entry.is_some());
+        let content = entry.unwrap();
+        assert!(content.contains("test-agent"));
+    }
+
+    #[test]
+    fn render_manifest_entry_none_for_harness_without_manifest() {
+        let registry = HarnessRegistry::with_builtins();
+        let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+        let entry = Engine::render_manifest_entry(&pair);
+        assert!(entry.is_none());
     }
 
     #[test]

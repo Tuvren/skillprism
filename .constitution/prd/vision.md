@@ -28,7 +28,7 @@ The following technology choices are non-binding implementation hints for downst
 | Language | Rust | Single static binary, no runtime dependencies; ecosystem alignment with `skill-harness` project. |
 | Template engine | MiniJinja (Jinja2-compatible) | Near-perfect Jinja2 implementation by Armin Ronacher; designed for text generation (YAML, config, Markdown). |
 | Configuration format | YAML | Matches the skill ecosystem's YAML frontmatter convention; supports comments; more readable than JSON/TOML for nested structures. |
-| CLI framework | Clap v5 (derive macros) | De facto Rust CLI framework; derive macros reduce boilerplate. |
+| CLI framework | Clap v4.6 (derive macros) | De facto Rust CLI framework; derive macros reduce boilerplate. |
 | Serialization | Serde + serde_yaml | Standard Rust serialization framework; serde_yaml for YAML config loading. |
 | Build system | Cargo | Standard Rust build tool. |
 | Repository layout | Two repos | skillprism CLI in its own repo; users' skill projects in separate repos. |
