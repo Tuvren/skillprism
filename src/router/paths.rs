@@ -19,7 +19,7 @@ pub fn resolve_skill_path(
         }
         TargetScope::User => {
             check_no_traversal(&harness.paths.user_scope_path, skill_name, &harness.id)?;
-            let home = home_dir();
+            let home = home_dir()?;
             let base = home.join(&harness.paths.user_scope_path);
             (base, home)
         }
@@ -52,7 +52,10 @@ pub fn resolve_manifest_path(
             (base.clone(), base)
         }
         TargetScope::User => {
-            let home = home_dir();
+            let home = match home_dir() {
+                Ok(h) => h,
+                Err(e) => return Some(Err(e)),
+            };
             (home.join(scope_path), home)
         }
         TargetScope::Dist => {
@@ -163,11 +166,11 @@ pub fn skill_output_dir(
     })
 }
 
-fn home_dir() -> PathBuf {
-    std::env::var("HOME")
-        .ok()
-        .filter(|h| !h.is_empty())
-        .map_or_else(|| PathBuf::from("/tmp"), PathBuf::from)
+fn home_dir() -> Result<PathBuf, RouterError> {
+    match std::env::var("HOME") {
+        Ok(h) if !h.is_empty() => Ok(PathBuf::from(h)),
+        _ => Err(RouterError::MissingHome),
+    }
 }
 
 #[cfg(test)]

@@ -56,6 +56,11 @@ pub enum RouterError {
         path: String,
         colliding_skills: String,
     },
+
+    /// `$HOME` is not set; cannot resolve user-scope paths.
+    #[error("$HOME is not set; cannot resolve user-scope path")]
+    #[diagnostic(help("Set the HOME environment variable or use a different target scope (project, dist)"))]
+    MissingHome,
 }
 
 /// A single manifest entry produced by rendering a skill through a harness.
