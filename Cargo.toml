@@ -13,7 +13,7 @@ keywords = ["agent", "claude", "codex", "skills", "template"]
 clap = { version = "4.6", features = ["derive"] }
 ctrlc = "3.5"
 miette = { version = "7.6", features = ["derive"] }
-minijinja = { version = "2.20", features = ["json"] }
+minijinja = { version = "2.20", features = ["json", "debug"] }
 serde = { version = "1", features = ["derive"] }
 similar = { version = "2.7", features = ["text"] }
 thiserror = "2"
