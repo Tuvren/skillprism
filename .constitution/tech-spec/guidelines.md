@@ -78,8 +78,11 @@ skillprism/
 ### Error Handling
 
 - All errors use `miette::Diagnostic` via the unified `types::error` module
-- Every error must carry `source_file`, `source_line`, and a human-readable `help` message
 - Use `thiserror` or manual `Diagnostic` derive — never `Box<dyn Error>` for user-facing errors
+- Diagnostic context follows two patterns:
+  - **File-backed diagnostics** (template read, syntax error, write error) carry `source_file`, `source_line` when available, and a human-readable `help` message with actionable file-level guidance
+  - **Path/environment diagnostics** (path traversal, missing `$HOME`, absolute path rejection) carry the actionable path, scope, or environment context — not file/line references, since the issue is in configuration or environment state, not a specific source file
+- Every `#[error(...)]` attribute must be paired with a `#[diagnostic(help(...))]` attribute providing the user-facing suggestion
 - The Validator accumulates errors into a `Vec<SkillError>` — never short-circuits on first error
 
 ### Testing
