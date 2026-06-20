@@ -92,6 +92,8 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
     }
 }
 
+#[allow(clippy::too_many_lines)]
+// reason: build pipeline orchestration — each step is justified; refactor deferred to Epic G.
 fn run_build(
     target: TargetScope,
     diff: bool,
@@ -108,7 +110,11 @@ fn run_build(
     let t0 = Instant::now();
     let (model, registry) = load_project(&project_root)?;
     if verbose {
-        eprintln!("[{t}] load {} skills", model.skills.len(), t = fmt_duration(t0.elapsed()));
+        eprintln!(
+            "[{t}] load {} skills",
+            model.skills.len(),
+            t = fmt_duration(t0.elapsed())
+        );
     }
 
     let t1 = Instant::now();
@@ -119,7 +125,11 @@ fn run_build(
         miette::miette!("Resolution failed with {} error(s)", errors.len())
     })?;
     if verbose {
-        eprintln!("[{t}] resolve {} skill-harness pairs", pairs.len(), t = fmt_duration(t1.elapsed()));
+        eprintln!(
+            "[{t}] resolve {} skill-harness pairs",
+            pairs.len(),
+            t = fmt_duration(t1.elapsed())
+        );
     }
 
     let t2 = Instant::now();
@@ -134,7 +144,11 @@ fn run_build(
         ));
     }
     if verbose {
-        eprintln!("[{t}] validate {} pairs", outcome.valid.len(), t = fmt_duration(t2.elapsed()));
+        eprintln!(
+            "[{t}] validate {} pairs",
+            outcome.valid.len(),
+            t = fmt_duration(t2.elapsed())
+        );
     }
 
     if verbose {
@@ -153,12 +167,15 @@ fn run_build(
         let output = Engine::render(pair).into_diagnostic()?;
         let render_time = fmt_duration(t_render.elapsed());
 
-        if let Some(entry) = Engine::render_manifest_entry(pair) {
-            if let Some(path) = crate::router::resolve_manifest_path(
-                &project_root, &pair.harness, target,
-            ) {
+        if let Some(entry) = Engine::render_manifest_entry(pair).into_diagnostic()? {
+            if let Some(path) =
+                crate::router::resolve_manifest_path(&project_root, &pair.harness, target)
+            {
                 let path = path.into_diagnostic()?;
-                manifest_entries.push(ManifestEntry { path, content: entry });
+                manifest_entries.push(ManifestEntry {
+                    path,
+                    content: entry,
+                });
             }
         }
 
@@ -168,18 +185,23 @@ fn run_build(
         }
 
         if diff {
-            let entries = Router::diff(pair, &output, &project_root, target);
+            let entries = Router::diff(pair, &output, &project_root, target).into_diagnostic()?;
             for entry in &entries {
                 print_diff_entry(entry, &mut result);
             }
         } else {
             let t_write = Instant::now();
             let write_result =
-                Router::write(pair, &output, &project_root, target, force, &mut skip_all).into_diagnostic()?;
+                Router::write(pair, &output, &project_root, target, force, &mut skip_all)
+                    .into_diagnostic()?;
             let write_time = fmt_duration(t_write.elapsed());
-            let skill_skipped = write_result
-                .skipped
-                .contains(&write_result.written.skill_path.to_string_lossy().to_string());
+            let skill_skipped = write_result.skipped.contains(
+                &write_result
+                    .written
+                    .skill_path
+                    .to_string_lossy()
+                    .to_string(),
+            );
             if !skill_skipped {
                 result.changed += 1;
             }
@@ -192,13 +214,20 @@ fn run_build(
     }
 
     if verbose {
-        eprintln!("[{t}] render + write {} skills", outcome.valid.len(), t = fmt_duration(t3.elapsed()));
+        eprintln!(
+            "[{t}] render + write {} skills",
+            outcome.valid.len(),
+            t = fmt_duration(t3.elapsed())
+        );
     }
 
     handle_manifests(diff, &manifest_entries, force, &mut skip_all, &mut result)?;
 
     if diff {
-        println!("{} file(s) changed, {} file(s) unchanged", result.changed, result.unchanged);
+        println!(
+            "{} file(s) changed, {} file(s) unchanged",
+            result.changed, result.unchanged
+        );
     } else if verbose {
         eprintln!("[build] wrote {} file(s)", result.changed);
     }
@@ -206,14 +235,19 @@ fn run_build(
         if skip_all {
             eprintln!("{} file(s) skipped", result.skipped);
         } else {
-            eprintln!("{} file(s) skipped (use --force to overwrite)", result.skipped);
+            eprintln!(
+                "{} file(s) skipped (use --force to overwrite)",
+                result.skipped
+            );
         }
     }
 
     Ok(())
 }
 
-fn load_project(project_root: &Path) -> Result<(crate::types::ProjectModel, HarnessRegistry), miette::Report> {
+fn load_project(
+    project_root: &Path,
+) -> Result<(crate::types::ProjectModel, HarnessRegistry), miette::Report> {
     let mut registry = HarnessRegistry::with_builtins();
     let harnesses_dir = project_root.join("harnesses");
     registry
@@ -237,8 +271,13 @@ fn handle_manifests(
         }
     } else if !manifest_entries.is_empty() {
         let mut manifest_skipped = Vec::new();
-        let written = Router::write_aggregated_manifests(manifest_entries, force, skip_all, &mut manifest_skipped)
-            .into_diagnostic()?;
+        let written = Router::write_aggregated_manifests(
+            manifest_entries,
+            force,
+            skip_all,
+            &mut manifest_skipped,
+        )
+        .into_diagnostic()?;
         result.changed += written.len();
         result.skipped += manifest_skipped.len();
     }
@@ -357,7 +396,9 @@ fn install_signal_handlers() {
         // regardless. If multi-signal handling is needed in the future, migrate
         // to sigaction() via the libc crate.
         extern "C" fn sigterm_handler(_: i32) {
-            unsafe { _exit(143); }
+            unsafe {
+                _exit(143);
+            }
         }
 
         const SIGTERM: i32 = 15;

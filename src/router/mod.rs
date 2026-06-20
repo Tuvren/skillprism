@@ -1,9 +1,10 @@
 pub mod diff;
+mod manifest;
+mod overwrite;
 mod paths;
 mod write;
 
 use std::collections::BTreeMap;
-use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
@@ -40,8 +41,12 @@ pub enum RouterError {
     },
 
     /// A resolved output path escapes its allowed scope (path traversal).
-    #[error("[{skill}] {harness}: Path traversal detected — `{resolved}` escapes scope `{allowed_base}`")]
-    #[diagnostic(help("Harness installation paths must not contain `..` traversal that escapes the intended scope"))]
+    #[error(
+        "[{skill}] {harness}: Path traversal detected — `{resolved}` escapes scope `{allowed_base}`"
+    )]
+    #[diagnostic(help(
+        "Harness installation paths must not contain `..` traversal that escapes the intended scope"
+    ))]
     PathTraversal {
         skill: String,
         harness: String,
@@ -59,8 +64,21 @@ pub enum RouterError {
 
     /// `$HOME` is not set; cannot resolve user-scope paths.
     #[error("$HOME is not set; cannot resolve user-scope path")]
-    #[diagnostic(help("Set the HOME environment variable or use a different target scope (project, dist)"))]
+    #[diagnostic(help(
+        "Set the HOME environment variable or use a different target scope (project, dist)"
+    ))]
     MissingHome,
+
+    /// An absolute path was provided where a relative path was required.
+    #[error("[{skill}] {harness}: Absolute path not allowed — `{component}`")]
+    #[diagnostic(help(
+        "Sidecar output_dir and filename must use relative paths within the skill output directory"
+    ))]
+    AbsolutePathDisallowed {
+        skill: String,
+        harness: String,
+        component: String,
+    },
 }
 
 /// A single manifest entry produced by rendering a skill through a harness.
@@ -83,81 +101,11 @@ pub struct WriteResult {
     pub skipped: Vec<String>,
 }
 
-/// User response to an overwrite prompt.
-#[derive(Debug, PartialEq, Eq)]
-enum OverwriteChoice {
-    Yes,
-    No,
-    SkipAll,
-    Abort,
-}
-
-/// Prompts the user for overwrite confirmation on stderr, reads choice from stdin.
-///
-/// Returns `None` if stdin is not a terminal (non-interactive).
-fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
-    if !io::stdin().is_terminal() {
-        return None;
-    }
-
-    loop {
-        eprint!(
-            "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
-            path.display()
-        );
-        let _ = io::stderr().flush();
-
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(0) => return Some(OverwriteChoice::Abort),
-            Err(_) => return None,
-            Ok(_) => {}
-        }
-
-        match input.trim().to_lowercase().as_str() {
-            "y" | "yes" => return Some(OverwriteChoice::Yes),
-            "n" | "no" => return Some(OverwriteChoice::No),
-            "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
-            "a" | "abort" => return Some(OverwriteChoice::Abort),
-            _ => {
-                eprintln!("Please answer y/n/s/a.");
-            }
-        }
-    }
-}
-
-/// Unified overwrite decision combining the force/skip-all guard and interactive prompt.
-///
-/// Returns `true` if the caller should write the file, `false` if it should skip.
-/// Handles `skip_all` progression and abort exit internally.
-fn resolve_overwrite(path: &Path, force: bool, skip_all: &mut bool, skipped: &mut Vec<String>) -> bool {
-    if force || !path.exists() {
-        return true;
-    }
-    if *skip_all {
-        skipped.push(path.to_string_lossy().to_string());
-        return false;
-    }
-    match prompt_overwrite(path) {
-        Some(OverwriteChoice::Yes) => true,
-        Some(OverwriteChoice::No) | None => {
-            skipped.push(path.to_string_lossy().to_string());
-            false
-        }
-        Some(OverwriteChoice::SkipAll) => {
-            *skip_all = true;
-            skipped.push(path.to_string_lossy().to_string());
-            false
-        }
-        Some(OverwriteChoice::Abort) => {
-            eprintln!("Aborting build.");
-            std::process::exit(1);
-        }
-    }
-}
-
 impl Router {
     /// Detects path collisions among resolved pairs before rendering or writing.
+    ///
+    /// Checks both skill file paths and sidecar file paths for collisions,
+    /// including skill-vs-sidecar collisions across different pairs.
     ///
     /// Returns `Ok(())` if no collisions exist, or `Err(Vec<RouterError>)` with one
     /// error per colliding path. Each error lists all colliding skills.
@@ -169,12 +117,38 @@ impl Router {
         let mut path_map: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
 
         for pair in pairs {
-            match resolve_skill_path(project_root, &pair.harness, &pair.skill.name, target) {
-                Ok(path) => {
-                    let label = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
-                    path_map.entry(path).or_default().push(label);
-                }
-                Err(e) => return Err(vec![e]),
+            let skill_path =
+                match resolve_skill_path(project_root, &pair.harness, &pair.skill.name, target) {
+                    Ok(path) => path,
+                    Err(e) => return Err(vec![e]),
+                };
+            let label = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+            path_map.entry(skill_path.clone()).or_default().push(label);
+
+            let skill_dir = match skill_path.parent() {
+                Some(p) => p.to_path_buf(),
+                None => continue,
+            };
+
+            for sidecar_def in &pair.harness.sidecars {
+                let sidecar_path = match resolve_sidecar_path(
+                    &skill_dir,
+                    sidecar_def.output_dir.as_deref(),
+                    &sidecar_def.filename,
+                    &pair.skill.name,
+                    &pair.harness.id,
+                ) {
+                    Ok(p) => p,
+                    Err(e) => return Err(vec![e]),
+                };
+                let sidecar_label = format!(
+                    "{} \u{2192} {} (sidecar: {})",
+                    pair.skill.name, &pair.harness.id, sidecar_def.filename,
+                );
+                path_map
+                    .entry(sidecar_path)
+                    .or_default()
+                    .push(sidecar_label);
             }
         }
 
@@ -187,7 +161,11 @@ impl Router {
             })
             .collect();
 
-        if errors.is_empty() { Ok(()) } else { Err(errors) }
+        if errors.is_empty() {
+            Ok(())
+        } else {
+            Err(errors)
+        }
     }
 
     /// Writes rendered skill output (skill file + sidecars) to disk at the resolved path.
@@ -213,7 +191,7 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
+        if overwrite::resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
                     skill: skill_name.clone(),
@@ -274,13 +252,13 @@ impl Router {
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
 
-        let grouped = group_manifest_entries(entries);
+        let grouped = manifest::group_manifest_entries(entries);
+
         for (path, group) in &grouped {
-            if !resolve_overwrite(path, force, skip_all, skipped) {
+            if !overwrite::resolve_overwrite(path, force, skip_all, skipped) {
                 continue;
             }
-
-            let aggregated = aggregate_json_entries(group);
+            let aggregated = manifest::aggregate_json_entries(group);
             atomic_write(path, &aggregated).map_err(|e| RouterError::WriteError {
                 skill: "manifest".to_string(),
                 harness: "aggregated".to_string(),
@@ -295,9 +273,8 @@ impl Router {
 
     /// Computes diff entries for all files that would be written (skill + sidecars, no manifest).
     ///
-    /// If `resolve_skill_path` fails (e.g., path traversal or missing `$HOME`),
-    /// the error is printed as a warning and an empty `Vec` is returned —
-    /// callers should perform path validation before calling this method.
+    /// Returns `RouterError` if any path cannot be resolved (e.g., path traversal,
+    /// missing `$HOME`, or absolute sidecar path).
     ///
     /// Manifest diffs are computed separately via [`diff_manifests`](Self::diff_manifests).
     pub fn diff(
@@ -305,17 +282,11 @@ impl Router {
         output: &HarnessOutput,
         project_root: &Path,
         target: TargetScope,
-    ) -> Vec<DiffEntry> {
+    ) -> Result<Vec<DiffEntry>, RouterError> {
         let skill_name = &pair.skill.name;
+        let harness_id = &pair.harness.id;
 
-        let skill_path = match resolve_skill_path(project_root, &pair.harness, skill_name, target)
-        {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("Warning: {e:?}");
-                return Vec::new();
-            }
-        };
+        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target)?;
         let skill_dir = skill_path
             .parent()
             .expect("skill path has parent")
@@ -339,7 +310,9 @@ impl Router {
                 &skill_dir,
                 sidecar.output_dir.as_deref(),
                 &sidecar.filename,
-            );
+                skill_name,
+                harness_id,
+            )?;
             let existing = diff::read_existing(&sidecar_path);
             let diff_output = diff::compute_diff(
                 existing.as_deref(),
@@ -352,24 +325,19 @@ impl Router {
             });
         }
 
-        entries
+        Ok(entries)
     }
 
     /// Computes diff entries for aggregated manifest files.
-    pub fn diff_manifests(
-        entries: &[ManifestEntry],
-    ) -> Vec<DiffEntry> {
-        let grouped = group_manifest_entries(entries);
+    pub fn diff_manifests(entries: &[ManifestEntry]) -> Vec<DiffEntry> {
+        let grouped = manifest::group_manifest_entries(entries);
         let mut result = Vec::new();
 
         for (path, group) in &grouped {
-            let aggregated = aggregate_json_entries(group);
+            let aggregated = manifest::aggregate_json_entries(group);
             let existing = diff::read_existing(path);
-            let diff_output = diff::compute_diff(
-                existing.as_deref(),
-                &aggregated,
-                &path.to_string_lossy(),
-            );
+            let diff_output =
+                diff::compute_diff(existing.as_deref(), &aggregated, &path.to_string_lossy());
             result.push(DiffEntry {
                 path: path.clone(),
                 diff: diff_output,
@@ -396,9 +364,11 @@ impl Router {
                 skill_dir,
                 sidecar.output_dir.as_deref(),
                 &sidecar.filename,
-            );
+                skill_name,
+                harness_id,
+            )?;
 
-            if !resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
+            if !overwrite::resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
                 continue;
             }
 
@@ -413,42 +383,6 @@ impl Router {
 
         Ok(sidecar_paths)
     }
-}
-
-/// Groups manifest entries by their resolved file path.
-fn group_manifest_entries(entries: &[ManifestEntry]) -> BTreeMap<PathBuf, Vec<String>> {
-    let mut grouped: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
-    for entry in entries {
-        grouped
-            .entry(entry.path.clone())
-            .or_default()
-            .push(entry.content.clone());
-    }
-    grouped
-}
-
-/// Aggregates manifest entries into a JSON array.
-///
-/// Each entry is expected to be a JSON object string.
-/// The result is a JSON array containing all entries.
-fn aggregate_json_entries(entries: &[String]) -> String {
-    if entries.is_empty() {
-        return "[]".to_string();
-    }
-
-    let mut result = String::from("[\n");
-    for (i, entry) in entries.iter().enumerate() {
-        if i > 0 {
-            result.push_str(",\n");
-        }
-        for line in entry.lines() {
-            result.push_str("  ");
-            result.push_str(line);
-            result.push('\n');
-        }
-    }
-    result.push(']');
-    result
 }
 
 /// Paths of files written during a build operation.
@@ -473,6 +407,7 @@ mod tests {
     use crate::engine::SidecarOutput;
     use crate::registry::HarnessRegistry;
     use crate::resolver::HarnessResolver;
+    use crate::resolver::ResolvedPair;
     use crate::resolver::tests::test_skill;
     use std::collections::BTreeMap;
     use std::fs;
@@ -502,7 +437,15 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+        )
+        .unwrap();
         assert_eq!(
             result.written.skill_path,
             dir.join(".claude/skills/my-agent/SKILL.md")
@@ -533,7 +476,15 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+        )
+        .unwrap();
         assert!(
             result.written.skill_path.exists(),
             "directory should be created"
@@ -566,7 +517,15 @@ mod tests {
             }],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+        )
+        .unwrap();
         assert!(result.written.sidecar_paths[0].exists());
         assert_eq!(
             written_content(&result.written.sidecar_paths[0]),
@@ -596,13 +555,9 @@ mod tests {
             },
         ];
 
-        let written = Router::write_aggregated_manifests(
-            &entries,
-            false,
-            &mut false,
-            &mut Vec::new(),
-        )
-        .unwrap();
+        let written =
+            Router::write_aggregated_manifests(&entries, false, &mut false, &mut Vec::new())
+                .unwrap();
         assert_eq!(written.len(), 1);
         assert!(manifest_path.exists());
 
@@ -638,7 +593,15 @@ mod tests {
             sidecars: vec![],
         };
 
-        Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+        )
+        .unwrap();
 
         let dest_refs = dir.join(".claude/skills/test-skill/references/guide.md");
         assert!(dest_refs.exists());
@@ -667,7 +630,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 1);
         assert!(entries[0].diff.stats.is_new_file);
         assert_eq!(entries[0].diff.stats.additions, 1);
@@ -697,7 +660,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 1);
         assert!(!entries[0].diff.stats.is_new_file);
         assert_eq!(entries[0].diff.stats.additions, 1);
@@ -728,7 +691,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 1);
         assert!(entries[0].diff.hunks.is_empty());
         assert_eq!(entries[0].diff.stats.additions, 0);
@@ -759,7 +722,7 @@ mod tests {
             }],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project);
+        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries[0].diff.stats.is_new_file);
         assert!(entries[1].diff.stats.is_new_file);
@@ -787,7 +750,15 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+        )
+        .unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
 
@@ -814,7 +785,8 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        let result =
+            Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
         assert_eq!(written_content(&result.written.skill_path), "rendered");
@@ -830,13 +802,8 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
 
-        let written = Router::write_aggregated_manifests(
-            &[],
-            false,
-            &mut false,
-            &mut Vec::new(),
-        )
-        .unwrap();
+        let written =
+            Router::write_aggregated_manifests(&[], false, &mut false, &mut Vec::new()).unwrap();
         assert!(written.is_empty());
 
         let _ = fs::remove_dir_all(&dir);
@@ -894,7 +861,15 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+        )
+        .unwrap();
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(written_content(&result.written.skill_path), "old");
 
@@ -924,7 +899,15 @@ mod tests {
         };
 
         let mut skip_all = true;
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut skip_all).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut skip_all,
+        )
+        .unwrap();
         assert!(skip_all);
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(written_content(&result.written.skill_path), "old");
@@ -954,7 +937,8 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        let result =
+            Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert_eq!(written_content(&result.written.skill_path), "overwritten");
 
@@ -989,9 +973,18 @@ mod tests {
         let errors = result.unwrap_err();
         assert_eq!(errors.len(), 1);
         match &errors[0] {
-            RouterError::PathCollision { path, colliding_skills } => {
-                assert!(path.contains("same-name"), "path should mention the colliding skill name, got {path}");
-                assert!(colliding_skills.contains("same-name"), "colliding_skills should mention same-name, got {colliding_skills}");
+            RouterError::PathCollision {
+                path,
+                colliding_skills,
+            } => {
+                assert!(
+                    path.contains("same-name"),
+                    "path should mention the colliding skill name, got {path}"
+                );
+                assert!(
+                    colliding_skills.contains("same-name"),
+                    "colliding_skills should mention same-name, got {colliding_skills}"
+                );
             }
             e => panic!("expected PathCollision, got {e:?}"),
         }
@@ -1023,7 +1016,10 @@ mod tests {
         let pairs = vec![pair_a, pair_b];
 
         let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
-        assert!(result.is_ok(), "expected no collisions for unique skill names, got {result:?}");
+        assert!(
+            result.is_ok(),
+            "expected no collisions for unique skill names, got {result:?}"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1063,11 +1059,31 @@ mod tests {
         fs::write(&sidecar_output, "old").unwrap();
 
         let mut skip_all = true;
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut skip_all).unwrap();
-        assert!(result.skipped.contains(&skill_output.to_string_lossy().to_string()),
-            "skill should be in skipped list");
-        assert_eq!(written_content(&skill_output), "old", "skill file should remain unchanged");
-        assert_eq!(written_content(&sidecar_output), "old", "sidecar file should remain unchanged when skill is skipped");
+        let result = Router::write(
+            &pair,
+            &output,
+            &dir,
+            TargetScope::Project,
+            false,
+            &mut skip_all,
+        )
+        .unwrap();
+        assert!(
+            result
+                .skipped
+                .contains(&skill_output.to_string_lossy().to_string()),
+            "skill should be in skipped list"
+        );
+        assert_eq!(
+            written_content(&skill_output),
+            "old",
+            "skill file should remain unchanged"
+        );
+        assert_eq!(
+            written_content(&sidecar_output),
+            "old",
+            "sidecar file should remain unchanged when skill is skipped"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
@@ -1104,10 +1120,113 @@ mod tests {
         let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
         fs::write(&sidecar_output, "old").unwrap();
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
-        assert!(result.skipped.is_empty(), "no files should be skipped with --force");
-        assert_eq!(written_content(&skill_output), "new-content", "skill should be overwritten");
-        assert_eq!(written_content(&sidecar_output), "new-val", "sidecar should be overwritten");
+        let result =
+            Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        assert!(
+            result.skipped.is_empty(),
+            "no files should be skipped with --force"
+        );
+        assert_eq!(
+            written_content(&skill_output),
+            "new-content",
+            "skill should be overwritten"
+        );
+        assert_eq!(
+            written_content(&sidecar_output),
+            "new-val",
+            "sidecar should be overwritten"
+        );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_sidecar_vs_sidecar_collision() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("collision_sidecar_sidecar");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/a")).unwrap();
+        fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join("skills/b")).unwrap();
+        fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+
+        // Build a patched harness with a sidecar to exercise the sidecar collision
+        // code path in detect_collisions.
+        let mut harness = registry.resolve("claude").unwrap();
+        harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "config.yaml".to_string(),
+            template: "key: val".to_string(),
+            output_dir: None,
+        }];
+
+        // Use the same skill name so both pairs share the same skill output directory,
+        // causing their sidecar paths to collide.
+        let skill_a = test_skill("same-skill", vec![]);
+        let skill_b = test_skill("same-skill", vec![]);
+
+        let pair_a = ResolvedPair {
+            skill: skill_a,
+            harness: harness.clone(),
+        };
+        let pair_b = ResolvedPair {
+            skill: skill_b,
+            harness,
+        };
+        let pairs = vec![pair_a, pair_b];
+
+        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert!(!errors.is_empty(), "expected at least one collision error");
+        for err in &errors {
+            assert!(matches!(err, RouterError::PathCollision { .. }));
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_collisions_no_sidecar_collision_for_unique_sidecar_names() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("collision_sidecar_unique");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/a")).unwrap();
+        fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join("skills/b")).unwrap();
+        fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+
+        // Different skill names → different skill directories → different sidecar paths → no collision.
+        let mut harness = registry.resolve("claude").unwrap();
+        harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "config.yaml".to_string(),
+            template: "key: val".to_string(),
+            output_dir: None,
+        }];
+
+        let skill_a = test_skill("unique-a", vec![]);
+        let skill_b = test_skill("unique-b", vec![]);
+
+        let pair_a = ResolvedPair {
+            skill: skill_a,
+            harness: harness.clone(),
+        };
+        let pair_b = ResolvedPair {
+            skill: skill_b,
+            harness,
+        };
+        let pairs = vec![pair_a, pair_b];
+
+        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        assert!(
+            result.is_ok(),
+            "expected no collisions for unique skill names, got {result:?}"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }

@@ -29,7 +29,9 @@ pub fn resolve_skill_path(
         }
     };
 
-    let resolved = scope_path.join(skill_name).join(&harness.paths.skill_filename);
+    let resolved = scope_path
+        .join(skill_name)
+        .join(&harness.paths.skill_filename);
     validate_scope_relative(&resolved, &allowed_base, skill_name, &harness.id)?;
     Ok(resolved)
 }
@@ -72,15 +74,68 @@ pub fn resolve_manifest_path(
 }
 
 /// Resolves the full path to a sidecar file within the skill output directory.
+///
+/// Returns an error if `filename` or `sidecar_output_dir` contains `..` components
+/// or is an absolute path, or if the resulting path escapes the skill output directory.
 pub fn resolve_sidecar_path(
     skill_output_dir: &Path,
     sidecar_output_dir: Option<&str>,
     filename: &str,
-) -> PathBuf {
-    sidecar_output_dir.map_or_else(
-        || skill_output_dir.join(filename),
-        |dir| skill_output_dir.join(dir).join(filename),
-    )
+    skill_name: &str,
+    harness_id: &str,
+) -> Result<PathBuf, RouterError> {
+    if Path::new(filename).is_absolute() {
+        return Err(RouterError::AbsolutePathDisallowed {
+            skill: skill_name.to_string(),
+            harness: harness_id.to_string(),
+            component: filename.to_string(),
+        });
+    }
+    for component in Path::new(filename).components() {
+        if component == Component::ParentDir {
+            return Err(RouterError::PathTraversal {
+                skill: skill_name.to_string(),
+                harness: harness_id.to_string(),
+                resolved: filename.to_string(),
+                allowed_base: "(sidecar filename)".to_string(),
+            });
+        }
+    }
+
+    let combined = match sidecar_output_dir {
+        Some(dir) => {
+            if Path::new(dir).is_absolute() {
+                return Err(RouterError::AbsolutePathDisallowed {
+                    skill: skill_name.to_string(),
+                    harness: harness_id.to_string(),
+                    component: dir.to_string(),
+                });
+            }
+            for component in Path::new(dir).components() {
+                if component == Component::ParentDir {
+                    return Err(RouterError::PathTraversal {
+                        skill: skill_name.to_string(),
+                        harness: harness_id.to_string(),
+                        resolved: dir.to_string(),
+                        allowed_base: "(sidecar output_dir)".to_string(),
+                    });
+                }
+            }
+            skill_output_dir.join(dir).join(filename)
+        }
+        None => skill_output_dir.join(filename),
+    };
+
+    if !combined.starts_with(skill_output_dir) {
+        return Err(RouterError::PathTraversal {
+            skill: skill_name.to_string(),
+            harness: harness_id.to_string(),
+            resolved: combined.to_string_lossy().to_string(),
+            allowed_base: skill_output_dir.to_string_lossy().to_string(),
+        });
+    }
+
+    Ok(combined)
 }
 
 /// Checks that a scope path string does not contain `..` traversal components.
@@ -112,10 +167,9 @@ fn validate_scope_relative(
     skill_name: &str,
     harness_id: &str,
 ) -> Result<(), RouterError> {
-    let (Ok(resolved_check), Ok(base_check)) = (
-        resolved.canonicalize(),
-        allowed_base.canonicalize(),
-    ) else {
+    let (Ok(resolved_check), Ok(base_check)) =
+        (resolved.canonicalize(), allowed_base.canonicalize())
+    else {
         if !resolved.starts_with(allowed_base) {
             return Err(RouterError::PathTraversal {
                 skill: skill_name.to_string(),
@@ -185,21 +239,24 @@ mod tests {
     #[test]
     fn project_scope_path() {
         let root = Path::new("/projects/my-skills");
-        let path = resolve_skill_path(root, &claude_harness(), "test-agent", TargetScope::Project).unwrap();
+        let path = resolve_skill_path(root, &claude_harness(), "test-agent", TargetScope::Project)
+            .unwrap();
         assert_eq!(path, root.join(".claude/skills/test-agent/SKILL.md"));
     }
 
     #[test]
     fn user_scope_path() {
         let root = Path::new("/tmp/project");
-        let path = resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User).unwrap();
+        let path =
+            resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User).unwrap();
         assert!(path.ends_with(".claude/skills/my-agent/SKILL.md"));
     }
 
     #[test]
     fn dist_scope_path() {
         let root = Path::new("/tmp/project");
-        let path = resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::Dist).unwrap();
+        let path =
+            resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::Dist).unwrap();
         assert_eq!(path, root.join("dist/claude/my-agent/SKILL.md"));
     }
 
@@ -214,15 +271,45 @@ mod tests {
     #[test]
     fn sidecar_path_with_output_dir() {
         let base = Path::new("/out/skill-dir");
-        let path = resolve_sidecar_path(base, Some("meta"), "config.yaml");
+        let path =
+            resolve_sidecar_path(base, Some("meta"), "config.yaml", "skill", "harness").unwrap();
         assert_eq!(path, base.join("meta/config.yaml"));
     }
 
     #[test]
     fn sidecar_path_without_output_dir() {
         let base = Path::new("/out/skill-dir");
-        let path = resolve_sidecar_path(base, None, "config.yaml");
+        let path = resolve_sidecar_path(base, None, "config.yaml", "skill", "harness").unwrap();
         assert_eq!(path, base.join("config.yaml"));
+    }
+
+    #[test]
+    fn sidecar_rejects_absolute_filename() {
+        let base = Path::new("/out/skill-dir");
+        let err = resolve_sidecar_path(base, None, "/etc/passwd", "s", "h").unwrap_err();
+        assert!(matches!(err, RouterError::AbsolutePathDisallowed { .. }));
+    }
+
+    #[test]
+    fn sidecar_rejects_traversal_in_filename() {
+        let base = Path::new("/out/skill-dir");
+        let err = resolve_sidecar_path(base, None, "../../escape.yaml", "s", "h").unwrap_err();
+        assert!(matches!(err, RouterError::PathTraversal { .. }));
+    }
+
+    #[test]
+    fn sidecar_rejects_absolute_output_dir() {
+        let base = Path::new("/out/skill-dir");
+        let err = resolve_sidecar_path(base, Some("/etc"), "cfg.yaml", "s", "h").unwrap_err();
+        assert!(matches!(err, RouterError::AbsolutePathDisallowed { .. }));
+    }
+
+    #[test]
+    fn sidecar_rejects_traversal_in_output_dir() {
+        let base = Path::new("/out/skill-dir");
+        let err =
+            resolve_sidecar_path(base, Some("../../escape"), "cfg.yaml", "s", "h").unwrap_err();
+        assert!(matches!(err, RouterError::PathTraversal { .. }));
     }
 
     #[test]
@@ -292,7 +379,9 @@ mod tests {
         // This is safe in a single-threaded test context.
         let prev = std::env::var("HOME").ok();
         // SAFETY: see above — single-threaded test, restored below.
-        unsafe { std::env::remove_var("HOME"); }
+        unsafe {
+            std::env::remove_var("HOME");
+        }
 
         let root = Path::new("/tmp/project");
         let harness = claude_harness();
@@ -300,7 +389,9 @@ mod tests {
 
         if let Some(home) = prev {
             // SAFETY: restoring original value after the test assertion.
-            unsafe { std::env::set_var("HOME", home); }
+            unsafe {
+                std::env::set_var("HOME", home);
+            }
         }
 
         match result {
@@ -313,6 +404,9 @@ mod tests {
     fn missing_home_error_formatting() {
         let err = RouterError::MissingHome;
         let msg = format!("{err}");
-        assert!(msg.contains("HOME"), "error should mention HOME, got: {msg}");
+        assert!(
+            msg.contains("HOME"),
+            "error should mention HOME, got: {msg}"
+        );
     }
 }
