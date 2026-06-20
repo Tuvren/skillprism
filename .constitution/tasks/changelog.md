@@ -1,5 +1,21 @@
 # Tasks Changelog
 
+## v0.6.0 — Epic D Complete
+
+- **Epic D (Safety & Robustness)** fully implemented and archived
+- 9 tickets completed: SAFE-D001 through SAFE-D009
+- 16 story points delivered
+- Active backlog reduced to 29 story points (Epics E/F/G/H)
+- New modules: `router/paths` traversal checks, `router/write` atomic write, signal handling via `ctrlc` crate
+- Path traversal protection with canonicalization and component-level fallback
+- Interactive overwrite confirmation (y/n/s/a) with non-interactive detection
+- SIGINT/SIGTERM signal handling with graceful exit (codes 130/143)
+- Verbose phase timing and resolved variable listing
+- Path collision detection before rendering
+- Template source line numbers in render errors (minijinja `debug` feature)
+- Missing asset directory warnings
+- `$HOME` check returns actionable error instead of `/tmp` fallback
+
 ## v0.5.0 — Stable Release Planning
 
 - **5 new epics planned (D/E/F/G/H)** for stable v1.0 readiness
