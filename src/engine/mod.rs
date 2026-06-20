@@ -47,11 +47,12 @@ pub enum EngineError {
     },
 
     /// The template failed to render (syntax error or missing variable).
-    #[error("[{skill}] {harness}: Template rendering failed")]
-    #[diagnostic(help("{detail}"))]
+    #[error("[{skill}] {harness}: {detail}")]
     RenderError {
         skill: String,
         harness: String,
+        template: String,
+        line: Option<usize>,
         detail: String,
     },
 
@@ -90,29 +91,19 @@ impl Engine {
 
         let name = pair.skill.template_path.to_string_lossy();
         env.add_template_owned(name.to_string(), content)
-            .map_err(|e| EngineError::RenderError {
-                skill: pair.skill.name.clone(),
-                harness: pair.harness.id.clone(),
-                detail: e.to_string(),
-            })?;
+            .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
 
         let tmpl = env
             .get_template(&name)
-            .map_err(|e| EngineError::RenderError {
-                skill: pair.skill.name.clone(),
-                harness: pair.harness.id.clone(),
-                detail: e.to_string(),
-            })?;
+            .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
 
-        let skill_content = tmpl.render(&ctx).map_err(|e| EngineError::RenderError {
-            skill: pair.skill.name.clone(),
-            harness: pair.harness.id.clone(),
-            detail: e.to_string(),
-        })?;
+        let skill_content = tmpl.render(&ctx).map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
 
         let sidecars = render_sidecars(pair, &ctx).map_err(|e| EngineError::RenderError {
             skill: pair.skill.name.clone(),
             harness: pair.harness.id.clone(),
+            template: "(sidecar)".to_string(),
+            line: None,
             detail: format!("Sidecar rendering failed: {e}"),
         })?;
 
@@ -142,6 +133,30 @@ impl Engine {
         }
     }
 
+}
+
+fn render_error_from_minijinja(
+    pair: &ResolvedPair,
+    template_name: &str,
+    err: &minijinja::Error,
+) -> EngineError {
+    let detail = fmt_minijinja_error(err);
+    EngineError::RenderError {
+        skill: pair.skill.name.clone(),
+        harness: pair.harness.id.clone(),
+        template: template_name.to_string(),
+        line: err.line(),
+        detail,
+    }
+}
+
+fn fmt_minijinja_error(err: &minijinja::Error) -> String {
+    let kind = format!("{}", err.kind());
+    if let Some(line) = err.line() {
+        format!("{kind} at line {line}")
+    } else {
+        kind
+    }
 }
 
 fn render_sidecars(
@@ -293,7 +308,14 @@ mod tests {
         let result = Engine::render(&pair);
         assert!(result.is_err());
         match result.unwrap_err() {
-            EngineError::RenderError { .. } => {}
+            EngineError::RenderError {
+                template,
+                line,
+                ..
+            } => {
+                assert!(template.ends_with("SKILL.md.j2"), "template path should end with .j2 file, got {template}");
+                assert_eq!(line, Some(1), "syntax error on line 1, got {line:?}");
+            }
             e => panic!("expected RenderError, got {e:?}"),
         }
     }

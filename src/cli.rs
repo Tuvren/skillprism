@@ -1,4 +1,5 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use clap::{Parser, Subcommand, ValueEnum};
 use miette::IntoDiagnostic;
@@ -97,22 +98,20 @@ fn run_build(
     force: bool,
     verbose: bool,
 ) -> Result<(), miette::Report> {
+    install_signal_handlers();
+
     let project_root = find_project_root()?;
     if verbose {
         eprintln!("[build] project root: {}", project_root.display());
     }
 
-    let mut registry = HarnessRegistry::with_builtins();
-    let harnesses_dir = project_root.join("harnesses");
-    registry
-        .load_user_overrides(&harnesses_dir)
-        .into_diagnostic()?;
-
-    let model = ProjectLoader::load(&project_root).into_diagnostic()?;
+    let t0 = Instant::now();
+    let (model, registry) = load_project(&project_root)?;
     if verbose {
-        eprintln!("[build] loaded {} skills", model.skills.len());
+        eprintln!("[{t}] load {} skills", model.skills.len(), t = fmt_duration(t0.elapsed()));
     }
 
+    let t1 = Instant::now();
     let pairs = HarnessResolver::resolve_project(&model, &registry).map_err(|errors| {
         for err in &errors {
             eprintln!("{err:?}");
@@ -120,9 +119,10 @@ fn run_build(
         miette::miette!("Resolution failed with {} error(s)", errors.len())
     })?;
     if verbose {
-        eprintln!("[build] resolved {} skill-harness pairs", pairs.len());
+        eprintln!("[{t}] resolve {} skill-harness pairs", pairs.len(), t = fmt_duration(t1.elapsed()));
     }
 
+    let t2 = Instant::now();
     let outcome = Validator::validate(pairs);
     if !outcome.errors.is_empty() {
         for err in &outcome.errors {
@@ -134,21 +134,37 @@ fn run_build(
         ));
     }
     if verbose {
-        eprintln!("[build] validated {} pairs", outcome.valid.len());
+        eprintln!("[{t}] validate {} pairs", outcome.valid.len(), t = fmt_duration(t2.elapsed()));
     }
 
+    if verbose {
+        log_verbose_variables(&outcome.valid);
+    }
+
+    check_collisions(&outcome.valid, &project_root, target)?;
+
+    let t3 = Instant::now();
     let mut result = BuildResult::default();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
+    let mut skip_all = false;
 
     for pair in &outcome.valid {
+        let t_render = Instant::now();
         let output = Engine::render(pair).into_diagnostic()?;
+        let render_time = fmt_duration(t_render.elapsed());
 
         if let Some(entry) = Engine::render_manifest_entry(pair) {
             if let Some(path) = crate::router::resolve_manifest_path(
                 &project_root, &pair.harness, target,
             ) {
+                let path = path.into_diagnostic()?;
                 manifest_entries.push(ManifestEntry { path, content: entry });
             }
+        }
+
+        let pair_name = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+        if verbose {
+            eprintln!("  [{render_time}] render {pair_name}");
         }
 
         if diff {
@@ -157,8 +173,10 @@ fn run_build(
                 print_diff_entry(entry, &mut result);
             }
         } else {
+            let t_write = Instant::now();
             let write_result =
-                Router::write(pair, &output, &project_root, target, force).into_diagnostic()?;
+                Router::write(pair, &output, &project_root, target, force, &mut skip_all).into_diagnostic()?;
+            let write_time = fmt_duration(t_write.elapsed());
             let skill_skipped = write_result
                 .skipped
                 .contains(&write_result.written.skill_path.to_string_lossy().to_string());
@@ -167,25 +185,17 @@ fn run_build(
             }
             result.changed += write_result.written.sidecar_paths.len();
             result.skipped += write_result.skipped.len();
+            if verbose {
+                eprintln!("  [{write_time}] write {pair_name}");
+            }
         }
     }
 
-    if diff && !manifest_entries.is_empty() {
-        for entry in &Router::diff_manifests(&manifest_entries) {
-            print_diff_entry(entry, &mut result);
-        }
-    } else if !diff && !manifest_entries.is_empty() {
-        let mut manifest_skipped = Vec::new();
-        let written = Router::write_aggregated_manifests(
-            &manifest_entries,
-            target,
-            force,
-            &mut manifest_skipped,
-        )
-        .into_diagnostic()?;
-        result.changed += written.len();
-        result.skipped += manifest_skipped.len();
+    if verbose {
+        eprintln!("[{t}] render + write {} skills", outcome.valid.len(), t = fmt_duration(t3.elapsed()));
     }
+
+    handle_manifests(diff, &manifest_entries, force, &mut skip_all, &mut result)?;
 
     if diff {
         println!("{} file(s) changed, {} file(s) unchanged", result.changed, result.unchanged);
@@ -193,9 +203,45 @@ fn run_build(
         eprintln!("[build] wrote {} file(s)", result.changed);
     }
     if result.skipped > 0 {
-        eprintln!("{} file(s) skipped (use --force to overwrite)", result.skipped);
+        if skip_all {
+            eprintln!("{} file(s) skipped", result.skipped);
+        } else {
+            eprintln!("{} file(s) skipped (use --force to overwrite)", result.skipped);
+        }
     }
 
+    Ok(())
+}
+
+fn load_project(project_root: &Path) -> Result<(crate::types::ProjectModel, HarnessRegistry), miette::Report> {
+    let mut registry = HarnessRegistry::with_builtins();
+    let harnesses_dir = project_root.join("harnesses");
+    registry
+        .load_user_overrides(&harnesses_dir)
+        .into_diagnostic()?;
+
+    let model = ProjectLoader::load(project_root).into_diagnostic()?;
+    Ok((model, registry))
+}
+
+fn handle_manifests(
+    diff: bool,
+    manifest_entries: &[ManifestEntry],
+    force: bool,
+    skip_all: &mut bool,
+    result: &mut BuildResult,
+) -> Result<(), miette::Report> {
+    if diff {
+        for entry in &Router::diff_manifests(manifest_entries) {
+            print_diff_entry(entry, result);
+        }
+    } else if !manifest_entries.is_empty() {
+        let mut manifest_skipped = Vec::new();
+        let written = Router::write_aggregated_manifests(manifest_entries, force, skip_all, &mut manifest_skipped)
+            .into_diagnostic()?;
+        result.changed += written.len();
+        result.skipped += manifest_skipped.len();
+    }
     Ok(())
 }
 
@@ -289,6 +335,84 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             println!("Created skill `{name}`");
             Ok(())
         }
+    }
+}
+
+fn install_signal_handlers() {
+    let result = ctrlc::set_handler(|| {
+        eprintln!("\nSIGINT received — abandoning in-progress writes");
+        std::process::exit(130);
+    });
+
+    if let Err(e) = result {
+        eprintln!("Warning: failed to install SIGINT handler: {e}");
+    }
+
+    #[cfg(unix)]
+    {
+        // SAFETY: raw signal() is used because adding libc as a direct dependency
+        // is not warranted for a single call. On Linux, signal() resets the handler
+        // to SIG_DFL after firing (one-shot). This is safe because the handler
+        // only calls _exit(143), so the process terminates on the first SIGTERM
+        // regardless. If multi-signal handling is needed in the future, migrate
+        // to sigaction() via the libc crate.
+        extern "C" fn sigterm_handler(_: i32) {
+            unsafe { _exit(143); }
+        }
+
+        const SIGTERM: i32 = 15;
+        unsafe {
+            let _ = signal(SIGTERM, sigterm_handler as *const () as usize);
+        }
+    }
+}
+
+#[cfg(unix)]
+unsafe extern "C" {
+    fn signal(sig: i32, handler: usize) -> usize;
+    fn _exit(status: i32);
+}
+
+fn check_collisions(
+    valid: &[crate::resolver::ResolvedPair],
+    project_root: &Path,
+    target: TargetScope,
+) -> Result<(), miette::Report> {
+    if let Err(errors) = Router::detect_collisions(valid, project_root, target) {
+        for err in &errors {
+            eprintln!("{err:?}");
+        }
+        return Err(miette::miette!(
+            "Build aborted: {} path collision(s) detected",
+            errors.len()
+        ));
+    }
+    Ok(())
+}
+
+fn log_verbose_variables(valid: &[crate::resolver::ResolvedPair]) {
+    for pair in valid {
+        let pair_name = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+        if pair.skill.variables.is_empty() {
+            eprintln!("  {pair_name}: (no variables)");
+        } else {
+            let vars: Vec<String> = pair
+                .skill
+                .variables
+                .iter()
+                .map(|(k, v)| format!("{k}={v:?}"))
+                .collect();
+            eprintln!("  {pair_name}: {}", vars.join(", "));
+        }
+    }
+}
+
+fn fmt_duration(d: std::time::Duration) -> String {
+    let secs = d.as_secs_f64();
+    if secs < 1.0 {
+        format!("{:.0}ms", secs * 1000.0)
+    } else {
+        format!("{secs:.1}s")
     }
 }
 

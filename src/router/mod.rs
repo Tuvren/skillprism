@@ -2,10 +2,9 @@ pub mod diff;
 mod paths;
 mod write;
 
-use std::path::Path;
-
 use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::io::{self, IsTerminal, Write};
+use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -39,6 +38,29 @@ pub enum RouterError {
         path: String,
         detail: String,
     },
+
+    /// A resolved output path escapes its allowed scope (path traversal).
+    #[error("[{skill}] {harness}: Path traversal detected — `{resolved}` escapes scope `{allowed_base}`")]
+    #[diagnostic(help("Harness installation paths must not contain `..` traversal that escapes the intended scope"))]
+    PathTraversal {
+        skill: String,
+        harness: String,
+        resolved: String,
+        allowed_base: String,
+    },
+
+    /// Two or more skill-harness pairs resolve to the same output path.
+    #[error("Path collision at `{path}`")]
+    #[diagnostic(help("Skills: {colliding_skills}"))]
+    PathCollision {
+        path: String,
+        colliding_skills: String,
+    },
+
+    /// `$HOME` is not set; cannot resolve user-scope paths.
+    #[error("$HOME is not set; cannot resolve user-scope path")]
+    #[diagnostic(help("Set the HOME environment variable or use a different target scope (project, dist)"))]
+    MissingHome,
 }
 
 /// A single manifest entry produced by rendering a skill through a harness.
@@ -61,7 +83,113 @@ pub struct WriteResult {
     pub skipped: Vec<String>,
 }
 
+/// User response to an overwrite prompt.
+#[derive(Debug, PartialEq, Eq)]
+enum OverwriteChoice {
+    Yes,
+    No,
+    SkipAll,
+    Abort,
+}
+
+/// Prompts the user for overwrite confirmation on stderr, reads choice from stdin.
+///
+/// Returns `None` if stdin is not a terminal (non-interactive).
+fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
+    if !io::stdin().is_terminal() {
+        return None;
+    }
+
+    loop {
+        eprint!(
+            "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
+            path.display()
+        );
+        let _ = io::stderr().flush();
+
+        let mut input = String::new();
+        match io::stdin().read_line(&mut input) {
+            Ok(0) => return Some(OverwriteChoice::Abort),
+            Err(_) => return None,
+            Ok(_) => {}
+        }
+
+        match input.trim().to_lowercase().as_str() {
+            "y" | "yes" => return Some(OverwriteChoice::Yes),
+            "n" | "no" => return Some(OverwriteChoice::No),
+            "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
+            "a" | "abort" => return Some(OverwriteChoice::Abort),
+            _ => {
+                eprintln!("Please answer y/n/s/a.");
+            }
+        }
+    }
+}
+
+/// Unified overwrite decision combining the force/skip-all guard and interactive prompt.
+///
+/// Returns `true` if the caller should write the file, `false` if it should skip.
+/// Handles `skip_all` progression and abort exit internally.
+fn resolve_overwrite(path: &Path, force: bool, skip_all: &mut bool, skipped: &mut Vec<String>) -> bool {
+    if force || !path.exists() {
+        return true;
+    }
+    if *skip_all {
+        skipped.push(path.to_string_lossy().to_string());
+        return false;
+    }
+    match prompt_overwrite(path) {
+        Some(OverwriteChoice::Yes) => true,
+        Some(OverwriteChoice::No) | None => {
+            skipped.push(path.to_string_lossy().to_string());
+            false
+        }
+        Some(OverwriteChoice::SkipAll) => {
+            *skip_all = true;
+            skipped.push(path.to_string_lossy().to_string());
+            false
+        }
+        Some(OverwriteChoice::Abort) => {
+            eprintln!("Aborting build.");
+            std::process::exit(1);
+        }
+    }
+}
+
 impl Router {
+    /// Detects path collisions among resolved pairs before rendering or writing.
+    ///
+    /// Returns `Ok(())` if no collisions exist, or `Err(Vec<RouterError>)` with one
+    /// error per colliding path. Each error lists all colliding skills.
+    pub fn detect_collisions(
+        pairs: &[ResolvedPair],
+        project_root: &Path,
+        target: TargetScope,
+    ) -> Result<(), Vec<RouterError>> {
+        let mut path_map: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+
+        for pair in pairs {
+            match resolve_skill_path(project_root, &pair.harness, &pair.skill.name, target) {
+                Ok(path) => {
+                    let label = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+                    path_map.entry(path).or_default().push(label);
+                }
+                Err(e) => return Err(vec![e]),
+            }
+        }
+
+        let errors: Vec<RouterError> = path_map
+            .into_iter()
+            .filter(|(_, labels)| labels.len() > 1)
+            .map(|(path, labels)| RouterError::PathCollision {
+                path: path.to_string_lossy().to_string(),
+                colliding_skills: labels.join(", "),
+            })
+            .collect();
+
+        if errors.is_empty() { Ok(()) } else { Err(errors) }
+    }
+
     /// Writes rendered skill output (skill file + sidecars) to disk at the resolved path.
     ///
     /// Manifest files are NOT written here — they are batch-processed via
@@ -72,11 +200,12 @@ impl Router {
         project_root: &Path,
         target: TargetScope,
         force: bool,
+        skip_all: &mut bool,
     ) -> Result<WriteResult, RouterError> {
         let skill_name = &pair.skill.name;
         let harness_id = &pair.harness.id;
 
-        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target);
+        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target)?;
         let skill_dir = skill_path
             .parent()
             .expect("skill path has parent")
@@ -84,13 +213,7 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if !force && target == TargetScope::User && skill_path.exists() {
-            eprintln!(
-                "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
-                skill_path.display()
-            );
-            skipped.push(skill_path.to_string_lossy().to_string());
-        } else {
+        if resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
                     skill: skill_name.clone(),
@@ -101,11 +224,25 @@ impl Router {
             })?;
         }
 
-        let sidecar_paths =
-            Self::write_sidecars(pair, output, &skill_dir, target, force, &mut skipped)?;
+        let skill_was_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
 
-        let skill_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
-        if !pair.skill.asset_dirs.is_empty() && !skill_skipped {
+        let sidecar_paths = if skill_was_skipped {
+            Vec::new()
+        } else {
+            Self::write_sidecars(pair, output, &skill_dir, force, skip_all, &mut skipped)?
+        };
+
+        for dir in &pair.skill.asset_dirs {
+            if !dir.exists() {
+                eprintln!(
+                    "Warning: [{}] {}: asset directory `{}` does not exist",
+                    skill_name,
+                    harness_id,
+                    dir.display(),
+                );
+            }
+        }
+        if !pair.skill.asset_dirs.is_empty() && !skill_was_skipped {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
                 RouterError::AssetCopyError {
                     skill: skill_name.clone(),
@@ -131,20 +268,15 @@ impl Router {
     /// Manifests are grouped by unique (resolved path) — each group produces one file.
     pub fn write_aggregated_manifests(
         entries: &[ManifestEntry],
-        target: TargetScope,
         force: bool,
+        skip_all: &mut bool,
         skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
 
         let grouped = group_manifest_entries(entries);
         for (path, group) in &grouped {
-            if !force && target == TargetScope::User && path.exists() {
-                eprintln!(
-                    "Warning: skipping manifest `{}` (user-scope file exists, use --force to overwrite)",
-                    path.display()
-                );
-                skipped.push(path.to_string_lossy().to_string());
+            if !resolve_overwrite(path, force, skip_all, skipped) {
                 continue;
             }
 
@@ -163,6 +295,10 @@ impl Router {
 
     /// Computes diff entries for all files that would be written (skill + sidecars, no manifest).
     ///
+    /// If `resolve_skill_path` fails (e.g., path traversal or missing `$HOME`),
+    /// the error is printed as a warning and an empty `Vec` is returned —
+    /// callers should perform path validation before calling this method.
+    ///
     /// Manifest diffs are computed separately via [`diff_manifests`](Self::diff_manifests).
     pub fn diff(
         pair: &ResolvedPair,
@@ -172,7 +308,14 @@ impl Router {
     ) -> Vec<DiffEntry> {
         let skill_name = &pair.skill.name;
 
-        let skill_path = resolve_skill_path(project_root, &pair.harness, skill_name, target);
+        let skill_path = match resolve_skill_path(project_root, &pair.harness, skill_name, target)
+        {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Warning: {e:?}");
+                return Vec::new();
+            }
+        };
         let skill_dir = skill_path
             .parent()
             .expect("skill path has parent")
@@ -240,8 +383,8 @@ impl Router {
         pair: &ResolvedPair,
         output: &HarnessOutput,
         skill_dir: &Path,
-        target: TargetScope,
         force: bool,
+        skip_all: &mut bool,
         skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let skill_name = &pair.skill.name;
@@ -255,12 +398,7 @@ impl Router {
                 &sidecar.filename,
             );
 
-            if !force && target == TargetScope::User && sidecar_path.exists() {
-                eprintln!(
-                    "Warning: skipping `{}` (user-scope file exists, use --force to overwrite)",
-                    sidecar_path.display()
-                );
-                skipped.push(sidecar_path.to_string_lossy().to_string());
+            if !resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
                 continue;
             }
 
@@ -364,7 +502,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert_eq!(
             result.written.skill_path,
             dir.join(".claude/skills/my-agent/SKILL.md")
@@ -395,7 +533,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(
             result.written.skill_path.exists(),
             "directory should be created"
@@ -428,7 +566,7 @@ mod tests {
             }],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(result.written.sidecar_paths[0].exists());
         assert_eq!(
             written_content(&result.written.sidecar_paths[0]),
@@ -460,8 +598,8 @@ mod tests {
 
         let written = Router::write_aggregated_manifests(
             &entries,
-            TargetScope::Project,
             false,
+            &mut false,
             &mut Vec::new(),
         )
         .unwrap();
@@ -500,7 +638,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
 
         let dest_refs = dir.join(".claude/skills/test-skill/references/guide.md");
         assert!(dest_refs.exists());
@@ -649,7 +787,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
 
@@ -676,7 +814,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true).unwrap();
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
         assert_eq!(written_content(&result.written.skill_path), "rendered");
@@ -694,8 +832,8 @@ mod tests {
 
         let written = Router::write_aggregated_manifests(
             &[],
-            TargetScope::Project,
             false,
+            &mut false,
             &mut Vec::new(),
         )
         .unwrap();
@@ -730,6 +868,246 @@ mod tests {
         assert_eq!(diffs.len(), 1);
         assert!(!diffs[0].diff.stats.is_new_file);
         assert!(diffs[0].diff.stats.additions > 0 || diffs[0].diff.stats.deletions > 0);
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn existing_file_skipped_in_non_interactive_mode() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_skip_existing");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new".to_string(),
+            sidecars: vec![],
+        };
+
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut false).unwrap();
+        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(written_content(&result.written.skill_path), "old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn skip_all_prevents_prompt_for_existing_file() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_skip_all_flag");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new".to_string(),
+            sidecars: vec![],
+        };
+
+        let mut skip_all = true;
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut skip_all).unwrap();
+        assert!(skip_all);
+        assert_eq!(result.skipped.len(), 1);
+        assert_eq!(written_content(&result.written.skill_path), "old");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn force_overwrites_existing_file() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("router_force_overwrite");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
+        fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "overwritten".to_string(),
+            sidecars: vec![],
+        };
+
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        assert!(result.skipped.is_empty());
+        assert_eq!(written_content(&result.written.skill_path), "overwritten");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_collisions_detects_duplicate_skill_name() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("collision_dup");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/a")).unwrap();
+        fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join("skills/b")).unwrap();
+        fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill_a = test_skill("same-name", vec![]);
+        skill_a.template_path = dir.join("skills/a/SKILL.md.j2");
+        skill_a.variables = BTreeMap::new();
+        let mut skill_b = test_skill("same-name", vec![]);
+        skill_b.template_path = dir.join("skills/b/SKILL.md.j2");
+        skill_b.variables = BTreeMap::new();
+
+        let pair_a = HarnessResolver::resolve_skill_harness(&skill_a, "claude", &registry).unwrap();
+        let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
+        let pairs = vec![pair_a, pair_b];
+
+        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            RouterError::PathCollision { path, colliding_skills } => {
+                assert!(path.contains("same-name"), "path should mention the colliding skill name, got {path}");
+                assert!(colliding_skills.contains("same-name"), "colliding_skills should mention same-name, got {colliding_skills}");
+            }
+            e => panic!("expected PathCollision, got {e:?}"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_collisions_no_collision_for_unique_paths() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("collision_unique");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/a")).unwrap();
+        fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join("skills/b")).unwrap();
+        fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill_a = test_skill("unique-a", vec![]);
+        skill_a.template_path = dir.join("skills/a/SKILL.md.j2");
+        skill_a.variables = BTreeMap::new();
+        let mut skill_b = test_skill("unique-b", vec![]);
+        skill_b.template_path = dir.join("skills/b/SKILL.md.j2");
+        skill_b.variables = BTreeMap::new();
+
+        let pair_a = HarnessResolver::resolve_skill_harness(&skill_a, "claude", &registry).unwrap();
+        let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
+        let pairs = vec![pair_a, pair_b];
+
+        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        assert!(result.is_ok(), "expected no collisions for unique skill names, got {result:?}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecars_respect_skip_all_when_skill_skipped() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("sidecar_skip_all");
+        let _ = fs::remove_dir_all(&dir);
+
+        let skill_dir = dir.join("skills/test-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md.j2"), "content").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("test-skill", vec![]);
+        skill.template_path = skill_dir.join("SKILL.md.j2");
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "rendered".to_string(),
+            sidecars: vec![SidecarOutput {
+                filename: "sidecar.yaml".to_string(),
+                content: "key: val".to_string(),
+                output_dir: None,
+            }],
+        };
+
+        // Pre-create skill file so it would be skipped with skip_all=true
+        let skill_output = dir.join(".opencode/skills/test-skill/SKILL.md");
+        fs::create_dir_all(skill_output.parent().unwrap()).unwrap();
+        fs::write(&skill_output, "old").unwrap();
+
+        // Pre-create sidecar file too
+        let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
+        fs::write(&sidecar_output, "old").unwrap();
+
+        let mut skip_all = true;
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut skip_all).unwrap();
+        assert!(result.skipped.contains(&skill_output.to_string_lossy().to_string()),
+            "skill should be in skipped list");
+        assert_eq!(written_content(&skill_output), "old", "skill file should remain unchanged");
+        assert_eq!(written_content(&sidecar_output), "old", "sidecar file should remain unchanged when skill is skipped");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecars_respect_force_true() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("sidecar_force");
+        let _ = fs::remove_dir_all(&dir);
+
+        let skill_dir = dir.join("skills/test-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md.j2"), "content").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("test-skill", vec![]);
+        skill.template_path = skill_dir.join("SKILL.md.j2");
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new-content".to_string(),
+            sidecars: vec![SidecarOutput {
+                filename: "sidecar.yaml".to_string(),
+                content: "new-val".to_string(),
+                output_dir: None,
+            }],
+        };
+
+        // Pre-create both files so they'd normally be skipped
+        let skill_output = dir.join(".opencode/skills/test-skill/SKILL.md");
+        fs::create_dir_all(skill_output.parent().unwrap()).unwrap();
+        fs::write(&skill_output, "old").unwrap();
+        let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
+        fs::write(&sidecar_output, "old").unwrap();
+
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        assert!(result.skipped.is_empty(), "no files should be skipped with --force");
+        assert_eq!(written_content(&skill_output), "new-content", "skill should be overwritten");
+        assert_eq!(written_content(&sidecar_output), "new-val", "sidecar should be overwritten");
 
         let _ = fs::remove_dir_all(&dir);
     }
