@@ -48,6 +48,14 @@ pub enum RouterError {
         resolved: String,
         allowed_base: String,
     },
+
+    /// Two or more skill-harness pairs resolve to the same output path.
+    #[error("Path collision at `{path}`")]
+    #[diagnostic(help("Skills: {colliding_skills}"))]
+    PathCollision {
+        path: String,
+        colliding_skills: String,
+    },
 }
 
 /// A single manifest entry produced by rendering a skill through a harness.
@@ -114,6 +122,39 @@ fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
 }
 
 impl Router {
+    /// Detects path collisions among resolved pairs before rendering or writing.
+    ///
+    /// Returns `Ok(())` if no collisions exist, or `Err(Vec<RouterError>)` with one
+    /// error per colliding path. Each error lists all colliding skills.
+    pub fn detect_collisions(
+        pairs: &[ResolvedPair],
+        project_root: &Path,
+        target: TargetScope,
+    ) -> Result<(), Vec<RouterError>> {
+        let mut path_map: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+
+        for pair in pairs {
+            match resolve_skill_path(project_root, &pair.harness, &pair.skill.name, target) {
+                Ok(path) => {
+                    let label = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+                    path_map.entry(path).or_default().push(label);
+                }
+                Err(e) => return Err(vec![e]),
+            }
+        }
+
+        let errors: Vec<RouterError> = path_map
+            .into_iter()
+            .filter(|(_, labels)| labels.len() > 1)
+            .map(|(path, labels)| RouterError::PathCollision {
+                path: path.to_string_lossy().to_string(),
+                colliding_skills: labels.join(", "),
+            })
+            .collect();
+
+        if errors.is_empty() { Ok(()) } else { Err(errors) }
+    }
+
     /// Writes rendered skill output (skill file + sidecars) to disk at the resolved path.
     ///
     /// Manifest files are NOT written here — they are batch-processed via

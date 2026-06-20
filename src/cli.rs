@@ -141,6 +141,8 @@ fn run_build(
         log_verbose_variables(&outcome.valid);
     }
 
+    check_collisions(&outcome.valid, &project_root, target)?;
+
     let t3 = Instant::now();
     let mut result = BuildResult::default();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
@@ -364,6 +366,23 @@ fn install_signal_handlers() {
 #[cfg(unix)]
 unsafe extern "C" {
     fn signal(sig: i32, handler: usize) -> usize;
+}
+
+fn check_collisions(
+    valid: &[crate::resolver::ResolvedPair],
+    project_root: &Path,
+    target: TargetScope,
+) -> Result<(), miette::Report> {
+    if let Err(errors) = Router::detect_collisions(valid, project_root, target) {
+        for err in &errors {
+            eprintln!("{err:?}");
+        }
+        return Err(miette::miette!(
+            "Build aborted: {} path collision(s) detected",
+            errors.len()
+        ));
+    }
+    Ok(())
 }
 
 fn log_verbose_variables(valid: &[crate::resolver::ResolvedPair]) {
