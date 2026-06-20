@@ -222,6 +222,16 @@ impl Router {
 
         let skill_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
         if !pair.skill.asset_dirs.is_empty() && !skill_skipped {
+            for dir in &pair.skill.asset_dirs {
+                if !dir.exists() {
+                    eprintln!(
+                        "Warning: [{}] {}: asset directory `{}` does not exist",
+                        skill_name,
+                        harness_id,
+                        dir.display(),
+                    );
+                }
+            }
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
                 RouterError::AssetCopyError {
                     skill: skill_name.clone(),
