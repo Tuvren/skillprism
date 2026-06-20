@@ -97,7 +97,9 @@ impl Engine {
             .get_template(&name)
             .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
 
-        let skill_content = tmpl.render(&ctx).map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
+        let skill_content = tmpl
+            .render(&ctx)
+            .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
 
         let sidecars = render_sidecars(pair, &ctx).map_err(|e| EngineError::RenderError {
             skill: pair.skill.name.clone(),
@@ -132,7 +134,6 @@ impl Engine {
             }
         }
     }
-
 }
 
 fn render_error_from_minijinja(
@@ -308,12 +309,11 @@ mod tests {
         let result = Engine::render(&pair);
         assert!(result.is_err());
         match result.unwrap_err() {
-            EngineError::RenderError {
-                template,
-                line,
-                ..
-            } => {
-                assert!(template.ends_with("SKILL.md.j2"), "template path should end with .j2 file, got {template}");
+            EngineError::RenderError { template, line, .. } => {
+                assert!(
+                    template.ends_with("SKILL.md.j2"),
+                    "template path should end with .j2 file, got {template}"
+                );
                 assert_eq!(line, Some(1), "syntax error on line 1, got {line:?}");
             }
             e => panic!("expected RenderError, got {e:?}"),

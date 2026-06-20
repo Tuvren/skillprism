@@ -520,6 +520,7 @@ mod tests {
     use crate::engine::SidecarOutput;
     use crate::registry::HarnessRegistry;
     use crate::resolver::HarnessResolver;
+    use crate::resolver::ResolvedPair;
     use crate::resolver::tests::test_skill;
     use std::collections::BTreeMap;
     use std::fs;
@@ -1264,26 +1265,29 @@ mod tests {
         fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
 
         let registry = HarnessRegistry::with_builtins();
-        let mut skill_a = test_skill("skill-a", vec![]);
-        skill_a.template_path = dir.join("skills/a/SKILL.md.j2");
-        skill_a.variables = BTreeMap::new();
-        let mut skill_b = test_skill("skill-b", vec![]);
-        skill_b.template_path = dir.join("skills/b/SKILL.md.j2");
-        skill_b.variables = BTreeMap::new();
 
-        // Both skills use the same harness that produces a "config.yaml" sidecar
-        // Their sidecars will collide because both resolve to the same file name
-        // under different skill names — but opencode harness has no sidecars.
-        // Force collision by patching: use a custom harness concept via resolve.
-        // Instead, just use the same skill name so both skill paths collide.
-        // For sidecars we need two skills with same skill_dir but same sidecar filename.
-        // Use the same skill name to force same skill_dir output path.
-        let same_skill = "same-output";
-        skill_a.name = same_skill.to_string();
-        skill_b.name = same_skill.to_string();
+        // Build a patched harness with a sidecar to exercise the sidecar collision
+        // code path in detect_collisions.
+        let mut harness = registry.resolve("claude").unwrap();
+        harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "config.yaml".to_string(),
+            template: "key: val".to_string(),
+            output_dir: None,
+        }];
 
-        let pair_a = HarnessResolver::resolve_skill_harness(&skill_a, "claude", &registry).unwrap();
-        let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
+        // Use the same skill name so both pairs share the same skill output directory,
+        // causing their sidecar paths to collide.
+        let skill_a = test_skill("same-skill", vec![]);
+        let skill_b = test_skill("same-skill", vec![]);
+
+        let pair_a = ResolvedPair {
+            skill: skill_a,
+            harness: harness.clone(),
+        };
+        let pair_b = ResolvedPair {
+            skill: skill_b,
+            harness,
+        };
         let pairs = vec![pair_a, pair_b];
 
         let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
@@ -1309,25 +1313,32 @@ mod tests {
         fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
 
         let registry = HarnessRegistry::with_builtins();
-        // Use different harnesses that have different sidecar filenames or no sidecars
-        // to avoid collisions.
-        let mut skill_a = test_skill("unique-a", vec![]);
-        skill_a.template_path = dir.join("skills/a/SKILL.md.j2");
-        skill_a.variables = BTreeMap::new();
-        let mut skill_b = test_skill("unique-b", vec![]);
-        skill_b.template_path = dir.join("skills/b/SKILL.md.j2");
-        skill_b.variables = BTreeMap::new();
 
-        // Claude and codex have different harness IDs → different dist paths,
-        // but same project scope path. They won't collide with different skill names.
-        let pair_a = HarnessResolver::resolve_skill_harness(&skill_a, "claude", &registry).unwrap();
-        let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "codex", &registry).unwrap();
+        // Different skill names → different skill directories → different sidecar paths → no collision.
+        let mut harness = registry.resolve("claude").unwrap();
+        harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "config.yaml".to_string(),
+            template: "key: val".to_string(),
+            output_dir: None,
+        }];
+
+        let skill_a = test_skill("unique-a", vec![]);
+        let skill_b = test_skill("unique-b", vec![]);
+
+        let pair_a = ResolvedPair {
+            skill: skill_a,
+            harness: harness.clone(),
+        };
+        let pair_b = ResolvedPair {
+            skill: skill_b,
+            harness,
+        };
         let pairs = vec![pair_a, pair_b];
 
         let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
         assert!(
             result.is_ok(),
-            "expected no collisions for different skill/harness combos, got {result:?}"
+            "expected no collisions for unique skill names, got {result:?}"
         );
 
         let _ = fs::remove_dir_all(&dir);
