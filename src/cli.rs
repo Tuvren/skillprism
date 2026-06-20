@@ -167,7 +167,7 @@ fn run_build(
         let output = Engine::render(pair).into_diagnostic()?;
         let render_time = fmt_duration(t_render.elapsed());
 
-        if let Some(entry) = Engine::render_manifest_entry(pair) {
+        if let Some(entry) = Engine::render_manifest_entry(pair).into_diagnostic()? {
             if let Some(path) =
                 crate::router::resolve_manifest_path(&project_root, &pair.harness, target)
             {

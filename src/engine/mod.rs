@@ -117,22 +117,17 @@ impl Engine {
 
     /// Renders a single manifest entry for a resolved skill-harness pair.
     ///
-    /// Returns `None` if the harness does not define a manifest template.
-    /// The rendered entry is a single item (e.g., a JSON object) that will be
-    /// aggregated with entries from other skills into the final manifest file.
-    pub fn render_manifest_entry(pair: &ResolvedPair) -> Option<String> {
-        let manifest = pair.harness.manifest.as_ref()?;
+    /// Returns `Ok(None)` if the harness does not define a manifest template.
+    /// Returns `Err(EngineError::RenderError)` if the manifest template is
+    /// invalid or fails to render.
+    pub fn render_manifest_entry(pair: &ResolvedPair) -> Result<Option<String>, EngineError> {
+        let Some(manifest) = pair.harness.manifest.as_ref() else {
+            return Ok(None);
+        };
         let ctx = build_context(pair);
-        match render_manifest(manifest, &ctx) {
-            Ok(entry) => Some(entry),
-            Err(e) => {
-                eprintln!(
-                    "Warning: [{}] {}: manifest entry not rendered — {e}",
-                    pair.skill.name, pair.harness.id,
-                );
-                None
-            }
-        }
+        render_manifest(manifest, &ctx)
+            .map(Some)
+            .map_err(|e| render_error_from_minijinja(pair, "(manifest)", &e))
     }
 }
 
@@ -272,7 +267,7 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-        let entry = Engine::render_manifest_entry(&pair);
+        let entry = Engine::render_manifest_entry(&pair).unwrap();
         assert!(entry.is_some());
         let content = entry.unwrap();
         assert!(content.contains("test-agent"));
@@ -283,8 +278,27 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
-        let entry = Engine::render_manifest_entry(&pair);
+        let entry = Engine::render_manifest_entry(&pair).unwrap();
         assert!(entry.is_none());
+    }
+
+    #[test]
+    fn render_manifest_entry_error_for_invalid_template() {
+        let registry = HarnessRegistry::with_builtins();
+        let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        // Corrupt the manifest template to make rendering fail
+        let mut pair = pair;
+        if let Some(ref mut manifest) = pair.harness.manifest {
+            manifest.template = "{{ .broken".to_string();
+        }
+        let result = Engine::render_manifest_entry(&pair);
+        match result {
+            Err(EngineError::RenderError { template, .. }) => {
+                assert_eq!(template, "(manifest)");
+            }
+            other => panic!("expected Err(RenderError), got {other:?}"),
+        }
     }
 
     #[test]
