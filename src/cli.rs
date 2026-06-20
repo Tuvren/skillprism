@@ -227,7 +227,7 @@ fn load_project(project_root: &Path) -> Result<(crate::types::ProjectModel, Harn
 fn handle_manifests(
     diff: bool,
     manifest_entries: &[ManifestEntry],
-    target: TargetScope,
+    _target: TargetScope,
     force: bool,
     skip_all: &mut bool,
     result: &mut BuildResult,
@@ -238,7 +238,7 @@ fn handle_manifests(
         }
     } else if !manifest_entries.is_empty() {
         let mut manifest_skipped = Vec::new();
-        let written = Router::write_aggregated_manifests(manifest_entries, target, force, skip_all, &mut manifest_skipped)
+        let written = Router::write_aggregated_manifests(manifest_entries, force, skip_all, &mut manifest_skipped)
             .into_diagnostic()?;
         result.changed += written.len();
         result.skipped += manifest_skipped.len();
@@ -352,8 +352,7 @@ fn install_signal_handlers() {
     #[cfg(unix)]
     {
         extern "C" fn sigterm_handler(_: i32) {
-            eprintln!("SIGTERM received — abandoning in-progress writes");
-            std::process::exit(143);
+            unsafe { _exit(143); }
         }
 
         const SIGTERM: i32 = 15;
@@ -366,6 +365,7 @@ fn install_signal_handlers() {
 #[cfg(unix)]
 unsafe extern "C" {
     fn signal(sig: i32, handler: usize) -> usize;
+    fn _exit(status: i32);
 }
 
 fn check_collisions(

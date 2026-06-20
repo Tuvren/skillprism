@@ -222,21 +222,25 @@ impl Router {
             })?;
         }
 
-        let sidecar_paths =
-            Self::write_sidecars(pair, output, &skill_dir, target, force, skip_all, &mut skipped)?;
+        let skill_was_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
 
-        let skill_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
-        if !pair.skill.asset_dirs.is_empty() && !skill_skipped {
-            for dir in &pair.skill.asset_dirs {
-                if !dir.exists() {
-                    eprintln!(
-                        "Warning: [{}] {}: asset directory `{}` does not exist",
-                        skill_name,
-                        harness_id,
-                        dir.display(),
-                    );
-                }
+        let sidecar_paths = if skill_was_skipped {
+            Vec::new()
+        } else {
+            Self::write_sidecars(pair, output, &skill_dir, force, skip_all, &mut skipped)?
+        };
+
+        for dir in &pair.skill.asset_dirs {
+            if !dir.exists() {
+                eprintln!(
+                    "Warning: [{}] {}: asset directory `{}` does not exist",
+                    skill_name,
+                    harness_id,
+                    dir.display(),
+                );
             }
+        }
+        if !pair.skill.asset_dirs.is_empty() && !skill_was_skipped {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
                 RouterError::AssetCopyError {
                     skill: skill_name.clone(),
@@ -262,7 +266,6 @@ impl Router {
     /// Manifests are grouped by unique (resolved path) — each group produces one file.
     pub fn write_aggregated_manifests(
         entries: &[ManifestEntry],
-        _target: TargetScope,
         force: bool,
         skip_all: &mut bool,
         skipped: &mut Vec<String>,
@@ -308,6 +311,10 @@ impl Router {
     }
 
     /// Computes diff entries for all files that would be written (skill + sidecars, no manifest).
+    ///
+    /// If `resolve_skill_path` fails (e.g., path traversal or missing `$HOME`),
+    /// the error is printed as a warning and an empty `Vec` is returned —
+    /// callers should perform path validation before calling this method.
     ///
     /// Manifest diffs are computed separately via [`diff_manifests`](Self::diff_manifests).
     pub fn diff(
@@ -393,7 +400,6 @@ impl Router {
         pair: &ResolvedPair,
         output: &HarnessOutput,
         skill_dir: &Path,
-        _target: TargetScope,
         force: bool,
         skip_all: &mut bool,
         skipped: &mut Vec<String>,
@@ -628,7 +634,6 @@ mod tests {
 
         let written = Router::write_aggregated_manifests(
             &entries,
-            TargetScope::Project,
             false,
             &mut false,
             &mut Vec::new(),
@@ -863,7 +868,6 @@ mod tests {
 
         let written = Router::write_aggregated_manifests(
             &[],
-            TargetScope::Project,
             false,
             &mut false,
             &mut Vec::new(),
