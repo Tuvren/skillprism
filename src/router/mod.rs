@@ -1,9 +1,10 @@
 pub mod diff;
+mod manifest;
+mod overwrite;
 mod paths;
 mod write;
 
 use std::collections::BTreeMap;
-use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
 use miette::Diagnostic;
@@ -100,84 +101,6 @@ pub struct WriteResult {
     pub skipped: Vec<String>,
 }
 
-/// User response to an overwrite prompt.
-#[derive(Debug, PartialEq, Eq)]
-enum OverwriteChoice {
-    Yes,
-    No,
-    SkipAll,
-    Abort,
-}
-
-/// Prompts the user for overwrite confirmation on stderr, reads choice from stdin.
-///
-/// Returns `None` if stdin is not a terminal (non-interactive).
-fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
-    if !io::stdin().is_terminal() {
-        return None;
-    }
-
-    loop {
-        eprint!(
-            "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
-            path.display()
-        );
-        let _ = io::stderr().flush();
-
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(0) => return Some(OverwriteChoice::Abort),
-            Err(_) => return None,
-            Ok(_) => {}
-        }
-
-        match input.trim().to_lowercase().as_str() {
-            "y" | "yes" => return Some(OverwriteChoice::Yes),
-            "n" | "no" => return Some(OverwriteChoice::No),
-            "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
-            "a" | "abort" => return Some(OverwriteChoice::Abort),
-            _ => {
-                eprintln!("Please answer y/n/s/a.");
-            }
-        }
-    }
-}
-
-/// Unified overwrite decision combining the force/skip-all guard and interactive prompt.
-///
-/// Returns `true` if the caller should write the file, `false` if it should skip.
-/// Handles `skip_all` progression and abort exit internally.
-fn resolve_overwrite(
-    path: &Path,
-    force: bool,
-    skip_all: &mut bool,
-    skipped: &mut Vec<String>,
-) -> bool {
-    if force || !path.exists() {
-        return true;
-    }
-    if *skip_all {
-        skipped.push(path.to_string_lossy().to_string());
-        return false;
-    }
-    match prompt_overwrite(path) {
-        Some(OverwriteChoice::Yes) => true,
-        Some(OverwriteChoice::No) | None => {
-            skipped.push(path.to_string_lossy().to_string());
-            false
-        }
-        Some(OverwriteChoice::SkipAll) => {
-            *skip_all = true;
-            skipped.push(path.to_string_lossy().to_string());
-            false
-        }
-        Some(OverwriteChoice::Abort) => {
-            eprintln!("Aborting build.");
-            std::process::exit(1);
-        }
-    }
-}
-
 impl Router {
     /// Detects path collisions among resolved pairs before rendering or writing.
     ///
@@ -268,7 +191,7 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
+        if overwrite::resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
                     skill: skill_name.clone(),
@@ -329,13 +252,13 @@ impl Router {
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
 
-        let grouped = group_manifest_entries(entries);
+        let grouped = manifest::group_manifest_entries(entries);
+
         for (path, group) in &grouped {
-            if !resolve_overwrite(path, force, skip_all, skipped) {
+            if !overwrite::resolve_overwrite(path, force, skip_all, skipped) {
                 continue;
             }
-
-            let aggregated = aggregate_json_entries(group);
+            let aggregated = manifest::aggregate_json_entries(group);
             atomic_write(path, &aggregated).map_err(|e| RouterError::WriteError {
                 skill: "manifest".to_string(),
                 harness: "aggregated".to_string(),
@@ -407,11 +330,11 @@ impl Router {
 
     /// Computes diff entries for aggregated manifest files.
     pub fn diff_manifests(entries: &[ManifestEntry]) -> Vec<DiffEntry> {
-        let grouped = group_manifest_entries(entries);
+        let grouped = manifest::group_manifest_entries(entries);
         let mut result = Vec::new();
 
         for (path, group) in &grouped {
-            let aggregated = aggregate_json_entries(group);
+            let aggregated = manifest::aggregate_json_entries(group);
             let existing = diff::read_existing(path);
             let diff_output =
                 diff::compute_diff(existing.as_deref(), &aggregated, &path.to_string_lossy());
@@ -445,7 +368,7 @@ impl Router {
                 harness_id,
             )?;
 
-            if !resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
+            if !overwrite::resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
                 continue;
             }
 
@@ -460,42 +383,6 @@ impl Router {
 
         Ok(sidecar_paths)
     }
-}
-
-/// Groups manifest entries by their resolved file path.
-fn group_manifest_entries(entries: &[ManifestEntry]) -> BTreeMap<PathBuf, Vec<String>> {
-    let mut grouped: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
-    for entry in entries {
-        grouped
-            .entry(entry.path.clone())
-            .or_default()
-            .push(entry.content.clone());
-    }
-    grouped
-}
-
-/// Aggregates manifest entries into a JSON array.
-///
-/// Each entry is expected to be a JSON object string.
-/// The result is a JSON array containing all entries.
-fn aggregate_json_entries(entries: &[String]) -> String {
-    if entries.is_empty() {
-        return "[]".to_string();
-    }
-
-    let mut result = String::from("[\n");
-    for (i, entry) in entries.iter().enumerate() {
-        if i > 0 {
-            result.push_str(",\n");
-        }
-        for line in entry.lines() {
-            result.push_str("  ");
-            result.push_str(line);
-            result.push('\n');
-        }
-    }
-    result.push(']');
-    result
 }
 
 /// Paths of files written during a build operation.
