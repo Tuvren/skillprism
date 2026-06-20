@@ -285,4 +285,34 @@ mod tests {
             other => panic!("expected PathTraversal, got {other:?}"),
         }
     }
+
+    #[test]
+    fn user_scope_reports_missing_home() {
+        // SAFETY: temporarily removing HOME to test the error path.
+        // This is safe in a single-threaded test context.
+        let prev = std::env::var("HOME").ok();
+        // SAFETY: see above — single-threaded test, restored below.
+        unsafe { std::env::remove_var("HOME"); }
+
+        let root = Path::new("/tmp/project");
+        let harness = claude_harness();
+        let result = resolve_skill_path(root, &harness, "agent", TargetScope::User);
+
+        if let Some(home) = prev {
+            // SAFETY: restoring original value after the test assertion.
+            unsafe { std::env::set_var("HOME", home); }
+        }
+
+        match result {
+            Err(RouterError::MissingHome) => {}
+            other => panic!("expected MissingHome, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn missing_home_error_formatting() {
+        let err = RouterError::MissingHome;
+        let msg = format!("{err}");
+        assert!(msg.contains("HOME"), "error should mention HOME, got: {msg}");
+    }
 }

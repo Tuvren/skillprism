@@ -350,6 +350,12 @@ fn install_signal_handlers() {
 
     #[cfg(unix)]
     {
+        // SAFETY: raw signal() is used because adding libc as a direct dependency
+        // is not warranted for a single call. On Linux, signal() resets the handler
+        // to SIG_DFL after firing (one-shot). This is safe because the handler
+        // only calls _exit(143), so the process terminates on the first SIGTERM
+        // regardless. If multi-signal handling is needed in the future, migrate
+        // to sigaction() via the libc crate.
         extern "C" fn sigterm_handler(_: i32) {
             unsafe { _exit(143); }
         }

@@ -126,6 +126,36 @@ fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
     }
 }
 
+/// Unified overwrite decision combining the force/skip-all guard and interactive prompt.
+///
+/// Returns `true` if the caller should write the file, `false` if it should skip.
+/// Handles `skip_all` progression and abort exit internally.
+fn resolve_overwrite(path: &Path, force: bool, skip_all: &mut bool, skipped: &mut Vec<String>) -> bool {
+    if force || !path.exists() {
+        return true;
+    }
+    if *skip_all {
+        skipped.push(path.to_string_lossy().to_string());
+        return false;
+    }
+    match prompt_overwrite(path) {
+        Some(OverwriteChoice::Yes) => true,
+        Some(OverwriteChoice::No) | None => {
+            skipped.push(path.to_string_lossy().to_string());
+            false
+        }
+        Some(OverwriteChoice::SkipAll) => {
+            *skip_all = true;
+            skipped.push(path.to_string_lossy().to_string());
+            false
+        }
+        Some(OverwriteChoice::Abort) => {
+            eprintln!("Aborting build.");
+            std::process::exit(1);
+        }
+    }
+}
+
 impl Router {
     /// Detects path collisions among resolved pairs before rendering or writing.
     ///
@@ -183,35 +213,7 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if !force && skill_path.exists() {
-            if *skip_all {
-                skipped.push(skill_path.to_string_lossy().to_string());
-            } else {
-                match prompt_overwrite(&skill_path) {
-                    Some(OverwriteChoice::Yes) => {
-                        atomic_write(&skill_path, &output.skill_content).map_err(|e| {
-                            RouterError::WriteError {
-                                skill: skill_name.clone(),
-                                harness: harness_id.clone(),
-                                path: skill_path.to_string_lossy().to_string(),
-                                detail: e.to_string(),
-                            }
-                        })?;
-                    }
-                    Some(OverwriteChoice::No) | None => {
-                        skipped.push(skill_path.to_string_lossy().to_string());
-                    }
-                    Some(OverwriteChoice::SkipAll) => {
-                        *skip_all = true;
-                        skipped.push(skill_path.to_string_lossy().to_string());
-                    }
-                    Some(OverwriteChoice::Abort) => {
-                        eprintln!("Aborting build.");
-                        std::process::exit(1);
-                    }
-                }
-            }
-        } else {
+        if resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
                     skill: skill_name.clone(),
@@ -274,27 +276,8 @@ impl Router {
 
         let grouped = group_manifest_entries(entries);
         for (path, group) in &grouped {
-            if !force && path.exists() {
-                if *skip_all {
-                    skipped.push(path.to_string_lossy().to_string());
-                    continue;
-                }
-                match prompt_overwrite(path) {
-                    Some(OverwriteChoice::Yes) => {}
-                    Some(OverwriteChoice::No) | None => {
-                        skipped.push(path.to_string_lossy().to_string());
-                        continue;
-                    }
-                    Some(OverwriteChoice::SkipAll) => {
-                        *skip_all = true;
-                        skipped.push(path.to_string_lossy().to_string());
-                        continue;
-                    }
-                    Some(OverwriteChoice::Abort) => {
-                        eprintln!("Aborting build.");
-                        std::process::exit(1);
-                    }
-                }
+            if !resolve_overwrite(path, force, skip_all, skipped) {
+                continue;
             }
 
             let aggregated = aggregate_json_entries(group);
@@ -415,27 +398,8 @@ impl Router {
                 &sidecar.filename,
             );
 
-            if !force && sidecar_path.exists() {
-                if *skip_all {
-                    skipped.push(sidecar_path.to_string_lossy().to_string());
-                    continue;
-                }
-                match prompt_overwrite(&sidecar_path) {
-                    Some(OverwriteChoice::Yes) => {}
-                    Some(OverwriteChoice::No) | None => {
-                        skipped.push(sidecar_path.to_string_lossy().to_string());
-                        continue;
-                    }
-                    Some(OverwriteChoice::SkipAll) => {
-                        *skip_all = true;
-                        skipped.push(sidecar_path.to_string_lossy().to_string());
-                        continue;
-                    }
-                    Some(OverwriteChoice::Abort) => {
-                        eprintln!("Aborting build.");
-                        std::process::exit(1);
-                    }
-                }
+            if !resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
+                continue;
             }
 
             atomic_write(&sidecar_path, &sidecar.content).map_err(|e| RouterError::WriteError {
@@ -993,6 +957,157 @@ mod tests {
         let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert_eq!(written_content(&result.written.skill_path), "overwritten");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_collisions_detects_duplicate_skill_name() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("collision_dup");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/a")).unwrap();
+        fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join("skills/b")).unwrap();
+        fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill_a = test_skill("same-name", vec![]);
+        skill_a.template_path = dir.join("skills/a/SKILL.md.j2");
+        skill_a.variables = BTreeMap::new();
+        let mut skill_b = test_skill("same-name", vec![]);
+        skill_b.template_path = dir.join("skills/b/SKILL.md.j2");
+        skill_b.variables = BTreeMap::new();
+
+        let pair_a = HarnessResolver::resolve_skill_harness(&skill_a, "claude", &registry).unwrap();
+        let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
+        let pairs = vec![pair_a, pair_b];
+
+        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        assert_eq!(errors.len(), 1);
+        match &errors[0] {
+            RouterError::PathCollision { path, colliding_skills } => {
+                assert!(path.contains("same-name"), "path should mention the colliding skill name, got {path}");
+                assert!(colliding_skills.contains("same-name"), "colliding_skills should mention same-name, got {colliding_skills}");
+            }
+            e => panic!("expected PathCollision, got {e:?}"),
+        }
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn detect_collisions_no_collision_for_unique_paths() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("collision_unique");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(dir.join("skills/a")).unwrap();
+        fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+        fs::create_dir_all(dir.join("skills/b")).unwrap();
+        fs::write(dir.join("skills/b/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill_a = test_skill("unique-a", vec![]);
+        skill_a.template_path = dir.join("skills/a/SKILL.md.j2");
+        skill_a.variables = BTreeMap::new();
+        let mut skill_b = test_skill("unique-b", vec![]);
+        skill_b.template_path = dir.join("skills/b/SKILL.md.j2");
+        skill_b.variables = BTreeMap::new();
+
+        let pair_a = HarnessResolver::resolve_skill_harness(&skill_a, "claude", &registry).unwrap();
+        let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
+        let pairs = vec![pair_a, pair_b];
+
+        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        assert!(result.is_ok(), "expected no collisions for unique skill names, got {result:?}");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecars_respect_skip_all_when_skill_skipped() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("sidecar_skip_all");
+        let _ = fs::remove_dir_all(&dir);
+
+        let skill_dir = dir.join("skills/test-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md.j2"), "content").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("test-skill", vec![]);
+        skill.template_path = skill_dir.join("SKILL.md.j2");
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "rendered".to_string(),
+            sidecars: vec![SidecarOutput {
+                filename: "sidecar.yaml".to_string(),
+                content: "key: val".to_string(),
+                output_dir: None,
+            }],
+        };
+
+        // Pre-create skill file so it would be skipped with skip_all=true
+        let skill_output = dir.join(".opencode/skills/test-skill/SKILL.md");
+        fs::create_dir_all(skill_output.parent().unwrap()).unwrap();
+        fs::write(&skill_output, "old").unwrap();
+
+        // Pre-create sidecar file too
+        let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
+        fs::write(&sidecar_output, "old").unwrap();
+
+        let mut skip_all = true;
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, false, &mut skip_all).unwrap();
+        assert!(result.skipped.contains(&skill_output.to_string_lossy().to_string()),
+            "skill should be in skipped list");
+        assert_eq!(written_content(&skill_output), "old", "skill file should remain unchanged");
+        assert_eq!(written_content(&sidecar_output), "old", "sidecar file should remain unchanged when skill is skipped");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn sidecars_respect_force_true() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("sidecar_force");
+        let _ = fs::remove_dir_all(&dir);
+
+        let skill_dir = dir.join("skills/test-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        fs::write(skill_dir.join("SKILL.md.j2"), "content").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("test-skill", vec![]);
+        skill.template_path = skill_dir.join("SKILL.md.j2");
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "new-content".to_string(),
+            sidecars: vec![SidecarOutput {
+                filename: "sidecar.yaml".to_string(),
+                content: "new-val".to_string(),
+                output_dir: None,
+            }],
+        };
+
+        // Pre-create both files so they'd normally be skipped
+        let skill_output = dir.join(".opencode/skills/test-skill/SKILL.md");
+        fs::create_dir_all(skill_output.parent().unwrap()).unwrap();
+        fs::write(&skill_output, "old").unwrap();
+        let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
+        fs::write(&sidecar_output, "old").unwrap();
+
+        let result = Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+        assert!(result.skipped.is_empty(), "no files should be skipped with --force");
+        assert_eq!(written_content(&skill_output), "new-content", "skill should be overwritten");
+        assert_eq!(written_content(&sidecar_output), "new-val", "sidecar should be overwritten");
 
         let _ = fs::remove_dir_all(&dir);
     }

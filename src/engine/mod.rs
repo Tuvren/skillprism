@@ -308,7 +308,14 @@ mod tests {
         let result = Engine::render(&pair);
         assert!(result.is_err());
         match result.unwrap_err() {
-            EngineError::RenderError { .. } => {}
+            EngineError::RenderError {
+                template,
+                line,
+                ..
+            } => {
+                assert!(template.ends_with("SKILL.md.j2"), "template path should end with .j2 file, got {template}");
+                assert_eq!(line, Some(1), "syntax error on line 1, got {line:?}");
+            }
             e => panic!("expected RenderError, got {e:?}"),
         }
     }
