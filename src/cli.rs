@@ -195,7 +195,7 @@ fn run_build(
         eprintln!("[{t}] render + write {} skills", outcome.valid.len(), t = fmt_duration(t3.elapsed()));
     }
 
-    handle_manifests(diff, &manifest_entries, target, force, &mut skip_all, &mut result)?;
+    handle_manifests(diff, &manifest_entries, force, &mut skip_all, &mut result)?;
 
     if diff {
         println!("{} file(s) changed, {} file(s) unchanged", result.changed, result.unchanged);
@@ -227,7 +227,6 @@ fn load_project(project_root: &Path) -> Result<(crate::types::ProjectModel, Harn
 fn handle_manifests(
     diff: bool,
     manifest_entries: &[ManifestEntry],
-    _target: TargetScope,
     force: bool,
     skip_all: &mut bool,
     result: &mut BuildResult,
