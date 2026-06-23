@@ -435,6 +435,7 @@ fn install_signal_handlers() {
 #[cfg(unix)]
 unsafe extern "C" {
     fn signal(sig: i32, handler: usize) -> usize;
+    #[allow(clippy::used_underscore_items)]
     fn _exit(status: i32);
 }
 
