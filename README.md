@@ -124,6 +124,25 @@ cargo clippy -- -W clippy::all -W clippy::pedantic -W clippy::nursery
 cargo fmt --check
 ```
 
+### Pre-commit Hooks
+
+This project includes pre-commit hooks for `cargo fmt` and `cargo clippy`,
+managed through devenv. Hooks install automatically when entering the
+environment via `devenv shell` or `direnv`.
+
+To run hooks manually:
+
+```bash
+devenv shell
+prek run --all-files
+```
+
+Or via devenv's CI integration:
+
+```bash
+devenv test
+```
+
 ### Documentation
 
 ```bash
