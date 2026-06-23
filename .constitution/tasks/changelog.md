@@ -1,5 +1,17 @@
 # Tasks Changelog
 
+## v0.7.0 — Epic E Complete
+
+- **Epic E (Scaffolding Enhancements)** fully implemented and archived
+- 4 tickets completed: SCAFF-E001 through SCAFF-E004
+- 7 story points delivered
+- New flags: `init project --harnesses`, `init skill --harnesses` (renamed from `--targets`)
+- New subcommand: `init harness`
+- New module: `src/scaffold/harness.rs`
+- Scaffold now generates sample skill with `{{ skill_name }}` and `{{ harness.id }}`
+- `init skill` creates `references/` and `scripts/` asset directories
+- Active backlog reduced to 22 story points (Epics F/G/H)
+
 ## v0.6.0 — Epic D Complete
 
 - **Epic D (Safety & Robustness)** fully implemented and archived
