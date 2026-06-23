@@ -73,7 +73,7 @@ enum InitKind {
         out: Option<String>,
 
         /// Comma-separated list of harness IDs (default: claude, opencode)
-        #[arg(long = "harnesses")]
+        #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
     },
     /// Scaffold a single skill into an existing project
