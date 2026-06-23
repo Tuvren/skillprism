@@ -234,7 +234,9 @@ mod tests {
 
     fn set_home_for_test() -> PathBuf {
         let home = std::env::temp_dir().join("skillprism-test-home");
-        unsafe { std::env::set_var("HOME", &home); }
+        unsafe {
+            std::env::set_var("HOME", &home);
+        }
         home
     }
 
