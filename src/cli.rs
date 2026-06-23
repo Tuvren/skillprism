@@ -73,6 +73,11 @@ enum InitKind {
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
     },
+    /// Scaffold a new custom harness definition in harnesses/
+    Harness {
+        /// Harness name (used as the YAML filename and harness ID)
+        name: String,
+    },
 }
 
 /// Entry point for the CLI application.
@@ -389,6 +394,12 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
                 .unwrap_or_default();
             crate::scaffold::skill::scaffold_skill(&root, &name, &selected).into_diagnostic()?;
             println!("Created skill `{name}`");
+            Ok(())
+        }
+        InitKind::Harness { name } => {
+            let root = find_project_root()?;
+            crate::scaffold::harness::scaffold_harness(&root, &name).into_diagnostic()?;
+            println!("Created harness `{name}`");
             Ok(())
         }
     }
