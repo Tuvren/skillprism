@@ -1,5 +1,7 @@
 # skillprism
 
+[![CI](https://github.com/tuvren/skillprism/actions/workflows/ci.yml/badge.svg)](https://github.com/tuvren/skillprism/actions/workflows/ci.yml)
+
 Build-time compiler that transforms canonical skill sources into harness-specific agent files.
 
 ## Installation
