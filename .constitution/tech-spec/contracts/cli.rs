@@ -71,6 +71,10 @@ enum InitKind {
         /// Output directory (defaults to ./{name})
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
+
+        /// Comma-separated list of harness IDs (default: claude, opencode)
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
     },
     /// Scaffold a single skill into an existing project
     Skill {
@@ -78,8 +82,13 @@ enum InitKind {
         name: String,
 
         /// Target harnesses (comma-separated, default: all built-in)
-        #[arg(short = 't', long = "targets")]
-        targets: Option<String>,
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+    },
+    /// Scaffold a new custom harness definition in harnesses/
+    Harness {
+        /// Harness name (used as the YAML filename and harness ID)
+        name: String,
     },
 }
 

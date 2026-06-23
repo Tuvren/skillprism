@@ -2,8 +2,9 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-/// Scaffolds a new skill directory with a starter skill.yaml and SKILL.md.j2 template.
-pub fn scaffold_skill(project_root: &Path, name: &str, _targets: &[String]) -> io::Result<()> {
+/// Scaffolds a new skill directory with a starter skill.yaml, SKILL.md.j2 template,
+/// and standard asset directories (references/, scripts/).
+pub fn scaffold_skill(project_root: &Path, name: &str, _harnesses: &[String]) -> io::Result<()> {
     let skill_dir = project_root.join("skills").join(name);
     fs::create_dir_all(&skill_dir)?;
 
@@ -16,6 +17,9 @@ pub fn scaffold_skill(project_root: &Path, name: &str, _targets: &[String]) -> i
         skill_dir.join("SKILL.md.j2"),
         format!("# {name}\n\n{{{{ skill_name }}}}\n"),
     )?;
+
+    fs::create_dir_all(skill_dir.join("references"))?;
+    fs::create_dir_all(skill_dir.join("scripts"))?;
 
     Ok(())
 }
@@ -43,6 +47,8 @@ mod tests {
         let skill_dir = project_root.join("skills/my-skill");
         assert!(skill_dir.join("skill.yaml").exists());
         assert!(skill_dir.join("SKILL.md.j2").exists());
+        assert!(skill_dir.join("references").is_dir());
+        assert!(skill_dir.join("scripts").is_dir());
 
         let yaml = fs::read_to_string(skill_dir.join("skill.yaml")).unwrap();
         assert!(yaml.contains("my-skill"));

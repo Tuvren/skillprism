@@ -1,5 +1,17 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.5.0 — 2026-06-23 — Epic E Scaffolding Enhancements
+
+- **Epic E (Scaffolding Enhancements)** fully implemented and archived
+- 4 tickets completed: SCAFF-E001 through SCAFF-E004
+- 7 story points delivered
+- Added `--harnesses` flag to `init project` (defaults to claude, opencode)
+- Renamed `init skill --targets` to `--harnesses` for naming consistency
+- `init project` now scaffolds a sample skill with variable references
+- `init skill` now creates `references/` and `scripts/` asset directories
+- Added `init harness` subcommand with placeholder YAML generation
+- Updated CLI contract in `contracts/cli.rs`
+
 ### v0.4.1 — 2026-06-18 — Constitutional Gap Fixes
 
 - Fixed manifest aggregation bug: manifests now batch-aggregate all skills into a JSON array instead of per-skill overwrite (last-write-wins)

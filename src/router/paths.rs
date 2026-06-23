@@ -232,6 +232,12 @@ mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
+    fn set_home_for_test() -> PathBuf {
+        let home = std::env::temp_dir().join("skillprism-test-home");
+        unsafe { std::env::set_var("HOME", &home); }
+        home
+    }
+
     fn claude_harness() -> HarnessDefinition {
         HarnessRegistry::with_builtins().resolve("claude").unwrap()
     }
@@ -246,10 +252,12 @@ mod tests {
 
     #[test]
     fn user_scope_path() {
+        let home = set_home_for_test();
         let root = Path::new("/tmp/project");
         let path =
             resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User).unwrap();
         assert!(path.ends_with(".claude/skills/my-agent/SKILL.md"));
+        assert!(path.starts_with(&home));
     }
 
     #[test]
@@ -327,6 +335,7 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_path() {
+        set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
         harness.paths.user_scope_path = "../../escape".to_string();
