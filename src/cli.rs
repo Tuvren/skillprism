@@ -61,12 +61,17 @@ enum InitKind {
 
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
+
+        /// Comma-separated list of harness IDs (default: claude, opencode)
+        #[arg(long = "harnesses")]
+        harnesses: Option<String>,
     },
     Skill {
         name: String,
 
-        #[arg(short = 't', long = "targets")]
-        targets: Option<String>,
+        /// Comma-separated list of target harnesses (default: all built-in)
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
     },
 }
 
@@ -354,23 +359,35 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
 
 fn run_init(kind: InitKind) -> Result<(), miette::Report> {
     match kind {
-        InitKind::Project { name, out } => {
+        InitKind::Project {
+            name,
+            out,
+            harnesses,
+        } => {
             let dir = out.map_or_else(|| PathBuf::from(&name), PathBuf::from);
-            crate::scaffold::project::scaffold_project(&dir, &name).into_diagnostic()?;
-            println!("Created project `{name}` in `{}`", dir.display());
-            Ok(())
-        }
-        InitKind::Skill { name, targets } => {
-            let root = find_project_root()?;
-            let target_harnesses = targets
-                .map(|t| {
-                    t.split(',')
+            let selected = harnesses
+                .map(|h| {
+                    h.split(',')
                         .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
                         .collect::<Vec<_>>()
                 })
                 .unwrap_or_default();
-            crate::scaffold::skill::scaffold_skill(&root, &name, &target_harnesses)
-                .into_diagnostic()?;
+            crate::scaffold::project::scaffold_project(&dir, &name, &selected).into_diagnostic()?;
+            println!("Created project `{name}` in `{}`", dir.display());
+            Ok(())
+        }
+        InitKind::Skill { name, harnesses } => {
+            let root = find_project_root()?;
+            let selected = harnesses
+                .map(|h| {
+                    h.split(',')
+                        .map(|s| s.trim().to_string())
+                        .filter(|s| !s.is_empty())
+                        .collect::<Vec<_>>()
+                })
+                .unwrap_or_default();
+            crate::scaffold::skill::scaffold_skill(&root, &name, &selected).into_diagnostic()?;
             println!("Created skill `{name}`");
             Ok(())
         }
