@@ -2,7 +2,7 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-/// Scaffolds a new skillprism project with directory structure and config.
+/// Scaffolds a new skillprism project with directory structure, config, and sample skill.
 ///
 /// When `harnesses` is empty, defaults to `["claude", "opencode"]`.
 pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Result<()> {
@@ -24,8 +24,18 @@ pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Res
         ),
     )?;
 
-    fs::create_dir_all(dir.join("skills"))?;
     fs::create_dir_all(dir.join("harnesses"))?;
+
+    let sample_dir = dir.join("skills/sample");
+    fs::create_dir_all(&sample_dir)?;
+    fs::write(
+        sample_dir.join("skill.yaml"),
+        "name: sample\ndescription: A sample skill to get started\nvariables:\n  greeting: Hello from sample\n",
+    )?;
+    fs::write(
+        sample_dir.join("SKILL.md.j2"),
+        "# {{ skill_name }}\n\n{{ skill_description }}\n\nHarness: {{ harness.id }} ({{ harness.name }})\n\n{{ greeting }}\n",
+    )?;
 
     Ok(())
 }
@@ -45,6 +55,8 @@ mod tests {
         assert!(dir.join("skillprism.yaml").exists());
         assert!(dir.join("skills").is_dir());
         assert!(dir.join("harnesses").is_dir());
+        assert!(dir.join("skills/sample/skill.yaml").exists());
+        assert!(dir.join("skills/sample/SKILL.md.j2").exists());
 
         let content = fs::read_to_string(dir.join("skillprism.yaml")).unwrap();
         assert!(content.contains("test-project"));
@@ -70,6 +82,34 @@ mod tests {
         assert!(lines.contains(&"  - claude"));
         assert!(lines.contains(&"  - codex"));
         assert!(lines.contains(&"  - pi"));
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scaffold_sample_skill_contains_variable_refs() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("scaffold_sample_refs");
+        let _ = fs::remove_dir_all(&dir);
+
+        scaffold_project(&dir, "test", &[]).unwrap();
+
+        let template = fs::read_to_string(dir.join("skills/sample/SKILL.md.j2")).unwrap();
+        assert!(
+            template.contains("{{ skill_name }}"),
+            "template must reference skill_name"
+        );
+        assert!(
+            template.contains("{{ harness.id }}"),
+            "template must reference harness.id"
+        );
+
+        let skill_yaml = fs::read_to_string(dir.join("skills/sample/skill.yaml")).unwrap();
+        assert!(
+            skill_yaml.contains("sample"),
+            "skill.yaml must contain the skill name"
+        );
 
         let _ = fs::remove_dir_all(&dir);
     }
