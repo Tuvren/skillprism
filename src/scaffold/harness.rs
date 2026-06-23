@@ -4,6 +4,13 @@ use std::path::Path;
 
 /// Scaffolds a new custom harness definition YAML in the harnesses/ directory.
 pub fn scaffold_harness(project_root: &Path, name: &str) -> io::Result<()> {
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("harness name `{name}` must not contain path separators or '..'"),
+        ));
+    }
+
     let harnesses_dir = project_root.join("harnesses");
     fs::create_dir_all(&harnesses_dir)?;
 

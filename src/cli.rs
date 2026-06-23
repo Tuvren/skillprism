@@ -63,7 +63,7 @@ enum InitKind {
         out: Option<String>,
 
         /// Comma-separated list of harness IDs (default: claude, opencode)
-        #[arg(long = "harnesses")]
+        #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
     },
     Skill {
@@ -362,6 +362,16 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
     }
 }
 
+fn parse_harness_list(opt: Option<String>) -> Vec<String> {
+    opt.map(|h| {
+        h.split(',')
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect()
+    })
+    .unwrap_or_default()
+}
+
 fn run_init(kind: InitKind) -> Result<(), miette::Report> {
     match kind {
         InitKind::Project {
@@ -370,28 +380,14 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             harnesses,
         } => {
             let dir = out.map_or_else(|| PathBuf::from(&name), PathBuf::from);
-            let selected = harnesses
-                .map(|h| {
-                    h.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+            let selected = parse_harness_list(harnesses);
             crate::scaffold::project::scaffold_project(&dir, &name, &selected).into_diagnostic()?;
             println!("Created project `{name}` in `{}`", dir.display());
             Ok(())
         }
         InitKind::Skill { name, harnesses } => {
             let root = find_project_root()?;
-            let selected = harnesses
-                .map(|h| {
-                    h.split(',')
-                        .map(|s| s.trim().to_string())
-                        .filter(|s| !s.is_empty())
-                        .collect::<Vec<_>>()
-                })
-                .unwrap_or_default();
+            let selected = parse_harness_list(harnesses);
             crate::scaffold::skill::scaffold_skill(&root, &name, &selected).into_diagnostic()?;
             println!("Created skill `{name}`");
             Ok(())

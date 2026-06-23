@@ -101,8 +101,20 @@ mod tests {
             "template must reference skill_name"
         );
         assert!(
+            template.contains("{{ skill_description }}"),
+            "template must reference skill_description"
+        );
+        assert!(
             template.contains("{{ harness.id }}"),
             "template must reference harness.id"
+        );
+        assert!(
+            template.contains("{{ harness.name }}"),
+            "template must reference harness.name"
+        );
+        assert!(
+            template.contains("{{ greeting }}"),
+            "template must reference greeting variable"
         );
 
         let skill_yaml = fs::read_to_string(dir.join("skills/sample/skill.yaml")).unwrap();
