@@ -22,6 +22,7 @@ jobs:
         with:
           toolchain: 1.85
           components: clippy, rustfmt
+          cache: true
 
       - name: Build
         run: cargo build --locked --all-targets
