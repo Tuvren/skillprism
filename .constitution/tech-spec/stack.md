@@ -27,7 +27,11 @@
 | Code formatting | `rustfmt` | Bundled | Project-wide consistent formatting enforced in CI |
 | Linting | `clippy` | Bundled | Enforce `#![deny(clippy::all, clippy::pedantic)]` in CI; allowlist exceptions per module where justified |
 | Testing | `cargo test` | Bundled | Unit tests per pipeline stage; inline assertions for template rendering |
-| CI (future) | GitHub Actions | N/A | No CI configured for v0.1; `cargo build` && `cargo test` && `cargo clippy` will be the standard gate |
+| CI | GitHub Actions | N/A | Matrix build (Linux, macOS); steps: build --locked --all-targets, test --locked, clippy -D warnings, fmt --check |
+| CLI test harness | `assert_cmd` | 2.x (dev) | End-to-end CLI binary testing in integration tests |
+| CLI predicates | `predicates` | 3.x (dev) | Exit code and stderr matching for CLI assertions |
+| Temp directories | `tempfile` | 3.x (dev) | Isolated temp directories for fixture-based integration tests |
+| Task automation | `just` | Latest (devenv) | Ad-hoc automation recipes in justfile |
 
 ## Compatibility Policy
 

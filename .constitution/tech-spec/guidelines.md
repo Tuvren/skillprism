@@ -18,6 +18,8 @@ skillprism/
 ├── Cargo.toml              # Package manifest (single crate)
 ├── Cargo.lock              # Lockfile (committed)
 ├── rust-toolchain.toml     # MSRV pin (1.85, edition 2024)
+├── .github/workflows/
+│   └── ci.yml              # GitHub Actions CI (matrix build, test, clippy, fmt)
 ├── src/
 │   ├── main.rs             # CLI entrypoint (clap dispatch)
 │   ├── cli.rs              # Command/flag definitions (clap derive) + pipeline dispatch
@@ -58,6 +60,10 @@ skillprism/
 │       ├── opencode.yaml
 │       ├── factory.yaml
 │       └── pi.yaml
+├── tests/
+│   ├── fixtures/
+│   │   └── valid/          # Integration test fixture project (2 skills, 2 harnesses)
+│   └── integration.rs      # CLI integration tests (build, validate, diff)
 └── harnesses/              # Users' override directory (documented, not shipped)
 ```
 
@@ -88,8 +94,8 @@ skillprism/
 ### Testing
 
 - Unit tests co-located with source (`#[cfg(test)] mod tests` in each module)
-- Integration tests in `tests/integration/` exercise the full build pipeline against a fixtures directory
-- CLI tests use `clap::Command::try_get_matches` or `assert_cmd` for end-to-end flag validation
+- Integration tests in `tests/integration.rs` exercise the full build pipeline against a fixtures directory
+- CLI tests use `assert_cmd` for end-to-end CLI binary validation with `predicates` for exit codes and stderr checking
 
 ### Module Exports
 

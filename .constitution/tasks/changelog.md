@@ -1,5 +1,17 @@
 # Tasks Changelog
 
+## v0.8.0 — Epic F Complete
+
+- **Epic F (Testing & CI)** fully implemented and archived
+- 3 tickets completed: TEST-F001 through TEST-F003
+- 8 story points delivered
+- Integration test suite: 3 end-to-end CLI tests in `tests/integration.rs`
+- Fixture project under `tests/fixtures/valid/` with 2 skills × 2 harnesses
+- GitHub Actions CI workflow with matrix build (Linux, macOS)
+- Pre-commit hooks via devenv (rustfmt, clippy with `denyWarnings`)
+- Fixed `is_builtin()` in validator to handle dotted variable names (e.g., `harness.id`)
+- Active backlog reduced to 14 story points (Epics G/H)
+
 ## v0.7.0 — Epic E Complete
 
 - **Epic E (Scaffolding Enhancements)** fully implemented and archived
