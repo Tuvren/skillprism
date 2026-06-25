@@ -1,5 +1,20 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.6.0 — 2026-06-23 — Epic F Testing & CI
+
+- **Epic F (Testing & CI)** fully implemented and archived
+- 3 tickets completed: TEST-F001 through TEST-F003
+- 8 story points delivered
+- Added `assert_cmd`, `predicates`, `tempfile` dev-dependencies
+- Created `tests/integration.rs` with 3 CLI binary end-to-end tests
+- Created `tests/fixtures/valid/` fixture project
+- Added `.github/workflows/ci.yml` — matrix build with locked dependencies
+- Added CI badge to README.md
+- Added rustfmt + clippy (denyWarnings) pre-commit hooks via devenv `git-hooks.hooks`
+- Added `git-hooks` input to devenv configuration
+- Updated project structure tree in guidelines.md to include `tests/` and `.github/` directories
+- Updated BOM in stack.md with dev-dependencies and CI tooling
+
 ### v0.5.0 — 2026-06-23 — Epic E Scaffolding Enhancements
 
 - **Epic E (Scaffolding Enhancements)** fully implemented and archived

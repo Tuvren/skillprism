@@ -419,6 +419,7 @@ fn install_signal_handlers() {
         // only calls _exit(143), so the process terminates on the first SIGTERM
         // regardless. If multi-signal handling is needed in the future, migrate
         // to sigaction() via the libc crate.
+        #[allow(clippy::used_underscore_items)]
         extern "C" fn sigterm_handler(_: i32) {
             unsafe {
                 _exit(143);

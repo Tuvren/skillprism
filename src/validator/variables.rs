@@ -38,8 +38,9 @@ pub fn check_variables(
 }
 
 fn is_builtin(name: &str) -> bool {
+    let root = name.split('.').next().unwrap();
     matches!(
-        name,
+        root,
         "loop"
             | "self"
             | "kwargs"

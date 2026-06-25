@@ -18,3 +18,8 @@ serde = { version = "1", features = ["derive"] }
 similar = { version = "2.7", features = ["text"] }
 thiserror = "2"
 yaml_serde = "0.10"
+
+[dev-dependencies]
+assert_cmd = "2"
+predicates = "3"
+tempfile = "3"

@@ -1,2 +1,3 @@
 target/
 .devenv/
+.pre-commit-config.yaml

@@ -1,0 +1,5 @@
+name: test-project
+harnesses:
+  - claude
+  - opencode
+skills_dir: skills
