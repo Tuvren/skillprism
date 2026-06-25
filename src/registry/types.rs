@@ -1,5 +1,6 @@
+// reason: HarnessCapabilities has 8 boolean fields by design; extracting a bools struct
+// would add indirection without clarity benefit. Lint kept at module level intentionally.
 #![allow(clippy::struct_excessive_bools)]
-#![allow(dead_code)]
 
 use std::collections::BTreeMap;
 
@@ -23,6 +24,7 @@ pub struct HarnessDefinition {
     pub macros: BTreeMap<String, MacroDef>,
     /// Custom functions exposed to templates.
     #[serde(default)]
+    #[allow(dead_code)]
     pub functions: BTreeMap<String, FunctionDef>,
     /// Sidecar file definitions produced alongside skills.
     #[serde(default)]
@@ -32,6 +34,7 @@ pub struct HarnessDefinition {
     /// Pattern for referencing skills in this harness (e.g. "/{name}").
     pub skill_ref_pattern: Option<String>,
     /// Configuration for where the harness discovers skills.
+    #[allow(dead_code)]
     pub discovery: Option<DiscoveryConfig>,
 }
 
@@ -47,12 +50,15 @@ pub struct HarnessCapabilities {
     #[serde(default)]
     pub requires_manifest: bool,
     /// Frontmatter parsing mode ("strict" or "lenient").
+    #[allow(dead_code)]
     pub frontmatter_mode: String,
     /// Maximum allowed skill name length.
     #[serde(default = "default_name_max")]
+    #[allow(dead_code)]
     pub name_max_length: usize,
     /// Maximum allowed description length.
     #[serde(default = "default_desc_max")]
+    #[allow(dead_code)]
     pub description_max_length: usize,
     /// Whether `allowed-tools` is supported in skill config.
     #[serde(default)]
@@ -64,6 +70,7 @@ pub struct HarnessCapabilities {
     #[serde(default)]
     pub supports_user_invocable_flag: bool,
     /// Path to an extra metadata file for the harness.
+    #[allow(dead_code)]
     pub extra_metadata_path: Option<String>,
 }
 
@@ -101,6 +108,7 @@ pub enum MacroDef {
         /// The macro body.
         content: String,
         /// Optional parameter names.
+        #[allow(dead_code)]
         arguments: Option<Vec<String>>,
     },
 }
@@ -109,10 +117,13 @@ pub enum MacroDef {
 #[derive(Debug, Clone, Deserialize)]
 pub struct FunctionDef {
     /// Human-readable description of the function.
+    #[allow(dead_code)]
     pub description: String,
     /// Optional description of the return value.
+    #[allow(dead_code)]
     pub returns: Option<String>,
     /// Optional inline template for the function body.
+    #[allow(dead_code)]
     pub template: Option<String>,
 }
 
@@ -131,6 +142,7 @@ pub struct SidecarDef {
 #[derive(Debug, Clone, Deserialize)]
 pub struct ManifestDef {
     /// Format of the manifest (e.g. "json").
+    #[allow(dead_code)]
     pub format: String,
     /// Jinja2 template for the manifest content.
     pub template: String,
@@ -141,11 +153,14 @@ pub struct ManifestDef {
 pub struct DiscoveryConfig {
     /// Discover skills from the project directory.
     #[serde(default)]
+    #[allow(dead_code)]
     pub project: bool,
     /// Discover skills from the user's home directory.
     #[serde(default)]
+    #[allow(dead_code)]
     pub user: bool,
     /// Discover skills from plugin directories.
     #[serde(default)]
+    #[allow(dead_code)]
     pub plugin: bool,
 }

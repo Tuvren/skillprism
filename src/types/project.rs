@@ -1,5 +1,3 @@
-#![allow(clippy::redundant_pub_crate, dead_code)]
-
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 
@@ -18,9 +16,11 @@ pub struct ProjectConfig {
 
     /// Directory containing user harness overrides.
     #[serde(default = "default_harnesses_dir")]
+    #[allow(dead_code)]
     pub harnesses_dir: PathBuf,
 
     /// Optional project name.
+    #[allow(dead_code)]
     pub name: Option<String>,
 }
 
@@ -49,6 +49,7 @@ pub struct SkillModel {
     /// Skill name, either from skill.yaml or the directory name.
     pub name: String,
     /// The directory name on disk.
+    #[allow(dead_code)]
     pub directory_name: String,
     /// Human-readable description of the skill.
     pub description: String,
@@ -100,6 +101,7 @@ pub struct SkillModel {
 
 /// A group of skills sharing local variables and nested sub-groups.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SkillGroup {
     /// Variables inherited by all skills in this group.
     pub local_variables: BTreeMap<String, yaml_serde::Value>,
@@ -119,5 +121,6 @@ pub struct ProjectModel {
     /// All discovered skills in the project.
     pub skills: Vec<SkillModel>,
     /// Absolute path to the project root directory.
+    #[allow(dead_code)]
     pub project_root: PathBuf,
 }
