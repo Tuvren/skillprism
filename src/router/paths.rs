@@ -217,6 +217,10 @@ mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
+    /// Serialises tests that mutate the global `HOME` env var so they don't
+    /// race under parallel test execution.
+    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     fn set_home_for_test() -> PathBuf {
         let home = std::env::temp_dir().join("skillprism-test-home");
         unsafe {
@@ -239,6 +243,7 @@ mod tests {
 
     #[test]
     fn user_scope_path() {
+        let _lock = HOME_LOCK.lock().unwrap();
         let home = set_home_for_test();
         let root = Path::new("/tmp/project");
         let path =
@@ -322,6 +327,7 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_path() {
+        let _lock = HOME_LOCK.lock().unwrap();
         set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
@@ -371,10 +377,8 @@ mod tests {
 
     #[test]
     fn user_scope_reports_missing_home() {
-        // SAFETY: temporarily removing HOME to test the error path.
-        // This is safe in a single-threaded test context.
+        let _lock = HOME_LOCK.lock().unwrap();
         let prev = std::env::var("HOME").ok();
-        // SAFETY: see above — single-threaded test, restored below.
         unsafe {
             std::env::remove_var("HOME");
         }

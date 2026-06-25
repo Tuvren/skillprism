@@ -282,8 +282,6 @@ enum EngineError {
     TemplateRead { skill: String, harness: String, path: String },
     /// MiniJinja render failure
     RenderError { skill: String, harness: String, detail: String },
-    /// Name collision between content block and sidecar
-    TemplateCollision { skill: String, harness: String, detail: String },
 }
 
 // ─── Output Router ───────────────────────────────────────────────────────────
