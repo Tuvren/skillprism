@@ -55,18 +55,6 @@ pub enum EngineError {
         line: Option<usize>,
         detail: String,
     },
-
-    /// Multiple harnesses registered a template with the same name.
-    #[error(
-        "[{skill}] {harness}: Collision — template `{template_name}` registered by multiple harnesses"
-    )]
-    #[diagnostic(help("Ensure harness templates have unique names"))]
-    #[allow(dead_code)]
-    TemplateCollision {
-        skill: String,
-        harness: String,
-        template_name: String,
-    },
 }
 
 /// The rendering engine that processes skill templates through harnesses.

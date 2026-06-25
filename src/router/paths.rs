@@ -205,21 +205,6 @@ fn validate_scope_relative(
     Ok(())
 }
 
-/// Returns the output directory for a skill (parent of the skill file path).
-#[allow(dead_code)]
-pub fn skill_output_dir(
-    project_root: &Path,
-    harness: &HarnessDefinition,
-    skill_name: &str,
-    target: TargetScope,
-) -> Result<PathBuf, RouterError> {
-    resolve_skill_path(project_root, harness, skill_name, target).map(|p| {
-        p.parent()
-            .expect("skill path should have a parent directory")
-            .to_path_buf()
-    })
-}
-
 fn home_dir() -> Result<PathBuf, RouterError> {
     match std::env::var("HOME") {
         Ok(h) if !h.is_empty() => Ok(PathBuf::from(h)),
@@ -231,6 +216,10 @@ fn home_dir() -> Result<PathBuf, RouterError> {
 mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
+
+    /// Serialises tests that mutate the global `HOME` env var so they don't
+    /// race under parallel test execution.
+    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn set_home_for_test() -> PathBuf {
         let home = std::env::temp_dir().join("skillprism-test-home");
@@ -254,6 +243,7 @@ mod tests {
 
     #[test]
     fn user_scope_path() {
+        let _lock = HOME_LOCK.lock().unwrap();
         let home = set_home_for_test();
         let root = Path::new("/tmp/project");
         let path =
@@ -337,6 +327,7 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_path() {
+        let _lock = HOME_LOCK.lock().unwrap();
         set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
@@ -386,10 +377,8 @@ mod tests {
 
     #[test]
     fn user_scope_reports_missing_home() {
-        // SAFETY: temporarily removing HOME to test the error path.
-        // This is safe in a single-threaded test context.
+        let _lock = HOME_LOCK.lock().unwrap();
         let prev = std::env::var("HOME").ok();
-        // SAFETY: see above — single-threaded test, restored below.
         unsafe {
             std::env::remove_var("HOME");
         }

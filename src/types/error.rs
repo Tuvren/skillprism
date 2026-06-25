@@ -22,12 +22,6 @@ pub enum ProjectError {
         message: String,
     },
 
-    /// A required field is missing from the configuration.
-    #[error("Missing required field in {path}")]
-    #[diagnostic(help("{message}"))]
-    #[allow(dead_code)]
-    MissingField { path: String, message: String },
-
     /// The skillprism.yaml project config file was not found.
     #[error("Project configuration not found: {path}")]
     #[diagnostic(help("Create a skillprism.yaml file in the project root"))]

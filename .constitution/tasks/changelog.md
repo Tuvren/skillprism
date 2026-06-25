@@ -1,5 +1,17 @@
 # Tasks Changelog
 
+## v0.9.0 — Epic G Complete
+
+- **Epic G (Code Quality)** fully implemented and archived
+- 8 tickets completed: CLEAN-G001 through CLEAN-G008
+- 9 story points delivered
+- **CLEAN-G001–G003:** Removed dead code (TemplateCollision variant, MissingField variant, skill_output_dir function)
+- **CLEAN-G004–G008:** Replaced all module-level `#![allow(...)]` attributes with targeted per-item annotations
+- **CLEAN-G006 (Spike):** Evaluated `yaml_serde` → `serde_yml` migration; recommended staying on `yaml_serde` (actively maintained by The YAML Organization; `serde_yml` is itself deprecated)
+- No ambient `#[allow(dead_code)]` or `#![allow(...)]` remains at module level without justification
+- Active backlog reduced to 5 story points (Epic H only)
+- Total delivery trajectory: 75 SP across 7 completed epics
+
 ## v0.8.0 — Epic F Complete
 
 - **Epic F (Testing & CI)** fully implemented and archived
