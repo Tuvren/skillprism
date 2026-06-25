@@ -205,21 +205,6 @@ fn validate_scope_relative(
     Ok(())
 }
 
-/// Returns the output directory for a skill (parent of the skill file path).
-#[allow(dead_code)]
-pub fn skill_output_dir(
-    project_root: &Path,
-    harness: &HarnessDefinition,
-    skill_name: &str,
-    target: TargetScope,
-) -> Result<PathBuf, RouterError> {
-    resolve_skill_path(project_root, harness, skill_name, target).map(|p| {
-        p.parent()
-            .expect("skill path should have a parent directory")
-            .to_path_buf()
-    })
-}
-
 fn home_dir() -> Result<PathBuf, RouterError> {
     match std::env::var("HOME") {
         Ok(h) if !h.is_empty() => Ok(PathBuf::from(h)),
