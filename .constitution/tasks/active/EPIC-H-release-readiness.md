@@ -102,7 +102,7 @@ Acronym: **RELS** | Story Points: **13**
 - **Type:** Feature
 - **Effort:** 3
 - **Dependencies:** None
-- **Description:** Add a GitHub Actions workflow triggered by git tags matching `v*`. Builds for Linux (x86_64) and macOS (x86_64 + ARM), attaches binaries to a GitHub Release, and optionally runs `cargo publish`. Ensure the workflow uses the same build matrix as the existing CI.
+- **Description:** Add a GitHub Actions workflow triggered by git tags matching `v*`. Builds for Linux (x86_64) and macOS (x86_64 + ARM), attaches binaries to a GitHub Release, and optionally runs `cargo publish`. The release matrix should expand beyond the CI baseline to include a macOS ARM runner (e.g., `macos-14`).
 - **Acceptance Criteria (Gherkin):**
   ```gherkin
   Given a tag v1.0.0 is pushed

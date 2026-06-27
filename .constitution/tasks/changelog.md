@@ -14,7 +14,7 @@
   - RELS-H001 — Shell completions (2 SP, was H002)
   - RELS-H002 — `--dry-run` alias (1 SP, was H003)
   - RELS-H003 — `.gitignore` polish (1 SP, was H004)
-- Critical path: H001/H002 → H004/H005 → H007/H008, with H003/H006 parallel
+- Wave 1: H001, H002, H003, H006 (fully parallel). Wave 2: H004, H005 (after H001/H002). Wave 3: H007, H008 (final)
 - Total delivery trajectory: 75 SP completed + 13 SP active = 88 SP
 
 ## v0.9.0 — Epic G Complete
