@@ -1,5 +1,22 @@
 # Tasks Changelog
 
+## v1.0.0 — Epic H Rewritten for Full Release Readiness
+
+- **Epic H restructured**: Removed RELS-H001 (license — externally completed in commit `79c4211` as Apache 2.0). Renumbered remaining tickets and added 5 new items.
+- **8 active tickets**, 13 total story points
+- **New scope:**
+  - RELS-H004 — CLI help polish (2 SP)
+  - RELS-H005 — Man page generation (1 SP)
+  - RELS-H006 — Release CI workflow (3 SP)
+  - RELS-H007 — User-facing CHANGELOG (1 SP)
+  - RELS-H008 — Cargo publish readiness (2 SP)
+- **Preserved scope:**
+  - RELS-H001 — Shell completions (2 SP, was H002)
+  - RELS-H002 — `--dry-run` alias (1 SP, was H003)
+  - RELS-H003 — `.gitignore` polish (1 SP, was H004)
+- Wave 1: H001, H002, H003, H006 (fully parallel). Wave 2: H004, H005 (after H001/H002). Wave 3: H007, H008 (final)
+- Total delivery trajectory: 75 SP completed + 13 SP active = 88 SP
+
 ## v0.9.0 — Epic G Complete
 
 - **Epic G (Code Quality)** fully implemented and archived
