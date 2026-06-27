@@ -15,7 +15,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_complete as clap_complete_crate;
 use miette::IntoDiagnostic;
 
 use crate::engine::Engine;
@@ -55,6 +56,20 @@ enum Command {
         #[command(subcommand)]
         kind: InitKind,
     },
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: ShellKind,
+    },
+}
+
+/// Shell to generate completion scripts for.
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
+pub enum ShellKind {
+    Bash,
+    Fish,
+    Zsh,
 }
 
 /// Target scope for where rendered skill files are written.
@@ -113,6 +128,10 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
         } => run_build(target, diff, force, cli.verbose),
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => run_init(kind),
+        Command::Completions { shell } => {
+            run_completions(shell);
+            Ok(())
+        }
     }
 }
 
@@ -339,6 +358,17 @@ fn print_diff_entry(entry: &crate::router::DiffEntry, result: &mut BuildResult) 
     }
 }
 
+fn run_completions(shell: ShellKind) {
+    let mut cmd = Cli::command();
+    let clap_shell = match shell {
+        ShellKind::Bash => clap_complete_crate::Shell::Bash,
+        ShellKind::Fish => clap_complete_crate::Shell::Fish,
+        ShellKind::Zsh => clap_complete_crate::Shell::Zsh,
+    };
+    let cmd_name = cmd.get_name().to_string();
+    clap_complete_crate::generate(clap_shell, &mut cmd, cmd_name, &mut std::io::stdout());
+}
+
 fn run_validate(path: &str) -> Result<(), miette::Report> {
     let root = PathBuf::from(path);
     let root = if root.is_absolute() {
@@ -516,6 +546,68 @@ fn find_project_root() -> Result<PathBuf, miette::Report> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn completions_bash_includes_subcommands() {
+        let result = Cli::try_parse_from(["skillprism", "completions", "bash"]);
+        assert!(result.is_ok(), "bash completions should parse");
+
+        // Verify completion generation produces valid output via parser helper
+        let mut cmd = Cli::command();
+        let mut buf = Vec::new();
+        clap_complete_crate::generate(
+            clap_complete_crate::Shell::Bash,
+            &mut cmd,
+            "skillprism",
+            &mut buf,
+        );
+        let output = String::from_utf8(buf).unwrap();
+        assert!(
+            output.contains("build"),
+            "bash completions should include build"
+        );
+        assert!(
+            output.contains("validate"),
+            "bash completions should include validate"
+        );
+        assert!(
+            output.contains("init"),
+            "bash completions should include init"
+        );
+    }
+
+    #[test]
+    fn completions_parse_bash() {
+        let cli = Cli::try_parse_from(["skillprism", "completions", "bash"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Completions {
+                shell: ShellKind::Bash
+            }
+        ));
+    }
+
+    #[test]
+    fn completions_parse_fish() {
+        let cli = Cli::try_parse_from(["skillprism", "completions", "fish"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Completions {
+                shell: ShellKind::Fish
+            }
+        ));
+    }
+
+    #[test]
+    fn completions_parse_zsh() {
+        let cli = Cli::try_parse_from(["skillprism", "completions", "zsh"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Completions {
+                shell: ShellKind::Zsh
+            }
+        ));
+    }
 
     #[test]
     fn build_target_user() {
