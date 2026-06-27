@@ -41,7 +41,7 @@ enum Command {
         #[arg(long = "target", default_value = "project")]
         target: TargetScope,
 
-        #[arg(long = "diff", alias = "dry-run")]
+        #[arg(long = "diff", visible_alias = "dry-run")]
         diff: bool,
 
         #[arg(long = "force")]
