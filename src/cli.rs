@@ -41,7 +41,7 @@ enum Command {
         #[arg(long = "target", default_value = "project")]
         target: TargetScope,
 
-        #[arg(long = "diff")]
+        #[arg(long = "diff", alias = "dry-run")]
         diff: bool,
 
         #[arg(long = "force")]
@@ -573,6 +573,19 @@ mod tests {
                 assert!(matches!(target, TargetScope::Project));
             }
             _ => panic!("expected Build command"),
+        }
+    }
+
+    #[test]
+    fn dry_run_is_alias_for_diff() {
+        let cli_diff = Cli::try_parse_from(["skillprism", "build", "--diff"]).unwrap();
+        let cli_dry_run = Cli::try_parse_from(["skillprism", "build", "--dry-run"]).unwrap();
+        match (cli_diff.command, cli_dry_run.command) {
+            (Command::Build { diff: d1, .. }, Command::Build { diff: d2, .. }) => {
+                assert!(d1, "--diff should set diff=true");
+                assert!(d2, "--dry-run should also set diff=true");
+            }
+            _ => panic!("expected Build command for both"),
         }
     }
 }
