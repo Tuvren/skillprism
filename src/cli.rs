@@ -12,11 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
-use clap_complete as clap_complete_crate;
+
 use miette::IntoDiagnostic;
 
 use crate::engine::Engine;
@@ -128,10 +129,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
         } => run_build(target, diff, force, cli.verbose),
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => run_init(kind),
-        Command::Completions { shell } => {
-            run_completions(shell);
-            Ok(())
-        }
+        Command::Completions { shell } => run_completions(shell),
     }
 }
 
@@ -358,15 +356,18 @@ fn print_diff_entry(entry: &crate::router::DiffEntry, result: &mut BuildResult) 
     }
 }
 
-fn run_completions(shell: ShellKind) {
+fn run_completions(shell: ShellKind) -> Result<(), miette::Report> {
     let mut cmd = Cli::command();
     let clap_shell = match shell {
-        ShellKind::Bash => clap_complete_crate::Shell::Bash,
-        ShellKind::Fish => clap_complete_crate::Shell::Fish,
-        ShellKind::Zsh => clap_complete_crate::Shell::Zsh,
+        ShellKind::Bash => clap_complete::Shell::Bash,
+        ShellKind::Fish => clap_complete::Shell::Fish,
+        ShellKind::Zsh => clap_complete::Shell::Zsh,
     };
     let cmd_name = cmd.get_name().to_string();
-    clap_complete_crate::generate(clap_shell, &mut cmd, cmd_name, &mut std::io::stdout());
+    let mut stdout = std::io::stdout().lock();
+    clap_complete::generate(clap_shell, &mut cmd, cmd_name, &mut stdout);
+    stdout.flush().into_diagnostic()?;
+    Ok(())
 }
 
 fn run_validate(path: &str) -> Result<(), miette::Report> {
@@ -549,18 +550,10 @@ mod tests {
 
     #[test]
     fn completions_bash_includes_subcommands() {
-        let result = Cli::try_parse_from(["skillprism", "completions", "bash"]);
-        assert!(result.is_ok(), "bash completions should parse");
-
-        // Verify completion generation produces valid output via parser helper
         let mut cmd = Cli::command();
+        let cmd_name = cmd.get_name().to_string();
         let mut buf = Vec::new();
-        clap_complete_crate::generate(
-            clap_complete_crate::Shell::Bash,
-            &mut cmd,
-            "skillprism",
-            &mut buf,
-        );
+        clap_complete::generate(clap_complete::Shell::Bash, &mut cmd, cmd_name, &mut buf);
         let output = String::from_utf8(buf).unwrap();
         assert!(
             output.contains("build"),
