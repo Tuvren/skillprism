@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_mangen::Man;
 
 use miette::IntoDiagnostic;
 
@@ -379,6 +380,15 @@ fn run_completions(shell: ShellKind) -> Result<(), miette::Report> {
     let mut stdout = std::io::stdout().lock();
     clap_complete::generate(clap_shell, &mut cmd, cmd_name, &mut stdout);
     stdout.flush().into_diagnostic()?;
+    Ok(())
+}
+
+/// Generate a man page for the CLI and write it to stdout.
+pub fn generate_man_page() -> Result<(), miette::Report> {
+    let cmd = Cli::command();
+    let man = Man::new(cmd);
+    man.render(&mut std::io::stdout().lock())
+        .into_diagnostic()?;
     Ok(())
 }
 
