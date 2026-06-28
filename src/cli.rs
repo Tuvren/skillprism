@@ -76,8 +76,11 @@ enum Command {
 /// Shell to generate completion scripts for.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
 pub enum ShellKind {
+    /// Generate completions for Bash
     Bash,
+    /// Generate completions for Fish
     Fish,
+    /// Generate completions for Zsh
     Zsh,
 }
 
