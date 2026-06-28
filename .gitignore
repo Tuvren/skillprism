@@ -1,3 +1,7 @@
 target/
 .devenv/
 .pre-commit-config.yaml
+.direnv/
+dist/
+*.tmp
+skillprism.1

@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
+use clap_mangen::Man;
+
 use miette::IntoDiagnostic;
 
 use crate::engine::Engine;
@@ -31,30 +34,54 @@ struct Cli {
     #[command(subcommand)]
     command: Command,
 
+    /// Enable verbose progress output
     #[arg(global = true, short = 'v', long = "verbose")]
     verbose: bool,
 }
 
 #[derive(Subcommand)]
 enum Command {
+    /// Compile templates and write harness-specific output files
     Build {
         #[arg(long = "target", default_value = "project")]
         target: TargetScope,
 
-        #[arg(long = "diff")]
+        /// Show a diff of changes without writing files
+        #[arg(long = "diff", visible_alias = "dry-run")]
         diff: bool,
 
+        /// Overwrite existing files without confirmation
         #[arg(long = "force")]
         force: bool,
     },
+    /// Validate skill project without writing output
     Validate {
+        /// Path to the project root directory
         #[arg(default_value = ".")]
         path: String,
     },
+    /// Scaffold a new project, skill, or harness definition
     Init {
         #[command(subcommand)]
         kind: InitKind,
     },
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: ShellKind,
+    },
+}
+
+/// Shell to generate completion scripts for.
+#[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
+pub enum ShellKind {
+    /// Generate completions for Bash
+    Bash,
+    /// Generate completions for Fish
+    Fish,
+    /// Generate completions for Zsh
+    Zsh,
 }
 
 /// Target scope for where rendered skill files are written.
@@ -70,9 +97,12 @@ pub enum TargetScope {
 
 #[derive(Subcommand)]
 enum InitKind {
+    /// Scaffold a full skillprism project
     Project {
+        /// Project name
         name: String,
 
+        /// Output directory (defaults to ./<name>)
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
 
@@ -80,7 +110,9 @@ enum InitKind {
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
     },
+    /// Scaffold a single skill into an existing project
     Skill {
+        /// Skill name
         name: String,
 
         /// Comma-separated list of target harnesses (default: all built-in)
@@ -113,6 +145,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
         } => run_build(target, diff, force, cli.verbose),
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => run_init(kind),
+        Command::Completions { shell } => run_completions(shell),
     }
 }
 
@@ -339,6 +372,29 @@ fn print_diff_entry(entry: &crate::router::DiffEntry, result: &mut BuildResult) 
     }
 }
 
+fn run_completions(shell: ShellKind) -> Result<(), miette::Report> {
+    let mut cmd = Cli::command();
+    let clap_shell = match shell {
+        ShellKind::Bash => clap_complete::Shell::Bash,
+        ShellKind::Fish => clap_complete::Shell::Fish,
+        ShellKind::Zsh => clap_complete::Shell::Zsh,
+    };
+    let cmd_name = cmd.get_name().to_string();
+    let mut stdout = std::io::stdout().lock();
+    clap_complete::generate(clap_shell, &mut cmd, cmd_name, &mut stdout);
+    stdout.flush().into_diagnostic()?;
+    Ok(())
+}
+
+/// Generate a man page for the CLI and write it to stdout.
+pub fn generate_man_page() -> Result<(), miette::Report> {
+    let cmd = Cli::command();
+    let man = Man::new(cmd);
+    man.render(&mut std::io::stdout().lock())
+        .into_diagnostic()?;
+    Ok(())
+}
+
 fn run_validate(path: &str) -> Result<(), miette::Report> {
     let root = PathBuf::from(path);
     let root = if root.is_absolute() {
@@ -518,6 +574,64 @@ mod tests {
     use super::*;
 
     #[test]
+    fn completions_bash_includes_subcommands() {
+        let mut cmd = Cli::command();
+        let cmd_name = cmd.get_name().to_string();
+        let mut buf = Vec::new();
+        clap_complete::generate(clap_complete::Shell::Bash, &mut cmd, cmd_name, &mut buf);
+        let output = String::from_utf8(buf).unwrap();
+        assert!(
+            output.contains("build"),
+            "bash completions should include build"
+        );
+        assert!(
+            output.contains("validate"),
+            "bash completions should include validate"
+        );
+        assert!(
+            output.contains("init"),
+            "bash completions should include init"
+        );
+        assert!(
+            output.contains("completions"),
+            "bash completions should include completions"
+        );
+    }
+
+    #[test]
+    fn completions_parse_bash() {
+        let cli = Cli::try_parse_from(["skillprism", "completions", "bash"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Completions {
+                shell: ShellKind::Bash
+            }
+        ));
+    }
+
+    #[test]
+    fn completions_parse_fish() {
+        let cli = Cli::try_parse_from(["skillprism", "completions", "fish"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Completions {
+                shell: ShellKind::Fish
+            }
+        ));
+    }
+
+    #[test]
+    fn completions_parse_zsh() {
+        let cli = Cli::try_parse_from(["skillprism", "completions", "zsh"]).unwrap();
+        assert!(matches!(
+            cli.command,
+            Command::Completions {
+                shell: ShellKind::Zsh
+            }
+        ));
+    }
+
+    #[test]
     fn build_target_user() {
         let cli = Cli::try_parse_from(["skillprism", "build", "--target", "user"]).unwrap();
         assert!(matches!(
@@ -573,6 +687,33 @@ mod tests {
                 assert!(matches!(target, TargetScope::Project));
             }
             _ => panic!("expected Build command"),
+        }
+    }
+
+    #[test]
+    fn generate_man_page_produces_roff_output() {
+        let mut buf = Vec::new();
+        let cmd = Cli::command();
+        let man = Man::new(cmd);
+        man.render(&mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains(".TH"), "man page should contain .TH macro");
+        assert!(
+            output.contains("skillprism"),
+            "man page should reference binary name"
+        );
+    }
+
+    #[test]
+    fn dry_run_is_alias_for_diff() {
+        let cli_diff = Cli::try_parse_from(["skillprism", "build", "--diff"]).unwrap();
+        let cli_dry_run = Cli::try_parse_from(["skillprism", "build", "--dry-run"]).unwrap();
+        match (cli_diff.command, cli_dry_run.command) {
+            (Command::Build { diff: d1, .. }, Command::Build { diff: d2, .. }) => {
+                assert!(d1, "--diff should set diff=true");
+                assert!(d2, "--dry-run should also set diff=true");
+            }
+            _ => panic!("expected Build command for both"),
         }
     }
 }

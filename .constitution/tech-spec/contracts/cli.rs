@@ -35,7 +35,7 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Compile templates and write harness-specific output
+    /// Compile templates and write harness-specific output files
     Build {
         /// Target scope for output
         ///   project  → write to project-level agent paths (default)
@@ -44,8 +44,8 @@ enum Command {
         #[arg(long = "target", default_value = "project")]
         target: TargetScope,
 
-        /// Show diff against currently installed files without writing
-        #[arg(long = "diff")]
+        /// Show a diff of changes without writing files
+        #[arg(long = "diff", visible_alias = "dry-run")]
         diff: bool,
 
         /// Overwrite existing files without confirmation
@@ -55,23 +55,43 @@ enum Command {
 
     /// Validate skill project without writing output
     Validate {
-        /// Optional path to project root (defaults to cwd)
+        /// Path to the project root directory
         #[arg(default_value = ".")]
         path: String,
     },
 
-    /// Scaffold a new project or skill
+    /// Scaffold a new project, skill, or harness definition
     Init {
-        /// Type of scaffold
         #[command(subcommand)]
         kind: InitKind,
     },
+
+    /// Generate shell completion scripts
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: ShellKind,
+    },
 }
 
-#[derive(ValueEnum, Clone)]
+/// Shell to generate completion scripts for.
+#[derive(ValueEnum, Clone, Copy)]
+enum ShellKind {
+    /// Generate completions for Bash
+    Bash,
+    /// Generate completions for Fish
+    Fish,
+    /// Generate completions for Zsh
+    Zsh,
+}
+
+#[derive(ValueEnum, Clone, Copy)]
 enum TargetScope {
+    /// Write to the project-local skill directory.
     Project,
+    /// Write to the user's home directory.
     User,
+    /// Write to a distribution output directory.
     Dist,
 }
 
@@ -82,7 +102,7 @@ enum InitKind {
         /// Project name
         name: String,
 
-        /// Output directory (defaults to ./{name})
+        /// Output directory (defaults to ./<name>)
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
 
@@ -92,10 +112,10 @@ enum InitKind {
     },
     /// Scaffold a single skill into an existing project
     Skill {
-        /// Skill name (used for directory and SKILL.md title)
+        /// Skill name
         name: String,
 
-        /// Target harnesses (comma-separated, default: all built-in)
+        /// Comma-separated list of target harnesses (default: all built-in)
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
     },

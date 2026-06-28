@@ -18,10 +18,13 @@ skillprism/
 ├── Cargo.toml              # Package manifest (single crate)
 ├── Cargo.lock              # Lockfile (committed)
 ├── rust-toolchain.toml     # MSRV pin (1.85, edition 2024)
-├── .github/workflows/
-│   └── ci.yml              # GitHub Actions CI (matrix build, test, clippy, fmt)
+ ├── .github/workflows/
+│   ├── ci.yml              # GitHub Actions CI (matrix build, test, clippy, fmt)
+│   └── release.yml         # GitHub Actions release (tag-triggered, matrix, GH Release)
+├── scripts/
+│   └── generate-man.sh     # Man page regeneration script
 ├── src/
-│   ├── main.rs             # CLI entrypoint (clap dispatch)
+│   ├── main.rs             # CLI entrypoint (clap dispatch + hidden __generate_man)
 │   ├── cli.rs              # Command/flag definitions (clap derive) + pipeline dispatch
 │   ├── loader/
 │   │   ├── mod.rs          # Module exports + public API
