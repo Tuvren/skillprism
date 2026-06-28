@@ -132,6 +132,22 @@ fn validate_reports_errors() {
 }
 
 #[test]
+fn completions_produce_output() {
+    for shell in &["bash", "fish", "zsh"] {
+        let assert = bin().arg("completions").arg(shell).assert().success();
+        let stdout = String::from_utf8_lossy(&assert.get_output().stdout);
+        assert!(
+            !stdout.is_empty(),
+            "completions for {shell} should produce output"
+        );
+        assert!(
+            stdout.contains("skillprism"),
+            "completions for {shell} should reference the binary name"
+        );
+    }
+}
+
+#[test]
 fn build_diff_does_not_write() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();
