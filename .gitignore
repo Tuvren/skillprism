@@ -4,3 +4,4 @@ target/
 .direnv/
 dist/
 *.tmp
+skillprism.1

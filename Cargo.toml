@@ -6,8 +6,12 @@ rust-version = "1.85"
 description = "Build-time compiler for multi-harness agent skills"
 license = "Apache-2.0"
 repository = "https://github.com/tuvren/skillprism"
+homepage = "https://github.com/tuvren/skillprism"
+documentation = "https://docs.rs/skillprism"
+readme = "README.md"
 categories = ["development-tools", "command-line-utilities"]
 keywords = ["agent", "claude", "codex", "skills", "template"]
+exclude = [".devenv/", ".direnv/", "devenv.*", "rust-toolchain.toml", "scripts/"]
 
 [dependencies]
 clap = { version = "4.6", features = ["derive"] }
@@ -20,6 +24,10 @@ serde = { version = "1", features = ["derive"] }
 similar = { version = "2.7", features = ["text"] }
 thiserror = "2"
 yaml_serde = "0.10"
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 assert_cmd = "2"
