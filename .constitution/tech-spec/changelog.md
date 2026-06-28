@@ -1,5 +1,16 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.10.0 — 2026-06-27 — Epic H Release Readiness
+
+- **Epic H (Release Readiness)** fully implemented and archived
+- 8 tickets completed: RELS-H001 through RELS-H008
+- 13 story points delivered
+- Added `clap_complete` and `clap_mangen` to BOM
+- Updated BOM with CI/release workflow entries and dependency additions
+- Updated CLI contract in `contracts/cli.rs` with Completions subcommand, ShellKind, --dry-run alias, and consistent doc comments
+- Updated project structure tree in `guidelines.md` with `.github/workflows/release.yml` and `scripts/`
+- Added `CHANGELOG.md` at project root for user-facing release notes
+
 ### v0.6.0 — 2026-06-23 — Epic F Testing & CI
 
 - **Epic F (Testing & CI)** fully implemented and archived
