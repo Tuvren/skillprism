@@ -1,6 +1,6 @@
 # Changelog
 
-## v1.0.0 — Release Readiness
+## v0.1.0 — Release Readiness
 
 ### Epic H — Release Readiness
 

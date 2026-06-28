@@ -592,6 +592,10 @@ mod tests {
             output.contains("init"),
             "bash completions should include init"
         );
+        assert!(
+            output.contains("completions"),
+            "bash completions should include completions"
+        );
     }
 
     #[test]
