@@ -691,6 +691,20 @@ mod tests {
     }
 
     #[test]
+    fn generate_man_page_produces_roff_output() {
+        let mut buf = Vec::new();
+        let cmd = Cli::command();
+        let man = Man::new(cmd);
+        man.render(&mut buf).unwrap();
+        let output = String::from_utf8(buf).unwrap();
+        assert!(output.contains(".TH"), "man page should contain .TH macro");
+        assert!(
+            output.contains("skillprism"),
+            "man page should reference binary name"
+        );
+    }
+
+    #[test]
     fn dry_run_is_alias_for_diff() {
         let cli_diff = Cli::try_parse_from(["skillprism", "build", "--diff"]).unwrap();
         let cli_dry_run = Cli::try_parse_from(["skillprism", "build", "--dry-run"]).unwrap();

@@ -4,7 +4,7 @@
 
 - **Epic H (Release Readiness)** fully implemented and archived via `git mv`
 - 8 tickets completed: RELS-H001 through RELS-H008 (13 story points)
-- All 124 unit tests and 3 integration tests pass
+- All 125 unit tests and 4 integration tests pass
 - `cargo publish --dry-run` validates cleanly
 - Total delivery trajectory: 88 SP across 8 completed epics
 
