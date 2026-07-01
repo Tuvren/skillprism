@@ -83,7 +83,8 @@ struct SkillModel {
     /// Path to the template file (SKILL.md or SKILL.md.j2; not both)
     template_path: PathBuf,
     /// Every direct subdirectory of the skill's own directory (e.g. references/,
-    /// scripts/, or any other name), copied verbatim alongside it
+    /// scripts/, or any other name), copied verbatim alongside it — dot-directories
+    /// (.venv/, .git/, ...) are excluded
     asset_dirs: Vec<PathBuf>,
     /// Required harness capabilities this skill depends on
     required_capabilities: Vec<String>,

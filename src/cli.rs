@@ -187,12 +187,12 @@ fn run_build(
     let t2 = Instant::now();
     let outcome = Validator::validate(pairs);
     if !outcome.errors.is_empty() {
-        for err in &outcome.errors {
-            eprintln!("{err:?}");
+        let error_count = outcome.errors.len();
+        for err in outcome.errors {
+            eprintln!("{:?}", miette::Report::new(err));
         }
         return Err(miette::miette!(
-            "Validation failed with {} error(s)",
-            outcome.errors.len()
+            "Validation failed with {error_count} error(s)"
         ));
     }
     if verbose {
@@ -438,12 +438,12 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
         println!("Validation passed ({} skill(s))", outcome.valid.len());
         Ok(())
     } else {
-        for err in &outcome.errors {
-            eprintln!("{err:?}");
+        let error_count = outcome.errors.len();
+        for err in outcome.errors {
+            eprintln!("{:?}", miette::Report::new(err));
         }
         Err(miette::miette!(
-            "Validation failed with {} error(s)",
-            outcome.errors.len()
+            "Validation failed with {error_count} error(s)"
         ))
     }
 }

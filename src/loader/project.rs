@@ -242,20 +242,32 @@ impl ProjectLoader {
             }
         }
 
-        // Every direct subdirectory of a skill's own directory is an asset directory to
-        // copy verbatim, regardless of name (`references/`, `scripts/`, or anything
-        // else an author uses) — `walk_directory` never recurses into a skill's own
-        // directory looking for nested skills/groups once SKILL.md.j2 has been found,
-        // so nothing here can be mistaken for one.
+        skill.asset_dirs = Self::discover_asset_dirs(dir)?;
+
+        Ok(skill)
+    }
+
+    /// Every direct subdirectory of a skill's own directory is an asset directory to
+    /// copy verbatim, regardless of name (`references/`, `scripts/`, or anything else
+    /// an author uses) — `walk_directory` never recurses into a skill's own directory
+    /// looking for nested skills/groups once SKILL.md.j2 has been found, so nothing
+    /// here can be mistaken for one. Dot-directories (`.venv/`, `.git/`,
+    /// `.ipynb_checkpoints/`, ...) are excluded — they're tooling/VCS artifacts, never
+    /// content an author intends to ship alongside the skill.
+    fn discover_asset_dirs(dir: &Path) -> Result<Vec<std::path::PathBuf>, ProjectError> {
         let mut asset_dirs = read_dir_entries(dir)?
             .into_iter()
             .map(|entry| entry.path())
             .filter(|path| path.is_dir())
+            .filter(|path| {
+                !path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with('.'))
+            })
             .collect::<Vec<_>>();
         asset_dirs.sort();
-        skill.asset_dirs = asset_dirs;
-
-        Ok(skill)
+        Ok(asset_dirs)
     }
 }
 
@@ -362,6 +374,32 @@ mod tests {
         assert_eq!(model.skills.len(), 1);
         assert_eq!(model.skills[0].name, "my-skill");
         assert_eq!(model.skills[0].description, "A test skill");
+    }
+
+    #[test]
+    fn dot_directories_excluded_from_asset_dirs() {
+        let root = setup_test_dir("dot_dirs_excluded");
+        fs::create_dir_all(root.join("skills/my-skill/references")).unwrap();
+        fs::create_dir_all(root.join("skills/my-skill/.venv")).unwrap();
+        fs::create_dir_all(root.join("skills/my-skill/.git")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "name: my-skill\ndescription: A test skill\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
+
+        let model = ProjectLoader::load(&root).unwrap();
+        assert_eq!(model.skills.len(), 1);
+        let asset_names: Vec<String> = model.skills[0]
+            .asset_dirs
+            .iter()
+            .filter_map(|p| p.file_name())
+            .map(|n| n.to_string_lossy().to_string())
+            .collect();
+        assert_eq!(asset_names, vec!["references".to_string()]);
     }
 
     #[test]
