@@ -2,7 +2,9 @@
 
 [![CI](https://github.com/tuvren/skillprism/actions/workflows/ci.yml/badge.svg)](https://github.com/tuvren/skillprism/actions/workflows/ci.yml)
 
-Build-time compiler that transforms canonical skill sources into harness-specific agent files.
+Build-time compiler that transforms canonical skill sources into harness-specific agent files. Every rendered `SKILL.md` is compliant with the [Agent Skills specification](https://agentskills.io/specification).
+
+**Documentation: [tuvren.github.io/skillprism](https://tuvren.github.io/skillprism/)**
 
 ## Installation
 
@@ -49,16 +51,7 @@ values are available inside a template's `{{ }}`:
   (`harness.id`, `harness.name`, plus harness-specific macros — see
   `src/builtin_harnesses/*.yaml` for what each harness defines, e.g.
   `harness.subagent_guide`).
-- **`skill.yaml` fields**, available under their own name — `license`, `version`,
-  `compatibility`, `when_to_use`, `metadata.*`, `allowed_tools`, and more (full list:
-  `.constitution/tech-spec/contracts/skill-schema.json`). Three are exceptions and
-  render under a different name than their `skill.yaml` key: `model:` is
-  `{{ model_override }}`, `paths:` is `{{ activation_paths }}`, and `context:` is
-  `{{ context_fork }}` (a derived boolean — `true` when `context: fork`, `false`
-  otherwise — not the raw string). You don't have to reference every field in your
-  template — some, like `compatibility` or `metadata.source`, are just
-  packaging/attribution metadata that tooling can read without it appearing in the
-  rendered body.
+- **`skill.yaml` fields**, available under their own name — `license`, `version`, `compatibility`, `when_to_use`, `metadata.*`, `allowed_tools`, and more (full list: [skill-yaml reference](https://tuvren.github.io/skillprism/docs/skill-yaml/)). Three are exceptions and render under a different name than their `skill.yaml` key: `model:` is `{{ model_override }}`, `paths:` is `{{ activation_paths }}`, and `context:` is `{{ context_fork }}` (a derived boolean — `true` when `context: fork`, `false` otherwise — not the raw string). You don't have to reference every field in your template — some, like `compatibility` or `metadata.source`, are just packaging/attribution metadata that tooling can read without it appearing in the rendered body.
 - **`variables:`** — your own custom data. Anything under `variables:` in `skill.yaml`
   is available by name. Use this when a value is constant across every harness; if a
   variable or macro genuinely needs a *different* value depending on which harness is
@@ -127,7 +120,11 @@ Shows a unified diff of what would be written without modifying any files.
 skillprism validate
 ```
 
-Checks templates for syntax errors, undefined variables, and missing macros without writing output.
+Checks templates for syntax errors, undefined variables, and missing macros without writing output. Also enforces [Agent Skills spec](https://agentskills.io/specification) constraints: skill name format (`^[a-z0-9]+(-[a-z0-9]+)*$`, must match the directory name), non-empty description, and per-harness length caps. Values over the spec's portable cap but within a harness's own cap (e.g. a 1200-char description for Claude) are reported as warnings, not errors.
+
+## Spec compliance
+
+skillprism renders `SKILL.md` files with the YAML frontmatter the [Agent Skills specification](https://agentskills.io/specification) requires (`name` + `description` at minimum). Without this frontmatter, no compatible agent can discover a skill. The scaffold (`init skill`, `init project`) and `validate` both enforce spec constraints so a successful `skillprism build` produces skills that load in any spec-compatible client.
 
 ## Examples
 
@@ -158,17 +155,29 @@ three:
 ## CLI Reference
 
 ```
-skillprism build [--target project|user|dist] [--diff] [--force]
-skillprism validate [path]
-skillprism init project <name> [--out <dir>]
-skillprism init skill <name> [--targets <harnesses>]
+skillprism build [--target project|user|dist] [--diff|--dry-run] [--force] [-v]
+skillprism validate [path] [-v]
+skillprism init project <name> [--out <dir>] [-H <harnesses>]
+skillprism init skill <name>
+skillprism init harness <name>
+skillprism completions <bash|fish|zsh>
 ```
+
+### Global flags
+
+- `-v`, `--verbose`: Enable verbose progress output with per-phase timing
 
 ### Build flags
 
 - `--target`: Output scope — `project` (default), `user` (global), or `dist` (inspection)
-- `--diff`: Show colored diff preview without writing files
-- `--force`: Overwrite existing user-scope files without warning
+- `--diff` / `--dry-run`: Show a colored diff preview without writing files
+- `--force`: Overwrite existing files without confirmation
+
+### Init flags
+
+- `init project <name>`: Scaffold a new project (`--out` for output dir, `-H`/`--harnesses` for comma-separated harness list; default: `claude,opencode`)
+- `init skill <name>`: Scaffold a new skill into an existing project
+- `init harness <name>`: Scaffold a custom harness definition in `harnesses/`
 
 ## Project Structure
 
@@ -206,7 +215,7 @@ cargo test
 ### Lint
 
 ```bash
-cargo clippy -- -W clippy::all -W clippy::pedantic -W clippy::nursery
+cargo clippy -- -D warnings
 cargo fmt --check
 ```
 
@@ -220,7 +229,7 @@ To run hooks manually:
 
 ```bash
 devenv shell
-prek run --all-files
+pre-commit run --all-files
 ```
 
 Or via devenv's CI integration:

@@ -68,11 +68,9 @@ pub struct HarnessCapabilities {
     pub frontmatter_mode: String,
     /// Maximum allowed skill name length.
     #[serde(default = "default_name_max")]
-    #[allow(dead_code)]
     pub name_max_length: usize,
     /// Maximum allowed description length.
     #[serde(default = "default_desc_max")]
-    #[allow(dead_code)]
     pub description_max_length: usize,
     /// Whether `allowed-tools` is supported in skill config.
     #[serde(default)]

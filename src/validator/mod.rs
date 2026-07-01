@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod macros;
+mod spec;
 mod syntax;
 mod variables;
 
@@ -21,7 +22,9 @@ use std::fs;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use crate::registry::HarnessDefinition;
 use crate::resolver::ResolvedPair;
+use crate::types::SkillModel;
 
 /// Errors found during template validation.
 #[derive(Debug, Diagnostic, Error)]
@@ -82,6 +85,73 @@ pub enum ValidationError {
         harness: String,
         variable_name: String,
     },
+
+    /// The skill name doesn't match the Agent Skills spec format.
+    #[error("[{skill}] {harness}: Invalid skill name `{name}`")]
+    #[diagnostic(help("{detail}"))]
+    InvalidSkillName {
+        skill: String,
+        harness: String,
+        name: String,
+        detail: String,
+    },
+
+    /// The skill name doesn't match its directory name (spec requirement).
+    #[error("[{skill}] {harness}: Skill name `{name}` does not match directory `{directory}`")]
+    #[diagnostic(help(
+        "The Agent Skills spec requires the `name` field to match the parent directory name."
+    ))]
+    NameDirectoryMismatch {
+        skill: String,
+        harness: String,
+        name: String,
+        directory: String,
+    },
+
+    /// The skill description is empty (spec requires non-empty).
+    #[error("[{skill}] {harness}: Skill description is empty")]
+    #[diagnostic(help(
+        "The Agent Skills spec requires a non-empty description that says what the skill \
+         does and when to use it. Include trigger keywords so agents can match it to \
+         relevant tasks."
+    ))]
+    EmptyDescription { skill: String, harness: String },
+
+    /// A field value exceeds the target harness's maximum length.
+    #[error(
+        "[{skill}] {harness}: {field} is {len} characters, exceeds {harness_name} limit of {max}"
+    )]
+    #[diagnostic(help("{detail}"))]
+    ExceedsHarnessLimit {
+        skill: String,
+        harness: String,
+        field: String,
+        len: usize,
+        max: usize,
+        harness_name: String,
+        detail: String,
+    },
+
+    /// The compatibility note exceeds the spec's 500-character limit.
+    #[error("[{skill}] {harness}: compatibility is {len} characters, exceeds spec limit of 500")]
+    #[diagnostic(help("Shorten the compatibility note or move details to a reference file."))]
+    CompatibilityTooLong {
+        skill: String,
+        harness: String,
+        len: usize,
+    },
+}
+
+/// A non-fatal portability warning — the skill builds for this harness, but a value
+/// is over the Agent Skills spec's portable cap (though within the harness's own cap).
+#[derive(Debug, Clone)]
+pub struct ValidationWarning {
+    /// The skill the warning applies to.
+    pub skill: String,
+    /// The harness the warning applies to.
+    pub harness: String,
+    /// Human-readable warning message.
+    pub message: String,
 }
 
 /// Outcome of validating a batch of resolved pairs.
@@ -90,28 +160,39 @@ pub struct ValidationOutcome {
     pub valid: Vec<ResolvedPair>,
     /// Errors collected from all pairs.
     pub errors: Vec<ValidationError>,
+    /// Non-fatal portability warnings (over spec cap but within harness cap).
+    pub warnings: Vec<ValidationWarning>,
 }
 
 /// Runs validation checks on resolved skill-harness pairs.
 pub struct Validator;
 
 impl Validator {
-    /// Validate all resolved pairs, collecting errors without short-circuiting.
+    /// Validate all resolved pairs, collecting errors and warnings without short-circuiting.
     pub fn validate(pairs: Vec<ResolvedPair>) -> ValidationOutcome {
         let mut valid = Vec::new();
         let mut errors = Vec::new();
+        let mut warnings = Vec::new();
 
         for pair in pairs {
-            Self::validate_pair(&pair, &mut errors);
+            Self::validate_pair(&pair, &mut errors, &mut warnings);
             if !has_error_for_skill(&errors, &pair.skill.name, &pair.harness.id) {
                 valid.push(pair);
             }
         }
 
-        ValidationOutcome { valid, errors }
+        ValidationOutcome {
+            valid,
+            errors,
+            warnings,
+        }
     }
 
-    fn validate_pair(pair: &ResolvedPair, errors: &mut Vec<ValidationError>) {
+    fn validate_pair(
+        pair: &ResolvedPair,
+        errors: &mut Vec<ValidationError>,
+        warnings: &mut Vec<ValidationWarning>,
+    ) {
         let template_path = &pair.skill.template_path;
         let content = match fs::read_to_string(template_path) {
             Ok(c) => c,
@@ -135,6 +216,21 @@ impl Validator {
                 detail,
             });
             return;
+        }
+
+        // Agent Skills spec compliance — name format, name==directory, description and
+        // compatibility length caps. Hard errors fail the pair; warnings (over spec cap
+        // but within harness cap) are collected separately and don't block the build.
+        let (spec_errors, spec_warnings) = spec::check_spec(&pair.skill, &pair.harness);
+        for serr in spec_errors {
+            errors.push(map_spec_error(&pair.skill, &pair.harness, serr));
+        }
+        for swarn in spec_warnings {
+            warnings.push(ValidationWarning {
+                skill: skill_name.clone(),
+                harness: harness_id.clone(),
+                message: swarn.message,
+            });
         }
 
         let resolved_variables = pair.skill.variables_for_harness(harness_id);
@@ -177,34 +273,87 @@ impl Validator {
     }
 }
 
+/// Maps a `spec::SpecError` to the corresponding `ValidationError`, filling in the
+/// skill/harness context fields that the spec checker doesn't carry.
+fn map_spec_error(
+    skill: &SkillModel,
+    harness: &HarnessDefinition,
+    serr: spec::SpecError,
+) -> ValidationError {
+    match serr.kind {
+        spec::SpecErrorKind::InvalidName => ValidationError::InvalidSkillName {
+            skill: skill.name.clone(),
+            harness: harness.id.clone(),
+            name: skill.name.clone(),
+            detail: serr.detail,
+        },
+        spec::SpecErrorKind::NameDirectoryMismatch => ValidationError::NameDirectoryMismatch {
+            skill: skill.name.clone(),
+            harness: harness.id.clone(),
+            name: skill.name.clone(),
+            directory: skill.directory_name.clone(),
+        },
+        spec::SpecErrorKind::EmptyDescription => ValidationError::EmptyDescription {
+            skill: skill.name.clone(),
+            harness: harness.id.clone(),
+        },
+        spec::SpecErrorKind::DescriptionExceedsHarness { len, max } => {
+            ValidationError::ExceedsHarnessLimit {
+                skill: skill.name.clone(),
+                harness: harness.id.clone(),
+                field: "description".to_string(),
+                len,
+                max,
+                harness_name: harness.name.clone(),
+                detail: serr.detail,
+            }
+        }
+        spec::SpecErrorKind::NameExceedsHarness { len, max } => {
+            ValidationError::ExceedsHarnessLimit {
+                skill: skill.name.clone(),
+                harness: harness.id.clone(),
+                field: "name".to_string(),
+                len,
+                max,
+                harness_name: harness.name.clone(),
+                detail: serr.detail,
+            }
+        }
+        spec::SpecErrorKind::CompatibilityTooLong { len } => {
+            ValidationError::CompatibilityTooLong {
+                skill: skill.name.clone(),
+                harness: harness.id.clone(),
+                len,
+            }
+        }
+    }
+}
+
 fn has_error_for_skill(errors: &[ValidationError], skill: &str, harness: &str) -> bool {
-    errors.iter().any(|e| match e {
-        ValidationError::SyntaxError {
-            skill: s,
-            harness: h,
-            ..
+    errors.iter().any(|e| e.pair_key() == (skill, harness))
+}
+
+/// Extracts the `(skill, harness)` key from any error variant — used by
+/// `has_error_for_skill` so new variants don't require updating a growing match.
+trait ValidationErrorKey {
+    fn pair_key(&self) -> (&str, &str);
+}
+
+impl ValidationErrorKey for ValidationError {
+    fn pair_key(&self) -> (&str, &str) {
+        match self {
+            Self::SyntaxError { skill, harness, .. }
+            | Self::UndefinedVariable { skill, harness, .. }
+            | Self::UndefinedMacro { skill, harness, .. }
+            | Self::TemplateRead { skill, harness, .. }
+            | Self::ReservedVariableName { skill, harness, .. }
+            | Self::InvalidSkillName { skill, harness, .. }
+            | Self::NameDirectoryMismatch { skill, harness, .. }
+            | Self::EmptyDescription { skill, harness }
+            | Self::ExceedsHarnessLimit { skill, harness, .. }
+            | Self::CompatibilityTooLong { skill, harness, .. } => (skill, harness),
         }
-        | ValidationError::UndefinedVariable {
-            skill: s,
-            harness: h,
-            ..
-        }
-        | ValidationError::UndefinedMacro {
-            skill: s,
-            harness: h,
-            ..
-        }
-        | ValidationError::TemplateRead {
-            skill: s,
-            harness: h,
-            ..
-        }
-        | ValidationError::ReservedVariableName {
-            skill: s,
-            harness: h,
-            ..
-        } => s == skill && h == harness,
-    })
+    }
 }
 
 #[cfg(test)]
@@ -233,7 +382,7 @@ mod tests {
         SkillModel {
             name: name.to_string(),
             directory_name: name.to_string(),
-            description: String::new(),
+            description: "A test skill".to_string(),
             version: None,
             license: None,
             compatibility: None,
@@ -290,12 +439,7 @@ mod tests {
             ValidationError::SyntaxError { skill, .. } => {
                 assert_eq!(skill, "broken");
             }
-            e @ (ValidationError::UndefinedVariable { .. }
-            | ValidationError::UndefinedMacro { .. }
-            | ValidationError::TemplateRead { .. }
-            | ValidationError::ReservedVariableName { .. }) => {
-                panic!("expected SyntaxError, got {e:?}")
-            }
+            e => panic!("expected SyntaxError, got {e:?}"),
         }
         assert!(outcome.valid.is_empty());
     }
@@ -384,12 +528,7 @@ mod tests {
         assert_eq!(outcome.errors.len(), 1);
         match &outcome.errors[0] {
             ValidationError::TemplateRead { .. } => {}
-            e @ (ValidationError::SyntaxError { .. }
-            | ValidationError::UndefinedVariable { .. }
-            | ValidationError::UndefinedMacro { .. }
-            | ValidationError::ReservedVariableName { .. }) => {
-                panic!("expected TemplateRead, got {e:?}")
-            }
+            e => panic!("expected TemplateRead, got {e:?}"),
         }
     }
 

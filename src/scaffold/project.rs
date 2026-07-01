@@ -16,7 +16,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-/// Scaffolds a new skillprism project with directory structure, config, and sample skill.
+/// Scaffolds a new skillprism project with directory structure, config, sample skill,
+/// and a project-level .gitignore so generated harness output isn't committed.
 ///
 /// When `harnesses` is empty, defaults to `["claude", "opencode"]`.
 pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Result<()> {
@@ -44,11 +45,28 @@ pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Res
     fs::create_dir_all(&sample_dir)?;
     fs::write(
         sample_dir.join("skill.yaml"),
-        "name: sample\ndescription: A sample skill to get started\nvariables:\n  greeting: Hello from sample\n",
+        "name: sample\ndescription: >-\n  TODO: Describe what this skill does AND when to use it. Include trigger\n  keywords so agents can match this skill to relevant tasks.\n",
     )?;
+    // The sample skill's SKILL.md starts with the YAML frontmatter the Agent Skills
+    // spec requires (name + description) — without it no client can discover the
+    // skill. skillprism renders it once per harness from the skill.yaml fields above.
     fs::write(
         sample_dir.join("SKILL.md"),
-        "# {{ skill_name }}\n\n{{ skill_description }}\n\nHarness: {{ harness.id }} ({{ harness.name }})\n\n{{ greeting }}\n",
+        "---\nname: {{ skill_name }}\ndescription: {{ skill_description }}\n---\n\n# {{ skill_name }}\n\n{{ skill_description }}\n",
+    )?;
+
+    // Keep generated harness output out of version control — these directories are
+    // written by `skillprism build` and shouldn't be committed alongside source.
+    fs::write(
+        dir.join(".gitignore"),
+        ".claude/\n.opencode/\n.agents/\n.factory/\n.pi/\ndist/\n",
+    )?;
+
+    fs::write(
+        dir.join("README.md"),
+        format!(
+            "# {name}\n\nAgent Skills project managed with [skillprism](https://tuvren.github.io/skillprism/).\n\n## Usage\n\n```bash\nskillprism build       # compile skills to all configured harnesses\nskillprism validate    # check templates without writing output\nskillprism init skill <name>   # add a new skill\n```\n\nSee `skills/` for your skills and `skillprism.yaml` for project configuration.\n"
+        ),
     )?;
 
     Ok(())
@@ -71,6 +89,8 @@ mod tests {
         assert!(dir.join("harnesses").is_dir());
         assert!(dir.join("skills/sample/skill.yaml").exists());
         assert!(dir.join("skills/sample/SKILL.md").exists());
+        assert!(dir.join(".gitignore").exists());
+        assert!(dir.join("README.md").exists());
 
         let content = fs::read_to_string(dir.join("skillprism.yaml")).unwrap();
         assert!(content.contains("test-project"));
@@ -101,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    fn scaffold_sample_skill_contains_variable_refs() {
+    fn scaffold_sample_skill_contains_frontmatter_and_builtins() {
         let dir = std::env::temp_dir()
             .join("skillprism_test")
             .join("scaffold_sample_refs");
@@ -110,6 +130,19 @@ mod tests {
         scaffold_project(&dir, "test", &[]).unwrap();
 
         let template = fs::read_to_string(dir.join("skills/sample/SKILL.md")).unwrap();
+        // The spec requires frontmatter — the scaffold must emit it.
+        assert!(
+            template.starts_with("---\n"),
+            "sample SKILL.md must start with YAML frontmatter, got: {template:?}"
+        );
+        assert!(
+            template.contains("name: {{ skill_name }}"),
+            "template must render skill_name in frontmatter"
+        );
+        assert!(
+            template.contains("description: {{ skill_description }}"),
+            "template must render skill_description in frontmatter"
+        );
         assert!(
             template.contains("{{ skill_name }}"),
             "template must reference skill_name"
@@ -118,24 +151,29 @@ mod tests {
             template.contains("{{ skill_description }}"),
             "template must reference skill_description"
         );
-        assert!(
-            template.contains("{{ harness.id }}"),
-            "template must reference harness.id"
-        );
-        assert!(
-            template.contains("{{ harness.name }}"),
-            "template must reference harness.name"
-        );
-        assert!(
-            template.contains("{{ greeting }}"),
-            "template must reference greeting variable"
-        );
 
         let skill_yaml = fs::read_to_string(dir.join("skills/sample/skill.yaml")).unwrap();
         assert!(
             skill_yaml.contains("sample"),
             "skill.yaml must contain the skill name"
         );
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn scaffold_writes_gitignore_for_harness_output() {
+        let dir = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("scaffold_gitignore");
+        let _ = fs::remove_dir_all(&dir);
+
+        scaffold_project(&dir, "test", &[]).unwrap();
+
+        let gitignore = fs::read_to_string(dir.join(".gitignore")).unwrap();
+        assert!(gitignore.contains(".claude/"));
+        assert!(gitignore.contains(".opencode/"));
+        assert!(gitignore.contains("dist/"));
 
         let _ = fs::remove_dir_all(&dir);
     }

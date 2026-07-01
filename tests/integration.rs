@@ -80,6 +80,15 @@ fn full_build_pipeline() {
     // Verify rendered content for alpha × claude
     let alpha_claude =
         fs::read_to_string(project_dir.join(".claude/skills/alpha/SKILL.md")).unwrap();
+    // The Agent Skills spec requires YAML frontmatter (name + description) — without
+    // it no client can discover the skill. The fixture templates must emit it.
+    assert!(
+        alpha_claude.starts_with("---\n"),
+        "rendered SKILL.md must start with YAML frontmatter, got: {}",
+        &alpha_claude[..alpha_claude.len().min(80)]
+    );
+    assert!(alpha_claude.contains("name: alpha"));
+    assert!(alpha_claude.contains("description: First test skill"));
     assert!(alpha_claude.contains("# alpha"));
     assert!(alpha_claude.contains("Hello from Alpha"));
     assert!(alpha_claude.contains("Theme: dark"));
@@ -88,6 +97,12 @@ fn full_build_pipeline() {
     // Verify rendered content for beta × opencode
     let beta_opencode =
         fs::read_to_string(project_dir.join(".opencode/skills/beta/SKILL.md")).unwrap();
+    assert!(
+        beta_opencode.starts_with("---\n"),
+        "rendered SKILL.md must start with YAML frontmatter"
+    );
+    assert!(beta_opencode.contains("name: beta"));
+    assert!(beta_opencode.contains("description: Second test skill"));
     assert!(beta_opencode.contains("# beta"));
     assert!(beta_opencode.contains("Hello from Beta"));
     assert!(beta_opencode.contains("Message:"));

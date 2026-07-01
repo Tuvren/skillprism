@@ -16,9 +16,10 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
-/// Scaffolds a new skill directory with a starter skill.yaml, SKILL.md template,
-/// and standard asset directories (references/, scripts/).
-pub fn scaffold_skill(project_root: &Path, name: &str, _harnesses: &[String]) -> io::Result<()> {
+/// Scaffolds a new skill directory with a starter skill.yaml, a spec-compliant
+/// SKILL.md template (YAML frontmatter + body), and standard asset directories
+/// (references/, scripts/).
+pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
     let skill_dir = project_root.join("skills").join(name);
     fs::create_dir_all(&skill_dir)?;
 
@@ -26,25 +27,32 @@ pub fn scaffold_skill(project_root: &Path, name: &str, _harnesses: &[String]) ->
         skill_dir.join("skill.yaml"),
         format!(
             "name: {name}\n\
-             description: A new skill\n\
-             # Anything under `variables:` is available in SKILL.md as {{{{ variable_name }}}}.\n\
-             # skill.yaml fields like `license`, `when_to_use`, and `metadata` are available\n\
-             # too, under their own name — see .constitution/tech-spec/contracts/skill-schema.json\n\
-             # for the full list.\n\
-             variables:\n  \
-             greeting: Hello from {name}\n"
+             description: >-\n  \
+             TODO: Describe what this skill does AND when to use it. Include trigger\n  \
+             keywords so agents can match this skill to relevant tasks.\n\
+             # Optional fields — uncomment as needed:\n\
+             # license: Apache-2.0\n\
+             # compatibility: Requires git and access to the internet\n\
+             # variables:        # custom template values, available in SKILL.md as {{{{ name }}}}\n\
+             #   greeting: Hello from {name}\n"
         ),
     )?;
 
     // SKILL.md (not SKILL.md.j2) so editors apply Markdown syntax highlighting; it's
     // still a MiniJinja template underneath — rename to SKILL.md.j2 if you'd rather
     // have the extension say so explicitly. Both are accepted, never both at once.
+    //
+    // The YAML frontmatter (name/description) is REQUIRED by the Agent Skills spec —
+    // without it no client can discover the skill. skillprism renders it once per
+    // harness from the skill.yaml fields above.
     fs::write(
         skill_dir.join("SKILL.md"),
-        "# {{ skill_name }}\n\n\
-         {{ skill_description }}\n\n\
-         {{ greeting }}\n\n\
-         Built for {{ harness.name }} ({{ harness.id }}).\n",
+        "---\n\
+         name: {{ skill_name }}\n\
+         description: {{ skill_description }}\n\
+         ---\n\n\
+         # {{ skill_name }}\n\n\
+         {{ skill_description }}\n",
     )?;
 
     fs::create_dir_all(skill_dir.join("references"))?;
@@ -71,7 +79,7 @@ mod tests {
         )
         .unwrap();
 
-        scaffold_skill(&project_root, "my-skill", &[]).unwrap();
+        scaffold_skill(&project_root, "my-skill").unwrap();
 
         let skill_dir = project_root.join("skills/my-skill");
         assert!(skill_dir.join("skill.yaml").exists());
@@ -86,10 +94,10 @@ mod tests {
     }
 
     #[test]
-    fn scaffold_skill_contains_variable_refs() {
+    fn scaffold_skill_emits_spec_compliant_frontmatter() {
         let project_root = std::env::temp_dir()
             .join("skillprism_test")
-            .join("scaffold_skill_variable_refs");
+            .join("scaffold_skill_frontmatter");
         let _ = fs::remove_dir_all(&project_root);
 
         fs::create_dir_all(project_root.join("skills")).unwrap();
@@ -99,23 +107,74 @@ mod tests {
         )
         .unwrap();
 
-        scaffold_skill(&project_root, "my-skill", &[]).unwrap();
+        scaffold_skill(&project_root, "my-skill").unwrap();
 
         let skill_dir = project_root.join("skills/my-skill");
 
-        // skill.yaml must round-trip a custom variable, matching the teaching shape of
-        // `scaffold_project`'s sample skill — both entry points should demonstrate the
-        // same skill.yaml <-> SKILL.md relationship.
-        let yaml = fs::read_to_string(skill_dir.join("skill.yaml")).unwrap();
-        assert!(yaml.contains("variables:"));
-        assert!(yaml.contains("greeting:"));
-
+        // The Agent Skills spec requires YAML frontmatter (name + description) at the
+        // top of SKILL.md — without it no client can discover the skill. The scaffold
+        // must emit it so a brand-new project's first `skillprism build` produces a
+        // valid, discoverable skill.
         let template = fs::read_to_string(skill_dir.join("SKILL.md")).unwrap();
+        assert!(
+            template.starts_with("---\n"),
+            "SKILL.md must start with YAML frontmatter, got: {template:?}"
+        );
+        assert!(
+            template.contains("name: {{ skill_name }}"),
+            "frontmatter must render the skill name"
+        );
+        assert!(
+            template.contains("description: {{ skill_description }}"),
+            "frontmatter must render the skill description"
+        );
+
+        // Built-ins are always available and always render — the scaffold should
+        // demonstrate them so the template builds successfully with zero edits beyond
+        // the description.
         assert!(template.contains("{{ skill_name }}"));
         assert!(template.contains("{{ skill_description }}"));
-        assert!(template.contains("{{ greeting }}"));
-        assert!(template.contains("{{ harness.id }}"));
-        assert!(template.contains("{{ harness.name }}"));
+
+        let _ = fs::remove_dir_all(&project_root);
+    }
+
+    #[test]
+    fn scaffold_skill_variables_are_optional_comment() {
+        let project_root = std::env::temp_dir()
+            .join("skillprism_test")
+            .join("scaffold_skill_optional_vars");
+        let _ = fs::remove_dir_all(&project_root);
+
+        fs::create_dir_all(project_root.join("skills")).unwrap();
+        fs::write(
+            project_root.join("skillprism.yaml"),
+            "harnesses:\n  - claude\n",
+        )
+        .unwrap();
+
+        scaffold_skill(&project_root, "my-skill").unwrap();
+
+        let skill_dir = project_root.join("skills/my-skill");
+
+        // variables: must be a commented optional example, NOT a real field — most
+        // skills don't need custom variables, and the scaffold should build cleanly
+        // without forcing the author to understand them first.
+        let yaml = fs::read_to_string(skill_dir.join("skill.yaml")).unwrap();
+        assert!(
+            !yaml.contains("variables:\n  greeting"),
+            "variables should be commented out, not active by default"
+        );
+        assert!(
+            yaml.contains("# variables:"),
+            "variables should appear as a commented example"
+        );
+
+        // The template must NOT reference {{ greeting }} — it's not defined by default.
+        let template = fs::read_to_string(skill_dir.join("SKILL.md")).unwrap();
+        assert!(
+            !template.contains("{{ greeting }}"),
+            "template should not reference an undefined variable"
+        );
 
         let _ = fs::remove_dir_all(&project_root);
     }
