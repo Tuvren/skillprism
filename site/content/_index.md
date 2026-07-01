@@ -3,48 +3,68 @@ title: "skillprism"
 description: "Build once, ship spec-compliant Agent Skills to every harness from one source."
 ---
 
-<section class="hero">
-<h1>Build once, ship everywhere</h1>
-<p class="tagline">skillprism is a build-time compiler that transforms canonical skill sources into harness-specific agent files. Write one <code>skill.yaml</code> + <code>SKILL.md</code> template, compile to Claude Code, Codex, OpenCode, Factory, and Pi — all from a single command.</p>
+<section class="prism-hero">
+<div class="prism-hero-inner">
+<h1>One source,<br><span class="amber">five harnesses.</span></h1>
+<p class="tagline">skillprism is a build-time compiler. Write one <code>skill.yaml</code> + <code>SKILL.md</code> template, compile to Claude Code, Codex, OpenCode, Factory, and Pi — all from a single command. No per-harness copies, no drift.</p>
 <div class="hero-cta">
-<a href="{{% relref "docs/quickstart" %}}" class="btn btn-primary">Quickstart</a>
+<a href="{{% relref "docs/quickstart" %}}" class="btn btn-primary">Quickstart →</a>
 <a href="{{% relref "docs" %}}" class="btn btn-secondary">Read the docs</a>
+</div>
+
+<div class="prism-diagram" aria-hidden="true">
+<div class="prism-source">
+<span class="source-label">SKILL.md</span><br>
+skill.yaml
+</div>
+<div class="prism-body"></div>
+<div class="prism-beam-in"></div>
+<div class="prism-beams">
+<div class="beam beam-1" data-label="claude"></div>
+<div class="beam beam-2" data-label="codex"></div>
+<div class="beam beam-3" data-label="opencode"></div>
+<div class="beam beam-4" data-label="factory"></div>
+<div class="beam beam-5" data-label="pi"></div>
+</div>
+</div>
 </div>
 </section>
 
 ## How it works
 
-<div class="how-it-works">
-<div class="step">
-<div class="step-num">1</div>
-<h3>Init</h3>
-<p><code>skillprism init project my-skills</code> scaffolds a project with a sample skill and config.</p>
+<div class="pipeline">
+<div class="pipeline-step">
+<div class="step-glyph">$ init</div>
+<h3>Scaffold</h3>
+<p><code>skillprism init project my-skills</code> creates a project with a sample skill and config.</p>
 </div>
-<div class="step">
-<div class="step-num">2</div>
-<h3>Author</h3>
-<p>Write <code>skill.yaml</code> (metadata) + <code>SKILL.md</code> (MiniJinja template). One source, no per-harness copies.</p>
+<div class="pipeline-step">
+<div class="step-glyph">$ author</div>
+<h3>Write</h3>
+<p>Edit <code>skill.yaml</code> (metadata) + <code>SKILL.md</code> (MiniJinja template). One source — no per-harness copies.</p>
 </div>
-<div class="step">
-<div class="step-num">3</div>
-<h3>Build</h3>
-<p><code>skillprism build</code> renders each skill once per configured harness, writing to each harness's expected paths.</p>
+<div class="pipeline-step">
+<div class="step-glyph">$ build</div>
+<h3>Compile</h3>
+<p><code>skillprism build</code> renders each skill once per configured harness, writing to each harness's expected path.</p>
 </div>
 </div>
 
 ## Supported harnesses
 
 <div class="harness-grid">
-<div class="harness-card"><code>claude</code><p>Claude Code<br><code>.claude/skills/</code></p></div>
-<div class="harness-card"><code>codex</code><p>OpenAI Codex<br><code>.agents/skills/</code></p></div>
-<div class="harness-card"><code>opencode</code><p>OpenCode<br><code>.opencode/skills/</code></p></div>
-<div class="harness-card"><code>factory</code><p>Factory<br><code>.factory/skills/</code></p></div>
-<div class="harness-card"><code>pi</code><p>Pi<br><code>.pi/skills/</code></p></div>
+<div class="harness-card"><div class="harness-dot" style="background:#d97757"></div><code>claude</code><p>Claude Code<br><code>.claude/skills/</code></p></div>
+<div class="harness-card"><div class="harness-dot" style="background:#10a37f"></div><code>codex</code><p>OpenAI Codex<br><code>.agents/skills/</code></p></div>
+<div class="harness-card"><div class="harness-dot" style="background:#6c8ae6"></div><code>opencode</code><p>OpenCode<br><code>.opencode/skills/</code></p></div>
+<div class="harness-card"><div class="harness-dot" style="background:#a78bfa"></div><code>factory</code><p>Factory<br><code>.factory/skills/</code></p></div>
+<div class="harness-card"><div class="harness-dot" style="background:#e8a838"></div><code>pi</code><p>Pi<br><code>.pi/skills/</code></p></div>
 </div>
 
 ## Spec compliant
 
-Every rendered `SKILL.md` includes the YAML frontmatter (`name` + `description`) that the [Agent Skills specification](https://agentskills.io/specification) requires. `skillprism validate` enforces spec constraints — name format, length caps, description non-empty — so a successful build produces skills that load in any compatible client.
+<div class="callout">
+<p>Every rendered <code>SKILL.md</code> includes the YAML frontmatter (<code>name</code> + <code>description</code>) that the <a href="https://agentskills.io/specification">Agent Skills specification</a> requires. <code>skillprism validate</code> enforces spec constraints — name format, length caps, non-empty description — so a successful build produces skills that load in any compatible client.</p>
+</div>
 
 ## Install
 
