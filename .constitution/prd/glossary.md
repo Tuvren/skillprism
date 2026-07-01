@@ -4,7 +4,7 @@
 | :--- | :--- | :--- |
 | Harness | An agent platform target (e.g., Claude Code, Codex, OpenCode) that skillprism generates output for | target, platform, runtime, agent |
 | Skill | A portable agent capability definition conforming to the open Agent Skills specification (SKILL.md with YAML frontmatter) | plugin, command, tool, action |
-| Template | A SKILL.md.j2 file containing MiniJinja syntax and harness-aware macro references that skillprism compiles into harness-specific SKILL.md files | source, blueprint, pattern |
+| Template | A SKILL.md (or SKILL.md.j2) file containing MiniJinja syntax and harness-aware macro references that skillprism compiles into harness-specific SKILL.md files; a skill directory may use either extension but not both | source, blueprint, pattern |
 | Macro | A named content block defined in a harness definition YAML file that is referenced in templates to emit harness-specific content | snippet, fragment, partial |
 | Sidecar | A harness-specific companion file generated alongside SKILL.md (e.g., Codex agents/openai.yaml) | metadata file, extra file, supplement |
 | Plugin manifest | A harness-specific discovery configuration file that registers skills with an agent (e.g., Claude's marketplace.json) | registry, index, catalog |

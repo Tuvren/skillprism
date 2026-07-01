@@ -38,7 +38,7 @@ classDiagram
   }
 
   class Skill {
-    +SKILL.md.j2 template
+    +SKILL.md template (or SKILL.md.j2)
     +skill.yaml
     +references/
     +scripts/

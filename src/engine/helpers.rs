@@ -14,8 +14,14 @@
 
 use minijinja::Environment;
 
-/// Registers custom Jinja2 helper functions into the rendering environment.
+/// Registers custom Jinja2 helper functions into the rendering environment, and
+/// configures rendering options shared by every render call site.
 pub fn register_helpers(env: &mut Environment) {
+    // MiniJinja defaults to Jinja2's `keep_trailing_newline=False`, silently dropping
+    // the final newline of every rendered file. Markdown/source files are
+    // conventionally newline-terminated, so without this every skillprism build would
+    // strip the trailing newline its own source template ended with.
+    env.set_keep_trailing_newline(true);
     env.add_function("skill_ref", skill_ref);
 }
 
@@ -44,5 +50,15 @@ mod tests {
             .render(minijinja::context! { name => "my-agent" })
             .unwrap();
         assert_eq!(result, "/my-agent");
+    }
+
+    #[test]
+    fn trailing_newline_in_source_template_is_preserved() {
+        let mut env = Environment::new();
+        register_helpers(&mut env);
+        env.add_template("t.j2", "# {{ name }}\n").unwrap();
+        let tmpl = env.get_template("t.j2").unwrap();
+        let result = tmpl.render(minijinja::context! { name => "test" }).unwrap();
+        assert_eq!(result, "# test\n");
     }
 }

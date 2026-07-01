@@ -109,8 +109,37 @@ pub struct SkillModel {
     pub variables: BTreeMap<String, yaml_serde::Value>,
     /// Path to the Jinja2 template file.
     pub template_path: PathBuf,
-    /// Asset directories (references, scripts) to copy alongside the skill.
+    /// Every direct subdirectory of the skill's own directory (e.g. `references/`,
+    /// `scripts/`, or any other name an author uses), copied verbatim alongside it.
     pub asset_dirs: Vec<PathBuf>,
+    /// Per-harness overrides from skill.yaml's `harnesses:` block, keyed by harness ID.
+    pub harness_overrides: BTreeMap<String, HarnessOverride>,
+}
+
+impl SkillModel {
+    /// Resolves this skill's variables for rendering against a specific harness: the
+    /// top-level `variables:` map with that harness's `harnesses.<id>.variables`
+    /// overrides merged in on top (harness wins), per the schema's documented
+    /// "merged with top-level variables, harness wins" semantics.
+    pub fn variables_for_harness(&self, harness_id: &str) -> BTreeMap<String, yaml_serde::Value> {
+        let mut merged = self.variables.clone();
+        if let Some(override_) = self.harness_overrides.get(harness_id) {
+            for (k, v) in &override_.variables {
+                merged.insert(k.clone(), v.clone());
+            }
+        }
+        merged
+    }
+}
+
+/// Per-harness overrides for a single skill, from skill.yaml's `harnesses:` block.
+#[derive(Debug, Clone, Default)]
+pub struct HarnessOverride {
+    /// Variable overrides merged over top-level `variables`, harness wins.
+    pub variables: BTreeMap<String, yaml_serde::Value>,
+    /// Macro overrides scoped to this skill only — harness wins over that harness's
+    /// own builtin macro of the same name, if any.
+    pub macros: BTreeMap<String, String>,
 }
 
 /// A group of skills sharing local variables and nested sub-groups.
@@ -126,6 +155,34 @@ pub struct SkillGroup {
     /// Skills directly contained in this group.
     pub skills: Vec<SkillModel>,
 }
+
+/// Names of `SkillModel` metadata fields exposed as built-in template variables,
+/// one-to-one with the fields below `description`. Shared by
+/// `engine::context::build_context` (which inserts them into the render context) and
+/// `validator::variables::is_builtin` (which exempts them from undefined-variable
+/// checks) so the two can't silently drift apart — `engine::context::tests` asserts
+/// every name here is actually present in a built context.
+pub const SKILL_METADATA_FIELDS: &[&str] = &[
+    "version",
+    "license",
+    "compatibility",
+    "metadata",
+    "allowed_tools",
+    "when_to_use",
+    "argument_hint",
+    "arguments",
+    "disable_model_invocation",
+    "user_invocable",
+    "disallowed_tools",
+    "model_override",
+    "effort",
+    "context_fork",
+    "agent",
+    "hooks",
+    "activation_paths",
+    "shell",
+    "required_capabilities",
+];
 
 /// The complete loaded model of a skillprism project.
 #[derive(Debug, Clone)]

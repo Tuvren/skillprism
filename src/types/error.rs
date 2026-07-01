@@ -45,4 +45,13 @@ pub enum ProjectError {
     #[error("Unknown harness: {name}")]
     #[diagnostic(help("{message}"))]
     UnknownHarness { name: String, message: String },
+
+    /// A skill directory contains both SKILL.md.j2 and SKILL.md.
+    #[error("Ambiguous template in {dir}: both SKILL.md.j2 and SKILL.md exist")]
+    #[diagnostic(help(
+        "A skill directory may have only one template file. Keep SKILL.md.j2 if it \
+         needs the .j2 extension for tooling, or SKILL.md if you'd rather have your \
+         editor treat it as plain Markdown — then delete the other one."
+    ))]
+    AmbiguousTemplate { dir: String },
 }
