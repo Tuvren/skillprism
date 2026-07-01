@@ -317,6 +317,7 @@ struct SkillYamlRaw {
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct HarnessOverrideRaw {
     #[serde(default)]
     variables: BTreeMap<String, yaml_serde::Value>,
@@ -446,6 +447,30 @@ mod tests {
 
         let result = ProjectLoader::load(&root);
         assert!(result.is_err());
+        match result.unwrap_err() {
+            ProjectError::YamlParse { .. } => {}
+            e => panic!("expected YamlParse error, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn typo_in_harness_override_field_rejected() {
+        let root = setup_test_dir("typo_harness_override");
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "name: my-skill\ndescription: A test skill\nharnesses:\n  claude:\n    variabels:\n      greeting: hi\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
+
+        let result = ProjectLoader::load(&root);
+        assert!(
+            result.is_err(),
+            "a typo'd override field should not be silently dropped"
+        );
         match result.unwrap_err() {
             ProjectError::YamlParse { .. } => {}
             e => panic!("expected YamlParse error, got {e:?}"),

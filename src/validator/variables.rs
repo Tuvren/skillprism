@@ -71,6 +71,26 @@ fn is_builtin(name: &str) -> bool {
     ) || SKILL_METADATA_FIELDS.contains(&root)
 }
 
+/// Checks that no skill.yaml variable name collides with a built-in context field.
+///
+/// `build_context` (`engine::context`) inserts `skill_name`, `skill_description`, and
+/// every `SKILL_METADATA_FIELDS` entry before skill variables, then lets variables
+/// overwrite them unconditionally — a variable named e.g. `version` or `license` would
+/// otherwise silently shadow the skill's own declared metadata with no warning.
+pub fn check_reserved_names(
+    resolved_variables: &BTreeMap<String, yaml_serde::Value>,
+) -> Vec<String> {
+    resolved_variables
+        .keys()
+        .filter(|name| is_reserved(name))
+        .cloned()
+        .collect()
+}
+
+fn is_reserved(name: &str) -> bool {
+    matches!(name, "skill_name" | "skill_description") || SKILL_METADATA_FIELDS.contains(&name)
+}
+
 /// A template variable that was used but not defined in skill.yaml.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UndefinedVariable {
@@ -154,5 +174,42 @@ mod tests {
         let vars = BTreeMap::new();
         let errors = check_variables("{{ broken", Path::new("t.j2"), &vars);
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn reserved_name_collision_reported() {
+        let mut vars = BTreeMap::new();
+        vars.insert("version".to_string(), yaml_serde::Value::String("2".into()));
+        vars.insert(
+            "theme".to_string(),
+            yaml_serde::Value::String("dark".into()),
+        );
+        let reserved = check_reserved_names(&vars);
+        assert_eq!(reserved, vec!["version".to_string()]);
+    }
+
+    #[test]
+    fn no_reserved_name_collision_when_none_present() {
+        let mut vars = BTreeMap::new();
+        vars.insert(
+            "theme".to_string(),
+            yaml_serde::Value::String("dark".into()),
+        );
+        assert!(check_reserved_names(&vars).is_empty());
+    }
+
+    #[test]
+    fn skill_name_and_description_are_reserved() {
+        let mut vars = BTreeMap::new();
+        vars.insert(
+            "skill_name".to_string(),
+            yaml_serde::Value::String("x".into()),
+        );
+        vars.insert(
+            "skill_description".to_string(),
+            yaml_serde::Value::String("y".into()),
+        );
+        let reserved = check_reserved_names(&vars);
+        assert_eq!(reserved.len(), 2);
     }
 }

@@ -82,10 +82,22 @@ struct SkillModel {
     variables: BTreeMap<String, Value>,
     /// Path to the template file (SKILL.md or SKILL.md.j2; not both)
     template_path: PathBuf,
-    /// Paths to shared asset directories (references/, scripts/)
+    /// Every direct subdirectory of the skill's own directory (e.g. references/,
+    /// scripts/, or any other name), copied verbatim alongside it
     asset_dirs: Vec<PathBuf>,
     /// Required harness capabilities this skill depends on
     required_capabilities: Vec<String>,
+    /// Per-harness overrides from skill.yaml's `harnesses:` block, keyed by harness ID
+    harness_overrides: BTreeMap<String, HarnessOverride>,
+}
+
+/// A single harness's overrides from skill.yaml's `harnesses.<id>` block.
+struct HarnessOverride {
+    /// Variable overrides merged over top-level `variables`, harness wins
+    variables: BTreeMap<String, Value>,
+    /// Macro overrides scoped to this skill only — wins over that harness's own
+    /// builtin macro of the same name, if any
+    macros: BTreeMap<String, String>,
 }
 
 /// The resolved project model — output of ProjectLoader

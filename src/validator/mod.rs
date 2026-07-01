@@ -67,6 +67,21 @@ pub enum ValidationError {
         harness: String,
         detail: String,
     },
+
+    /// A skill.yaml variable name collides with a built-in context field.
+    #[error(
+        "[{skill}] {harness}: Variable `{variable_name}` collides with a built-in field of the same name"
+    )]
+    #[diagnostic(help(
+        "`{variable_name}` is populated from skill.yaml's own metadata and inserted into \
+         the template context before variables — a variable of the same name silently \
+         overwrites it. Rename the variable in skill.yaml (or its harnesses override)."
+    ))]
+    ReservedVariableName {
+        skill: String,
+        harness: String,
+        variable_name: String,
+    },
 }
 
 /// Outcome of validating a batch of resolved pairs.
@@ -133,6 +148,14 @@ impl Validator {
             });
         }
 
+        for variable_name in variables::check_reserved_names(&resolved_variables) {
+            errors.push(ValidationError::ReservedVariableName {
+                skill: skill_name.clone(),
+                harness: harness_id.clone(),
+                variable_name,
+            });
+        }
+
         let mut resolved_macros = pair.harness.macros.clone();
         if let Some(override_) = pair.skill.harness_overrides.get(harness_id) {
             for (name, content) in &override_.macros {
@@ -172,6 +195,11 @@ fn has_error_for_skill(errors: &[ValidationError], skill: &str, harness: &str) -
             ..
         }
         | ValidationError::TemplateRead {
+            skill: s,
+            harness: h,
+            ..
+        }
+        | ValidationError::ReservedVariableName {
             skill: s,
             harness: h,
             ..
@@ -264,7 +292,8 @@ mod tests {
             }
             e @ (ValidationError::UndefinedVariable { .. }
             | ValidationError::UndefinedMacro { .. }
-            | ValidationError::TemplateRead { .. }) => {
+            | ValidationError::TemplateRead { .. }
+            | ValidationError::ReservedVariableName { .. }) => {
                 panic!("expected SyntaxError, got {e:?}")
             }
         }
@@ -287,6 +316,31 @@ mod tests {
                 .count(),
             1
         );
+    }
+
+    #[test]
+    fn reserved_variable_name_collected() {
+        let registry = HarnessRegistry::with_builtins();
+        let mut vars = BTreeMap::new();
+        vars.insert("version".to_string(), yaml_serde::Value::String("2".into()));
+        let skill = test_skill("shadowed", "Version: {{ version }}", vars);
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+
+        let outcome = Validator::validate(vec![pair]);
+
+        assert_eq!(
+            outcome
+                .errors
+                .iter()
+                .filter(|e| matches!(
+                    e,
+                    ValidationError::ReservedVariableName { variable_name, .. }
+                    if variable_name == "version"
+                ))
+                .count(),
+            1
+        );
+        assert!(outcome.valid.is_empty());
     }
 
     #[test]
@@ -332,7 +386,8 @@ mod tests {
             ValidationError::TemplateRead { .. } => {}
             e @ (ValidationError::SyntaxError { .. }
             | ValidationError::UndefinedVariable { .. }
-            | ValidationError::UndefinedMacro { .. }) => {
+            | ValidationError::UndefinedMacro { .. }
+            | ValidationError::ReservedVariableName { .. }) => {
                 panic!("expected TemplateRead, got {e:?}")
             }
         }

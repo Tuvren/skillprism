@@ -319,8 +319,8 @@ fn resolve_pairs(
 ) -> Result<Vec<crate::resolver::ResolvedPair>, miette::Report> {
     let outcome = HarnessResolver::resolve_project(model, registry);
 
-    for warning in &outcome.skipped {
-        eprintln!("[resolve] skipped: {warning:?}");
+    for warning in outcome.skipped {
+        eprintln!("[resolve] skipped: {:?}", miette::Report::new(warning));
     }
 
     if outcome.fatal.is_empty() {
