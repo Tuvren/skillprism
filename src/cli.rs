@@ -326,12 +326,12 @@ fn resolve_pairs(
     if outcome.fatal.is_empty() {
         Ok(outcome.resolved)
     } else {
-        for err in &outcome.fatal {
-            eprintln!("{err:?}");
+        let fatal_count = outcome.fatal.len();
+        for err in outcome.fatal {
+            eprintln!("{:?}", miette::Report::new(err));
         }
         Err(miette::miette!(
-            "Resolution failed with {} error(s)",
-            outcome.fatal.len()
+            "Resolution failed with {fatal_count} error(s)"
         ))
     }
 }

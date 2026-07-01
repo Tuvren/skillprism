@@ -29,7 +29,8 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     Ok(())
 }
 
-/// Copies asset directories (references, scripts) to the skill output directory.
+/// Copies asset directories (every direct subdirectory of a skill's own directory,
+/// regardless of name) to the skill output directory.
 pub fn copy_assets(source_dirs: &[impl AsRef<Path>], target_dir: &Path) -> io::Result<()> {
     for src in source_dirs {
         let src = src.as_ref();

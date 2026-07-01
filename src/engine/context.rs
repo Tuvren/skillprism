@@ -37,15 +37,15 @@ pub fn build_context(pair: &ResolvedPair) -> BTreeMap<String, minijinja::Value> 
 
     ctx.insert(
         "version".to_string(),
-        minijinja::Value::from_serialize(&skill.version),
+        optional_value(skill.version.as_ref()),
     );
     ctx.insert(
         "license".to_string(),
-        minijinja::Value::from_serialize(&skill.license),
+        optional_value(skill.license.as_ref()),
     );
     ctx.insert(
         "compatibility".to_string(),
-        minijinja::Value::from_serialize(&skill.compatibility),
+        optional_value(skill.compatibility.as_ref()),
     );
     ctx.insert(
         "metadata".to_string(),
@@ -53,60 +53,48 @@ pub fn build_context(pair: &ResolvedPair) -> BTreeMap<String, minijinja::Value> 
     );
     ctx.insert(
         "allowed_tools".to_string(),
-        minijinja::Value::from_serialize(&skill.allowed_tools),
+        optional_value(skill.allowed_tools.as_ref()),
     );
     ctx.insert(
         "when_to_use".to_string(),
-        minijinja::Value::from_serialize(&skill.when_to_use),
+        optional_value(skill.when_to_use.as_ref()),
     );
     ctx.insert(
         "argument_hint".to_string(),
-        minijinja::Value::from_serialize(&skill.argument_hint),
+        optional_value(skill.argument_hint.as_ref()),
     );
     ctx.insert(
         "arguments".to_string(),
-        minijinja::Value::from_serialize(&skill.arguments),
+        optional_value(skill.arguments.as_ref()),
     );
     ctx.insert(
         "disable_model_invocation".to_string(),
-        minijinja::Value::from_serialize(skill.disable_model_invocation),
+        optional_value(skill.disable_model_invocation.as_ref()),
     );
     ctx.insert(
         "user_invocable".to_string(),
-        minijinja::Value::from_serialize(skill.user_invocable),
+        optional_value(skill.user_invocable.as_ref()),
     );
     ctx.insert(
         "disallowed_tools".to_string(),
-        minijinja::Value::from_serialize(&skill.disallowed_tools),
+        optional_value(skill.disallowed_tools.as_ref()),
     );
     ctx.insert(
         "model_override".to_string(),
-        minijinja::Value::from_serialize(&skill.model_override),
+        optional_value(skill.model_override.as_ref()),
     );
-    ctx.insert(
-        "effort".to_string(),
-        minijinja::Value::from_serialize(&skill.effort),
-    );
+    ctx.insert("effort".to_string(), optional_value(skill.effort.as_ref()));
     ctx.insert(
         "context_fork".to_string(),
         minijinja::Value::from_serialize(skill.context_fork),
     );
-    ctx.insert(
-        "agent".to_string(),
-        minijinja::Value::from_serialize(&skill.agent),
-    );
-    ctx.insert(
-        "hooks".to_string(),
-        minijinja::Value::from_serialize(&skill.hooks),
-    );
+    ctx.insert("agent".to_string(), optional_value(skill.agent.as_ref()));
+    ctx.insert("hooks".to_string(), optional_value(skill.hooks.as_ref()));
     ctx.insert(
         "activation_paths".to_string(),
-        minijinja::Value::from_serialize(&skill.activation_paths),
+        optional_value(skill.activation_paths.as_ref()),
     );
-    ctx.insert(
-        "shell".to_string(),
-        minijinja::Value::from_serialize(&skill.shell),
-    );
+    ctx.insert("shell".to_string(), optional_value(skill.shell.as_ref()));
     ctx.insert(
         "required_capabilities".to_string(),
         minijinja::Value::from_serialize(&skill.required_capabilities),
@@ -122,6 +110,16 @@ pub fn build_context(pair: &ResolvedPair) -> BTreeMap<String, minijinja::Value> 
     );
 
     ctx
+}
+
+/// Renders an unset optional field as `Undefined` (empty when printed) rather than
+/// `None` (which `MiniJinja` displays as the literal text `none`) — an unset
+/// `skill.yaml` field should read as absent, not as the string "none".
+fn optional_value<T: serde::Serialize>(value: Option<&T>) -> minijinja::Value {
+    value.map_or(
+        minijinja::Value::UNDEFINED,
+        minijinja::Value::from_serialize,
+    )
 }
 
 fn build_harness_value(
@@ -216,6 +214,26 @@ mod tests {
             ctx.get("allowed_tools").and_then(minijinja::Value::as_str),
             Some("Read, Grep")
         );
+    }
+
+    #[test]
+    fn unset_optional_field_renders_empty_not_the_string_none() {
+        let registry = HarnessRegistry::with_builtins();
+        let skill = crate::resolver::tests::test_skill("no-license", vec![]);
+        let pair =
+            crate::resolver::HarnessResolver::resolve_skill_harness(&skill, "claude", &registry)
+                .unwrap();
+        let ctx = build_context(&pair);
+
+        let mut env = minijinja::Environment::new();
+        env.add_template("t", "license: {{ license }}").unwrap();
+        let rendered = env
+            .get_template("t")
+            .unwrap()
+            .render(minijinja::Value::from_serialize(&ctx))
+            .unwrap();
+
+        assert_eq!(rendered, "license: ");
     }
 
     #[test]

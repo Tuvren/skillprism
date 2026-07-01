@@ -51,9 +51,13 @@ values are available inside a template's `{{ }}`:
   `harness.subagent_guide`).
 - **`skill.yaml` fields**, available under their own name — `license`, `version`,
   `compatibility`, `when_to_use`, `metadata.*`, `allowed_tools`, and more (full list:
-  `.constitution/tech-spec/contracts/skill-schema.json`). You don't have to reference
-  every field in your template — some, like `compatibility` or `metadata.source`, are
-  just packaging/attribution metadata that tooling can read without it appearing in the
+  `.constitution/tech-spec/contracts/skill-schema.json`). Three are exceptions and
+  render under a different name than their `skill.yaml` key: `model:` is
+  `{{ model_override }}`, `paths:` is `{{ activation_paths }}`, and `context:` is
+  `{{ context_fork }}` (a derived boolean — `true` when `context: fork`, `false`
+  otherwise — not the raw string). You don't have to reference every field in your
+  template — some, like `compatibility` or `metadata.source`, are just
+  packaging/attribution metadata that tooling can read without it appearing in the
   rendered body.
 - **`variables:`** — your own custom data. Anything under `variables:` in `skill.yaml`
   is available by name. Use this when a value is constant across every harness; if a
