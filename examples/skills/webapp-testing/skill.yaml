@@ -1,0 +1,22 @@
+name: webapp-testing
+description: >-
+  Toolkit for interacting with and testing local web applications using Playwright.
+  Supports verifying frontend functionality, debugging UI behavior, capturing browser
+  screenshots, and viewing browser logs.
+version: 1.0.0
+license: Apache-2.0
+compatibility: >-
+  Requires Python 3.10+ with `pip install playwright && playwright install chromium`,
+  and a local dev server (or static HTML files) to test against.
+metadata:
+  source: https://github.com/anthropics/skills/tree/35414756ca55738e050562e272a6bbc6273aa926/skills/webapp-testing
+  upstream_license: Apache-2.0
+  category: agent-tooling
+when_to_use: >-
+  Trigger phrases: "test this web app", "check if the button works", "take a
+  screenshot of the page", "debug why this UI isn't updating".
+argument-hint: "[dev-server-command]"
+arguments:
+  - dev_server_command
+user-invocable: true
+shell: bash

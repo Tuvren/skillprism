@@ -66,7 +66,14 @@ skillprism/
 ├── tests/
 │   ├── fixtures/
 │   │   └── valid/          # Integration test fixture project (2 skills, 2 harnesses)
-│   └── integration.rs      # CLI integration tests (build, validate, diff)
+│   ├── integration.rs      # CLI integration tests (build, validate, diff)
+│   └── examples.rs         # Builds examples/ end-to-end, asserts on rendered output
+├── examples/                # A single skillprism project showing off skillprism's own
+│   ├── skillprism.yaml      # mechanics (see examples/README.md), not a ready-to-use
+│   └── skills/              # skill library
+│       ├── quickstart/      # Synthetic, minimal — tours every mechanism in one file
+│       ├── mcp-builder/     # Real skill ported from anthropics/skills
+│       └── webapp-testing/  # Real skill ported from anthropics/skills
 └── harnesses/              # Users' override directory (documented, not shipped)
 ```
 

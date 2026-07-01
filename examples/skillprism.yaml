@@ -1,0 +1,6 @@
+name: skillprism-examples
+harnesses:
+  - claude
+  - opencode
+  - codex
+skills_dir: skills

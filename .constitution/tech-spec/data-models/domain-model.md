@@ -80,7 +80,7 @@ struct SkillModel {
     shell: Option<String>,
     /// Resolved variables (group + skill merged, skill wins)
     variables: BTreeMap<String, Value>,
-    /// Path to the SKILL.md.j2 template file
+    /// Path to the template file (SKILL.md or SKILL.md.j2; not both)
     template_path: PathBuf,
     /// Paths to shared asset directories (references/, scripts/)
     asset_dirs: Vec<PathBuf>,

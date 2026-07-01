@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::types::{ProjectConfig, ProjectError, ProjectModel, SkillModel};
+use crate::types::{HarnessOverride, ProjectConfig, ProjectError, ProjectModel, SkillModel};
 
 /// Loads a skillprism project from disk, discovering all skills.
 pub struct ProjectLoader;
@@ -102,9 +102,8 @@ impl ProjectLoader {
             let path = entry.path();
 
             if path.is_dir() {
-                let template_path = path.join("SKILL.md.j2");
-                if template_path.exists() {
-                    let skill = Self::load_skill(&path, &merged)?;
+                if let Some(template_path) = Self::find_template_path(&path)? {
+                    let skill = Self::load_skill(&path, &template_path, &merged)?;
                     skills.push(skill);
                 } else if path.join("skill.yaml").exists() || Self::has_skill_dirs(&path) {
                     Self::walk_directory(&path, &merged, skills)?;
@@ -115,16 +114,35 @@ impl ProjectLoader {
         Ok(())
     }
 
+    /// A skill's template may be authored as `SKILL.md.j2` or as bare `SKILL.md` — the
+    /// latter exists purely so editors apply Markdown syntax highlighting to a file that
+    /// is otherwise identical (still `MiniJinja` syntax, still rendered the same way).
+    /// Having both in one directory is rejected rather than silently preferring one.
+    fn find_template_path(dir: &Path) -> Result<Option<std::path::PathBuf>, ProjectError> {
+        let j2 = dir.join("SKILL.md.j2");
+        let bare = dir.join("SKILL.md");
+        match (j2.exists(), bare.exists()) {
+            (true, true) => Err(ProjectError::AmbiguousTemplate {
+                dir: dir.to_string_lossy().to_string(),
+            }),
+            (true, false) => Ok(Some(j2)),
+            (false, true) => Ok(Some(bare)),
+            (false, false) => Ok(None),
+        }
+    }
+
     fn has_skill_dirs(dir: &Path) -> bool {
         read_dir_entries(dir).is_ok_and(|entries| {
-            entries
-                .iter()
-                .any(|e| e.path().is_dir() && e.path().join("SKILL.md.j2").exists())
+            entries.iter().any(|e| {
+                let p = e.path();
+                p.is_dir() && (p.join("SKILL.md.j2").exists() || p.join("SKILL.md").exists())
+            })
         })
     }
 
     fn load_skill(
         dir: &Path,
+        template_path: &Path,
         merged_variables: &BTreeMap<String, yaml_serde::Value>,
     ) -> Result<SkillModel, ProjectError> {
         let config_path = dir.join("skill.yaml");
@@ -157,8 +175,9 @@ impl ProjectLoader {
             shell: None,
             required_capabilities: Vec::new(),
             variables: merged_variables.clone(),
-            template_path: dir.join("SKILL.md.j2"),
+            template_path: template_path.to_path_buf(),
             asset_dirs: Vec::new(),
+            harness_overrides: BTreeMap::new(),
         };
 
         if config_path.exists() {
@@ -206,16 +225,35 @@ impl ProjectLoader {
                     skill.variables.insert(k, v);
                 }
             }
+
+            if let Some(harnesses) = skill_config.harnesses {
+                skill.harness_overrides = harnesses
+                    .into_iter()
+                    .map(|(harness_id, raw)| {
+                        (
+                            harness_id,
+                            HarnessOverride {
+                                variables: raw.variables,
+                                macros: raw.macros,
+                            },
+                        )
+                    })
+                    .collect();
+            }
         }
 
-        let refs_dir = dir.join("references");
-        if refs_dir.exists() {
-            skill.asset_dirs.push(refs_dir);
-        }
-        let scripts_dir = dir.join("scripts");
-        if scripts_dir.exists() {
-            skill.asset_dirs.push(scripts_dir);
-        }
+        // Every direct subdirectory of a skill's own directory is an asset directory to
+        // copy verbatim, regardless of name (`references/`, `scripts/`, or anything
+        // else an author uses) — `walk_directory` never recurses into a skill's own
+        // directory looking for nested skills/groups once SKILL.md.j2 has been found,
+        // so nothing here can be mistaken for one.
+        let mut asset_dirs = read_dir_entries(dir)?
+            .into_iter()
+            .map(|entry| entry.path())
+            .filter(|path| path.is_dir())
+            .collect::<Vec<_>>();
+        asset_dirs.sort();
+        skill.asset_dirs = asset_dirs;
 
         Ok(skill)
     }
@@ -275,6 +313,15 @@ struct SkillYamlRaw {
     #[serde(rename = "required-capabilities")]
     required_capabilities: Option<Vec<String>>,
     variables: Option<BTreeMap<String, yaml_serde::Value>>,
+    harnesses: Option<BTreeMap<String, HarnessOverrideRaw>>,
+}
+
+#[derive(Debug, Clone, Default, serde::Deserialize)]
+struct HarnessOverrideRaw {
+    #[serde(default)]
+    variables: BTreeMap<String, yaml_serde::Value>,
+    #[serde(default)]
+    macros: BTreeMap<String, String>,
 }
 
 #[cfg(test)]
@@ -314,6 +361,50 @@ mod tests {
         assert_eq!(model.skills.len(), 1);
         assert_eq!(model.skills[0].name, "my-skill");
         assert_eq!(model.skills[0].description, "A test skill");
+    }
+
+    #[test]
+    fn load_valid_project_with_bare_skill_md() {
+        let root = setup_test_dir("valid_project_bare_md");
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "name: my-skill\ndescription: A test skill\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md"), "# {{ name }}\n").unwrap();
+
+        let model = ProjectLoader::load(&root).unwrap();
+        assert_eq!(model.skills.len(), 1);
+        assert_eq!(
+            model.skills[0].template_path,
+            root.join("skills/my-skill/SKILL.md")
+        );
+    }
+
+    #[test]
+    fn ambiguous_template_both_extensions_present() {
+        let root = setup_test_dir("ambiguous_template");
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "name: my-skill\ndescription: A test skill\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md"), "# {{ name }}\n").unwrap();
+
+        let result = ProjectLoader::load(&root);
+        match result.unwrap_err() {
+            ProjectError::AmbiguousTemplate { dir } => {
+                assert!(dir.contains("my-skill"));
+            }
+            e => panic!("expected AmbiguousTemplate error, got {e:?}"),
+        }
     }
 
     #[test]
@@ -359,6 +450,51 @@ mod tests {
             ProjectError::YamlParse { .. } => {}
             e => panic!("expected YamlParse error, got {e:?}"),
         }
+    }
+
+    #[test]
+    fn harness_overrides_parsed_from_skill_yaml() {
+        let root = setup_test_dir("harness_overrides");
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "name: my-skill\n\
+             description: test\n\
+             variables:\n  \
+             greeting: hello\n\
+             harnesses:\n  \
+             claude:\n    \
+             variables:\n      \
+             greeting: hello-claude\n    \
+             macros:\n      \
+             extra_note: Claude-only note\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# test\n").unwrap();
+
+        let model = ProjectLoader::load(&root).unwrap();
+        let skill = &model.skills[0];
+
+        // The top-level default is untouched by the override.
+        assert_eq!(
+            skill.variables.get("greeting").and_then(|v| v.as_str()),
+            Some("hello")
+        );
+
+        let claude_override = skill.harness_overrides.get("claude").unwrap();
+        assert_eq!(
+            claude_override
+                .variables
+                .get("greeting")
+                .and_then(|v| v.as_str()),
+            Some("hello-claude")
+        );
+        assert_eq!(
+            claude_override.macros.get("extra_note").map(String::as_str),
+            Some("Claude-only note")
+        );
     }
 
     #[test]

@@ -122,7 +122,8 @@ impl Validator {
             return;
         }
 
-        let var_errors = variables::check_variables(&content, template_path, &pair.skill.variables);
+        let resolved_variables = pair.skill.variables_for_harness(harness_id);
+        let var_errors = variables::check_variables(&content, template_path, &resolved_variables);
         for uvar in var_errors {
             errors.push(ValidationError::UndefinedVariable {
                 skill: skill_name.clone(),
@@ -132,7 +133,16 @@ impl Validator {
             });
         }
 
-        let macro_errors = macros::check_macros(&content, template_path, &pair.harness.macros);
+        let mut resolved_macros = pair.harness.macros.clone();
+        if let Some(override_) = pair.skill.harness_overrides.get(harness_id) {
+            for (name, content) in &override_.macros {
+                resolved_macros.insert(
+                    name.clone(),
+                    crate::registry::MacroDef::Inline(content.clone()),
+                );
+            }
+        }
+        let macro_errors = macros::check_macros(&content, template_path, &resolved_macros);
         for umacro in macro_errors {
             errors.push(ValidationError::UndefinedMacro {
                 skill: skill_name.clone(),
@@ -218,6 +228,7 @@ mod tests {
             variables: vars,
             template_path: tmpl_path,
             asset_dirs: Vec::new(),
+            harness_overrides: BTreeMap::new(),
         }
     }
 
@@ -328,11 +339,90 @@ mod tests {
     }
 
     #[test]
+    fn harness_only_variable_not_flagged_undefined_for_its_own_harness() {
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("harness-var", "Hello {{ custom_var }}!", BTreeMap::new());
+        let mut claude_vars = BTreeMap::new();
+        claude_vars.insert(
+            "custom_var".to_string(),
+            yaml_serde::Value::String("hi".into()),
+        );
+        skill.harness_overrides.insert(
+            "claude".to_string(),
+            crate::types::HarnessOverride {
+                variables: claude_vars,
+                macros: BTreeMap::new(),
+            },
+        );
+
+        let claude_pair =
+            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let opencode_pair =
+            HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+
+        let outcome = Validator::validate(vec![claude_pair, opencode_pair]);
+
+        assert_eq!(outcome.valid.len(), 1);
+        assert_eq!(outcome.valid[0].harness.id, "claude");
+        assert_eq!(
+            outcome
+                .errors
+                .iter()
+                .filter(|e| matches!(e, ValidationError::UndefinedVariable { harness, .. } if harness == "opencode"))
+                .count(),
+            1,
+            "opencode has no override for custom_var, so it should still be reported undefined there"
+        );
+    }
+
+    #[test]
+    fn harness_only_macro_not_flagged_undefined_for_its_own_harness() {
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill(
+            "harness-macro",
+            "{{ harness.custom_macro }}",
+            BTreeMap::new(),
+        );
+        let mut claude_macros = BTreeMap::new();
+        claude_macros.insert("custom_macro".to_string(), "Custom!".to_string());
+        skill.harness_overrides.insert(
+            "claude".to_string(),
+            crate::types::HarnessOverride {
+                variables: BTreeMap::new(),
+                macros: claude_macros,
+            },
+        );
+
+        let claude_pair =
+            HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let opencode_pair =
+            HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
+
+        let outcome = Validator::validate(vec![claude_pair, opencode_pair]);
+
+        assert_eq!(outcome.valid.len(), 1);
+        assert_eq!(outcome.valid[0].harness.id, "claude");
+        assert_eq!(
+            outcome
+                .errors
+                .iter()
+                .filter(|e| matches!(e, ValidationError::UndefinedMacro { harness, .. } if harness == "opencode"))
+                .count(),
+            1,
+            "opencode has no override for custom_macro, so it should still be reported undefined there"
+        );
+    }
+
+    #[test]
     fn valid_skills_included_with_partial_failures() {
         let registry = HarnessRegistry::with_builtins();
 
-        let good = test_skill("good", "ok", BTreeMap::new());
-        let broken = test_skill("broken", "{{ broken", BTreeMap::new());
+        // Distinct names from other tests in this file's `good`/`broken` pairs —
+        // test_skill() writes to a path keyed only by name under the shared
+        // std::env::temp_dir(), so reusing a name races other tests under parallel
+        // execution (each test's setup removes and recreates the same directory).
+        let good = test_skill("good-partial", "ok", BTreeMap::new());
+        let broken = test_skill("broken-partial", "{{ broken", BTreeMap::new());
 
         let pairs = vec![
             HarnessResolver::resolve_skill_harness(&good, "claude", &registry).unwrap(),
@@ -341,7 +431,7 @@ mod tests {
 
         let outcome = Validator::validate(pairs);
         assert_eq!(outcome.valid.len(), 1);
-        assert_eq!(outcome.valid[0].skill.name, "good");
+        assert_eq!(outcome.valid[0].skill.name, "good-partial");
         assert_eq!(outcome.errors.len(), 1);
     }
 }

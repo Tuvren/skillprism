@@ -17,6 +17,8 @@ use std::path::Path;
 
 use minijinja::Environment;
 
+use crate::types::SKILL_METADATA_FIELDS;
+
 /// Checks that all template variables are defined in skill.yaml or built-in.
 pub fn check_variables(
     template_content: &str,
@@ -66,7 +68,7 @@ fn is_builtin(name: &str) -> bool {
             | "_"
             | "skill_name"
             | "skill_description"
-    )
+    ) || SKILL_METADATA_FIELDS.contains(&root)
 }
 
 /// A template variable that was used but not defined in skill.yaml.

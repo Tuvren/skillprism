@@ -49,7 +49,7 @@
     },
     "variables": {
       "type": "object",
-      "description": "Template variables available to SKILL.md.j2 during rendering. Structure is user-defined.",
+      "description": "Template variables available to SKILL.md (or SKILL.md.j2) during rendering. Structure is user-defined.",
       "additionalProperties": true
     },
     "when_to_use": {

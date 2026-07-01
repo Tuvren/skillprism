@@ -1,0 +1,14 @@
+name: quickstart
+description: >-
+  A minimal, deliberately synthetic skill that exercises every skillprism mechanism in
+  one place — built-ins, custom variables, harness macros, and per-harness overrides.
+  Meant to be read end-to-end as a tour of the format, not used for real work.
+variables:
+  greeting: Hello from skillprism
+harnesses:
+  opencode:
+    variables:
+      greeting: Hello from skillprism, rendered specifically for OpenCode
+  codex:
+    macros:
+      subagent_guide: "## Subagent Instructions\n\nThis skill overrides Codex's own subagent_guide macro for itself only — every other skill built for Codex still gets Codex's unmodified builtin text."

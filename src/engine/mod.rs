@@ -313,7 +313,7 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             EngineError::TemplateRead { .. } => {}
-            e => panic!("expected TemplateRead, got {e:?}"),
+            e @ EngineError::RenderError { .. } => panic!("expected TemplateRead, got {e:?}"),
         }
     }
 
@@ -332,7 +332,7 @@ mod tests {
                 );
                 assert_eq!(line, Some(1), "syntax error on line 1, got {line:?}");
             }
-            e => panic!("expected RenderError, got {e:?}"),
+            e @ EngineError::TemplateRead { .. } => panic!("expected RenderError, got {e:?}"),
         }
     }
 }

@@ -44,7 +44,10 @@ pub enum ResolveError {
         "Skill `{skill_name}` requires capability `{capability}` but harness `{harness_name}` does not support it"
     )]
     #[diagnostic(help(
-        "Remove the required-capability from the skill, or use a different harness"
+        "This skill is skipped for `{harness_name}` — it still builds for any other \
+         configured harness that satisfies `{capability}`. Remove the \
+         required-capability from the skill, or drop `{harness_name}` from \
+         skillprism.yaml, if you don't want it skipped here."
     ))]
     MissingCapability {
         skill_name: String,
@@ -53,32 +56,52 @@ pub enum ResolveError {
     },
 }
 
+/// Outcome of resolving a project's skills against its configured harnesses.
+///
+/// Unlike an unknown harness name (a project misconfiguration that aborts the whole
+/// build), a single skill-harness pair failing a capability check doesn't invalidate
+/// the rest of the project — that skill simply isn't shipped for that harness. This
+/// mirrors `validator::ValidationOutcome`'s accumulate-don't-abort pattern.
+pub struct ResolveOutcome {
+    /// Pairs that resolved successfully.
+    pub resolved: Vec<ResolvedPair>,
+    /// Pairs skipped because the skill required a capability the harness doesn't
+    /// support — non-fatal; every other pair in the project still builds.
+    pub skipped: Vec<ResolveError>,
+    /// Errors that abort the whole resolution (currently: an unknown harness name in
+    /// `skillprism.yaml`, which is a project misconfiguration, not a per-skill issue).
+    pub fatal: Vec<ResolveError>,
+}
+
 /// Resolves skills to their target harnesses, producing renderable pairs.
 #[derive(Debug, Default)]
 pub struct HarnessResolver;
 
 impl HarnessResolver {
     /// Resolves all skills in a project against the project's configured harnesses.
-    pub fn resolve_project(
-        model: &ProjectModel,
-        registry: &HarnessRegistry,
-    ) -> Result<Vec<ResolvedPair>, Vec<ResolveError>> {
-        let mut pairs: Vec<ResolvedPair> = Vec::new();
-        let mut errors: Vec<ResolveError> = Vec::new();
+    ///
+    /// Never short-circuits: every skill × harness combination is attempted, and
+    /// capability mismatches only remove that one pair (see `ResolveOutcome::skipped`)
+    /// rather than the whole project.
+    pub fn resolve_project(model: &ProjectModel, registry: &HarnessRegistry) -> ResolveOutcome {
+        let mut resolved = Vec::new();
+        let mut skipped = Vec::new();
+        let mut fatal = Vec::new();
 
         for skill in &model.skills {
             for harness_name in &model.config.harnesses {
                 match Self::resolve_skill_harness(skill, harness_name, registry) {
-                    Ok(pair) => pairs.push(pair),
-                    Err(e) => errors.push(e),
+                    Ok(pair) => resolved.push(pair),
+                    Err(e @ ResolveError::MissingCapability { .. }) => skipped.push(e),
+                    Err(e @ ResolveError::UnknownHarness { .. }) => fatal.push(e),
                 }
             }
         }
 
-        if errors.is_empty() {
-            Ok(pairs)
-        } else {
-            Err(errors)
+        ResolveOutcome {
+            resolved,
+            skipped,
+            fatal,
         }
     }
 
@@ -172,6 +195,7 @@ pub mod tests {
             variables: BTreeMap::new(),
             template_path: std::path::PathBuf::new(),
             asset_dirs: Vec::new(),
+            harness_overrides: BTreeMap::new(),
         }
     }
 
@@ -241,12 +265,14 @@ pub mod tests {
             project_root: std::path::PathBuf::from("/tmp/test"),
         };
 
-        let pairs = HarnessResolver::resolve_project(&model, &registry).unwrap();
-        assert_eq!(pairs.len(), 4);
+        let outcome = HarnessResolver::resolve_project(&model, &registry);
+        assert_eq!(outcome.resolved.len(), 4);
+        assert!(outcome.skipped.is_empty());
+        assert!(outcome.fatal.is_empty());
     }
 
     #[test]
-    fn resolve_project_collects_all_errors() {
+    fn resolve_project_treats_unknown_harness_as_fatal() {
         let registry = test_registry();
 
         let cfg = crate::types::ProjectConfig {
@@ -260,14 +286,57 @@ pub mod tests {
             project_root: std::path::PathBuf::from("/tmp/test"),
         };
 
-        let result = HarnessResolver::resolve_project(&model, &registry);
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 1);
-        match &errors[0] {
+        let outcome = HarnessResolver::resolve_project(&model, &registry);
+        assert_eq!(outcome.fatal.len(), 1);
+        match &outcome.fatal[0] {
             ResolveError::UnknownHarness { .. } => {}
             e @ ResolveError::MissingCapability { .. } => {
                 panic!("expected UnknownHarness, got {e:?}")
+            }
+        }
+        // The valid pair (my-agent x claude) is still resolved despite the other
+        // harness being unknown — accumulate-don't-abort applies per pair.
+        assert_eq!(outcome.resolved.len(), 1);
+    }
+
+    #[test]
+    fn resolve_project_skips_capability_mismatch_without_aborting_other_pairs() {
+        let registry = test_registry();
+
+        // pi has supports_subagent: false; claude and opencode both support it.
+        let cfg = crate::types::ProjectConfig {
+            harnesses: vec![
+                "claude".to_string(),
+                "opencode".to_string(),
+                "pi".to_string(),
+            ],
+            ..Default::default()
+        };
+
+        let model = ProjectModel {
+            config: cfg,
+            skills: vec![test_skill("sub-agent", vec!["subagent".to_string()])],
+            project_root: std::path::PathBuf::from("/tmp/test"),
+        };
+
+        let outcome = HarnessResolver::resolve_project(&model, &registry);
+        assert!(outcome.fatal.is_empty());
+        assert_eq!(
+            outcome.resolved.len(),
+            2,
+            "claude and opencode pairs should still resolve"
+        );
+        assert_eq!(
+            outcome.skipped.len(),
+            1,
+            "only the pi pair should be skipped"
+        );
+        match &outcome.skipped[0] {
+            ResolveError::MissingCapability { harness_name, .. } => {
+                assert_eq!(harness_name, "pi");
+            }
+            e @ ResolveError::UnknownHarness { .. } => {
+                panic!("expected MissingCapability, got {e:?}")
             }
         }
     }

@@ -175,12 +175,7 @@ fn run_build(
     }
 
     let t1 = Instant::now();
-    let pairs = HarnessResolver::resolve_project(&model, &registry).map_err(|errors| {
-        for err in &errors {
-            eprintln!("{err:?}");
-        }
-        miette::miette!("Resolution failed with {} error(s)", errors.len())
-    })?;
+    let pairs = resolve_pairs(&model, &registry)?;
     if verbose {
         eprintln!(
             "[{t}] resolve {} skill-harness pairs",
@@ -315,6 +310,32 @@ fn load_project(
     Ok((model, registry))
 }
 
+/// Resolves a project's skills against its harnesses, printing a warning for each
+/// skipped skill-harness pair (capability mismatch) and aborting only on fatal errors
+/// (an unknown harness name in `skillprism.yaml`).
+fn resolve_pairs(
+    model: &crate::types::ProjectModel,
+    registry: &HarnessRegistry,
+) -> Result<Vec<crate::resolver::ResolvedPair>, miette::Report> {
+    let outcome = HarnessResolver::resolve_project(model, registry);
+
+    for warning in &outcome.skipped {
+        eprintln!("[resolve] skipped: {warning:?}");
+    }
+
+    if outcome.fatal.is_empty() {
+        Ok(outcome.resolved)
+    } else {
+        for err in &outcome.fatal {
+            eprintln!("{err:?}");
+        }
+        Err(miette::miette!(
+            "Resolution failed with {} error(s)",
+            outcome.fatal.len()
+        ))
+    }
+}
+
 fn handle_manifests(
     diff: bool,
     manifest_entries: &[ManifestEntry],
@@ -410,12 +431,7 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
         .into_diagnostic()?;
 
     let model = ProjectLoader::load(&root).into_diagnostic()?;
-    let pairs = HarnessResolver::resolve_project(&model, &registry).map_err(|errors| {
-        for err in &errors {
-            eprintln!("{err:?}");
-        }
-        miette::miette!("Resolution failed with {} error(s)", errors.len())
-    })?;
+    let pairs = resolve_pairs(&model, &registry)?;
     let outcome = Validator::validate(pairs);
 
     if outcome.errors.is_empty() {

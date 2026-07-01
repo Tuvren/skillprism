@@ -47,7 +47,7 @@ pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Res
         "name: sample\ndescription: A sample skill to get started\nvariables:\n  greeting: Hello from sample\n",
     )?;
     fs::write(
-        sample_dir.join("SKILL.md.j2"),
+        sample_dir.join("SKILL.md"),
         "# {{ skill_name }}\n\n{{ skill_description }}\n\nHarness: {{ harness.id }} ({{ harness.name }})\n\n{{ greeting }}\n",
     )?;
 
@@ -70,7 +70,7 @@ mod tests {
         assert!(dir.join("skills").is_dir());
         assert!(dir.join("harnesses").is_dir());
         assert!(dir.join("skills/sample/skill.yaml").exists());
-        assert!(dir.join("skills/sample/SKILL.md.j2").exists());
+        assert!(dir.join("skills/sample/SKILL.md").exists());
 
         let content = fs::read_to_string(dir.join("skillprism.yaml")).unwrap();
         assert!(content.contains("test-project"));
@@ -109,7 +109,7 @@ mod tests {
 
         scaffold_project(&dir, "test", &[]).unwrap();
 
-        let template = fs::read_to_string(dir.join("skills/sample/SKILL.md.j2")).unwrap();
+        let template = fs::read_to_string(dir.join("skills/sample/SKILL.md")).unwrap();
         assert!(
             template.contains("{{ skill_name }}"),
             "template must reference skill_name"

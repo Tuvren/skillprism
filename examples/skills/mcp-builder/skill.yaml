@@ -1,0 +1,32 @@
+name: mcp-builder
+description: >-
+  Guide for creating high-quality MCP (Model Context Protocol) servers that enable
+  LLMs to interact with external services through well-designed tools. Use when
+  building MCP servers to integrate external APIs or services, in Python (FastMCP)
+  or Node/TypeScript (MCP SDK).
+version: 1.0.0
+license: Apache-2.0
+compatibility: >-
+  Requires `pip install -r scripts/requirements.txt` (anthropic, mcp) for the
+  Python evaluation tooling, and network access to modelcontextprotocol.io while
+  researching the protocol specification during the planning phase.
+required-capabilities:
+  - subagent
+  - allowed-tools
+metadata:
+  source: https://github.com/anthropics/skills/tree/35414756ca55738e050562e272a6bbc6273aa926/skills/mcp-builder
+  upstream_license: Apache-2.0
+  category: agent-tooling
+when_to_use: >-
+  Trigger phrases: "build an MCP server for X", "write an MCP integration for this
+  API", "create a FastMCP server", "add MCP tools for our internal service".
+allowed-tools: "Read, Write, Bash, WebFetch, WebSearch"
+argument-hint: "[service-name]"
+arguments:
+  - service_name
+disable-model-invocation: false
+user-invocable: true
+effort: high
+context: fork
+agent: general-purpose
+shell: bash
