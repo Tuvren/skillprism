@@ -5,3 +5,6 @@ target/
 dist/
 *.tmp
 skillprism.1
+site/public/
+site/resources/
+site/.hugo_build.lock

@@ -1,0 +1,10 @@
+{{ define "main" }}
+<section class="docs-list">
+{{ .Content }}
+<ul class="doc-index">
+{{ range .Pages }}
+<li><a href="{{ .Permalink }}">{{ .Title }}</a> — {{ .Description }}</li>
+{{ end }}
+</ul>
+</section>
+{{ end }}
