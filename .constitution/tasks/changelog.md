@@ -7,10 +7,10 @@
 - New commands: `add` (fetch + auto-detect + render/copy), `list`, `remove`, `update`.
 - Deferred to future epics: `find` (requires directory/registry backend), `use` (render-to-temp + agent launching).
 - **Spike SPK-DIST-I001 complete** (`.constitution/spikes/SPK-DIST-I001.md`): remote fetch methodology resolved by reading the actual source of `vercel-labs/skills`. Recommendation: shell out to `git` directly for shallow clones. Three-layer auth chain (Vercel parity): `git clone` → `gh repo clone` (GitHub HTTPS only) → SSH with `BatchMode=yes`. Vercel-parity source URL parser (all 7 forms in v1). State file: single YAML at `~/.config/skillprism/installed.yaml`. Change detection: per-file SHA-256.
-- **Tickets specified** (7, not 8): the spike is no longer a ticket inside the epic; it lives in `.constitution/spikes/` as a free-floating prerequisite. The implementation tickets reference the spike for their contracts and mechanisms. Renumbered DIST-I001–DIST-I007 (state layer, `add`, `list`, `remove`, `update`, tests, docs).
+- **Tickets specified** (7 tickets, DIST-I001–DIST-I007): the spike lives in `.constitution/spikes/` as a free-floating prerequisite, not as a ticket inside the epic. The implementation tickets reference the spike for their contracts and mechanisms. Renumbered DIST-I001–DIST-I007 (state layer, `add`, `list`, `remove`, `update`, tests, docs).
 - **State tracking:** `~/.config/skillprism/installed.yaml` (system-wide, not per-project), mode 0o700, schema-versioned, atomic writes per ADR-005.
 - Reuses `--target project|user|dist` scope flag, atomic writes, scope confinement, collect-all-errors, `--diff` preview.
-- Source format auto-detected per skill directory: skill.yaml + SKILL.md → render per-harness; SKILL.md only → copy as-is.
+- Source format is **manifest-declared**: each skill directory's `skill.yaml` carries a `skillprism: '<version>'` field whose presence declares skillprism-format; absence of `skill.yaml` defaults to plain-format. The marker heuristic (`{{` / `{%` detection) is not the discriminator — markers in the template are allowed but do not determine format. The full format-decision rules and malformed-manifest error cases are in DIST-I002.
 - **Upstream amendments in the same PR:**
   - Stage 1 (PRD) v0.2.0: `prd/constraints.md` allows `git` as a documented runtime dep for distribution commands only.
   - Stage 2 (Architecture) v0.2.2: `architecture/strategy.md` line 24 scopes the "no network" rule to non-distribution commands.

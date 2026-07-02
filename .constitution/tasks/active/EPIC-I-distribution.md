@@ -17,7 +17,7 @@ Acronym: **DIST** | Story Points: **32**
 
 Expand skillprism from a build-time compiler into a distribution CLI — a Vercel `skills` CLI competitor that adds per-harness templating and build-time validation to the same install/list/remove/update workflow.
 
-**Operator directive:** skillprism's model replaces Vercel's single-generic-skill model with one where authors write skillprism MiniJinja skills and the CLI handles per-harness tailoring. The CLI consumes both skillprism-format sources (skill.yaml + SKILL.md → render per-harness) and plain SKILL.md sources (copy as-is), auto-detected per skill directory.
+**Operator directive:** skillprism's model replaces Vercel's single-generic-skill model with one where authors write skillprism MiniJinja skills and the CLI handles per-harness tailoring. The CLI consumes both skillprism-format sources (`skill.yaml` declaring `skillprism: '<version>'` + `SKILL.md` → render per-harness) and plain sources (no `skill.yaml` → copy as-is). Format is **declared by the manifest**, not inferred from file contents.
 
 **Scope of this epic:**
 - `add` — fetch from remote, auto-detect format, render/copy, write to target scope, record state
@@ -130,35 +130,43 @@ And the state file is atomically rewritten
 
   **Source URL parser (per spike §4.3):** produces a `ParsedSource` enum with variants `GitHub { url, ref, subpath, skill_filter }`, `GitLab { url, ref, subpath, skill_filter }`, `Git { url, ref }`, `Local { path }`, `WellKnown { url, index_path }`. Implemented in `src/distribution/source.rs`. Unit-tested against every accepted form and several rejection cases.
 
-  **Auto-detection (per spike §4.3 + the existing loader's `find_template_path` contract):** the discriminator is *what the template file actually contains*, not which sibling files exist. For each skill directory, locate the template via the existing `find_template_path` from `src/loader/project.rs:121` (which returns one of `SKILL.md.j2`, `SKILL.md`, or `None` — the existing `(j2, bare, ambiguous)` matching is the canonical source-of-truth and MUST be reused, not re-implemented).
+  **Auto-detection (manifest-declared):** the discriminator is the `skill.yaml` manifest, not the template file's contents. The `skill.yaml` MUST carry a `skillprism:` field whose value is a non-empty version string (e.g., `skillprism: '1'`). The version is the manifest schema version; presence of the field is the declaration of skillprism-format. The marker heuristic (`{{` / `{%` detection) is not the discriminator — markers in the template are still allowed but do not determine format.
 
-  **Visibility fix (P1 from PR #15 review):** `find_template_path` and `discover_asset_dirs` are currently module-private in `src/loader/project.rs`. The new `src/distribution/` module needs to call them. The implementation PR MUST lift them to `pub(crate)` in `src/loader/project.rs:121` and `src/loader/project.rs:257` and add explicit re-exports to `src/loader/mod.rs` (which already contains `mod project;` and `pub use project::*;` — the lift adds `pub use project::find_template_path;` and `pub use project::discover_asset_dirs;` rather than starting from an empty file). This is the minimum-surface change — no free-function extraction needed. The `copy_assets` helper at `src/router/write.rs:34` is already `pub` and is the right reference for the asset-copy side.
+  **Format decision rules:**
 
-  1. **Template absent** → the directory is not a skill; the walk skips it.
-  2. **Both `SKILL.md` and `SKILL.md.j2` exist** → the skill is **ambiguous**; `add` MUST surface `ProjectError::AmbiguousTemplate` verbatim, matching the `init` / `build` flow.
-  3. **Exactly one template file exists** → the skill is `skillprism-format` if the template contains any MiniJinja variables (`{{` or `{%`), `plain-format` otherwise. The exact detection method (regex scan, parser-based, etc.) is implementation-owned and may evolve; the planning doc only pins the *semantic* of "plain-format = a file with no template variables." The semantic matters because the existing loader (`src/loader/project.rs:117-120` and the test at line 405) treats a bare `SKILL.md` as a MiniJinja template, so a plain-format copy MUST only run on files that are actually plain (no markers) — copying a marker-bearing file verbatim would leave unrendered `{{ ... }}` in the installed file.
-     - `skillprism-format` → render per configured harness via the existing Load → Resolve → Validate → Render pipeline. The skill is recorded in the state layer with `format: skillprism`.
-     - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement — see visibility fix above). The skill is recorded in the state layer with `format: plain`.
+  1. **`skill.yaml` absent** → the skill is `plain-format`. Copy template + assets as-is. No manifest = no skillprism claim.
+  2. **`skill.yaml` present, `skillprism: '<non-empty-version>'` (e.g. `skillprism: '1'`)** → the skill is `skillprism-format`. Render per configured harness via the existing Load → Resolve → Validate → Render pipeline. The state record carries `format: skillprism`.
+  3. **`skill.yaml` present, no `skillprism:` field** → malformed manifest. Surface a clear error: "skill.yaml is present but missing the `skillprism:` field; either add `skillprism: '1'` to declare skillprism-format, or remove `skill.yaml` to declare plain-format." Exit code 1 (runtime error per `src/cli.rs:131-137`).
+  4. **`skill.yaml` present, `skillprism: ''` (empty)** → malformed manifest. Same error as case 3.
+  5. **`skill.yaml` present, `skillprism:` is not a string** (e.g. `skillprism: true` or `skillprism: 1` without quotes) → malformed manifest. The field MUST be a quoted string. Same error as case 3.
 
-  **Note on the bare-SKILL.md citation:** the test at `src/loader/project.rs:405` (`load_valid_project_with_bare_skill_md`) verifies the loader maps a bare `SKILL.md` to the template path; it does not run the renderer. The MiniJinja render behavior is the engine's responsibility. The contract that "a bare `SKILL.md` is a MiniJinja template" is grounded in the docstring at `src/loader/project.rs:117-120` and in the existing render path (DIST-I006 should add a test that invokes the engine on a bare `SKILL.md` containing `{{` markers to anchor the claim).
+  **Template handling (per skill directory, after format is determined):** the existing `find_template_path` from `src/loader/project.rs:121` is the canonical source-of-truth for which file is the template and MUST be reused, not re-implemented. It returns one of `SKILL.md.j2`, `SKILL.md`, or `None`. The `find_template_path` ambiguity check (`Both SKILL.md and SKILL.md.j2 exist` → `ProjectError::AmbiguousTemplate`) is preserved verbatim. The visibility fix (below) covers the `pub(crate)` lift.
 
-  `skill.yaml` is not a discriminator — it is consulted only when rendering a `skillprism-format` skill, to populate the variable context. The `--target` flag (default: project) controls where output is written. **`add` enforces `--target` at parse time via a restricted `InstallScope { Project, User }` enum** (not the full `TargetScope` enum used by `build`) — clap rejects `dist` with a parse error (exit code 2) before the command runs. This pins the parse-time vs runtime check decision the earlier commit deferred. The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer (per DIST-I001 schema). Overwrite confirmation applies per existing safety model unless `--force`.
+  - `skillprism-format` → render per configured harness. The `skill.yaml` provides the variable context (top-level `variables:` and per-harness `harnesses.<harness>.variables`).
+  - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement — see visibility fix below). The state record carries `format: plain`.
+
+  **Visibility fix:** `find_template_path` and `discover_asset_dirs` are currently module-private in `src/loader/project.rs`. The new `src/distribution/` module needs to call them. The implementation PR MUST lift them to `pub(crate)` in `src/loader/project.rs:121` and `src/loader/project.rs:257` and add explicit re-exports to `src/loader/mod.rs` (which already contains `mod project;` and `pub use project::*;` — the lift adds `pub use project::find_template_path;` and `pub use project::discover_asset_dirs;` rather than starting from an empty file). This is the minimum-surface change — no free-function extraction needed. The `copy_assets` helper at `src/router/write.rs:34` is already `pub` and is the right reference for the asset-copy side.
+
+  **Note on the `find_template_path` test citation:** the test at `src/loader/project.rs:405` (`load_valid_project_with_bare_skill_md`) verifies the loader maps a bare `SKILL.md` to the template path; it does not run the renderer. The MiniJinja render behavior is the engine's responsibility. The loader's role is to locate the template file; the format decision is made by reading `skill.yaml` (or its absence). DIST-I006 should add a test that invokes the engine on a `skillprism:`-declared skill with markers, to anchor the render path.
+
+  The `--target` flag (default: project) controls where output is written. **`add` enforces `--target` at parse time via a restricted `InstallScope { Project, User }` enum** (not the full `TargetScope` enum used by `build`) — clap rejects `dist` with a parse error (exit code 2) before the command runs. The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer (per DIST-I001 schema). Overwrite confirmation applies per existing safety model unless `--force`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
-Given a skillprism-format skill repo with skill.yaml + SKILL.md
+Given a skillprism-format skill repo with `skill.yaml` declaring `skillprism: '1'` and `SKILL.md`
 When the user runs `skillprism add owner/repo`
 Then the repo is fetched to a temporary directory via `git clone --depth 1`
-And each skill directory is auto-detected as skillprism-format
-And the skill is rendered once per configured harness
+And each skill directory's `skill.yaml` is read and the `skillprism:` field is consulted
+And the skill is recognized as `skillprism-format` (manifest-declared)
+And the skill is rendered once per configured harness (the `skill.yaml` provides the variable context)
 And the rendered SKILL.md files are written to each harness's project scope path
-And each installed skill is recorded in the state tracking layer with the schema fields from DIST-I001
+And each installed skill is recorded in the state tracking layer with `format: skillprism`
 
-Given a plain-format skill repo with only SKILL.md (no skill.yaml, no MiniJinja markers)
+Given a plain-format skill repo with only `SKILL.md` (no `skill.yaml`)
 When the user runs `skillprism add owner/repo`
 Then the repo is fetched to a temporary directory via `git clone --depth 1`
-And each skill directory is auto-detected as plain-format
+And each skill directory has no manifest, so it is recognized as `plain-format` (default)
 And the SKILL.md is copied as-is to each harness's project scope path
-And each installed skill is recorded in the state tracking layer
+And each installed skill is recorded in the state tracking layer with `format: plain`
 
 Given a multi-skill repo with skills "alpha" and "beta"
 When the user runs `skillprism add owner/repo --skill alpha`
@@ -215,6 +223,23 @@ When the user runs `skillprism add owner/repo --harnesses claude`
 Then skills are only rendered/copied to .claude/skills/
 And .opencode/skills/ is not written
 
+Given a `skill.yaml` present but missing the `skillprism:` field
+When the user runs `skillprism add owner/repo --skill that-skill`
+Then the command fails with a clear error: "skill.yaml is present but missing the `skillprism:` field; either add `skillprism: '1'` to declare skillprism-format, or remove `skill.yaml` to declare plain-format."
+And no files are written
+And the state tracking layer is not modified
+And the exit code is 1
+
+Given a `skill.yaml` with an empty `skillprism:` value (`skillprism: ''`)
+When the user runs `skillprism add owner/repo --skill that-skill`
+Then the command fails with the same malformed-manifest error
+And the exit code is 1
+
+Given a `skill.yaml` with a non-string `skillprism:` field (e.g. `skillprism: true` or `skillprism: 1` without quotes)
+When the user runs `skillprism add owner/repo --skill that-skill`
+Then the command fails with the malformed-manifest error naming the bad field type
+And the exit code is 1
+
 Given a fetched repo with no skill directories anywhere (no SKILL.md* reachable)
 When the user runs `skillprism add owner/repo`
 Then the command exits with code 1
@@ -246,28 +271,27 @@ Then the command fails with ProjectError::AmbiguousTemplate (re-uses the existin
 And no files are written
 And the state tracking layer is not modified
 
-Given a plain-format skill directory containing only SKILL.md (no SKILL.md.j2) where the file's text contains no `{{` or `{%` MiniJinja markers, and the directory has a `references/` subdirectory
+Given a plain-format skill directory containing only `SKILL.md` (no `skill.yaml`) and a `references/` subdirectory
 When the user runs `skillprism add owner/repo --skill that-skill --harnesses claude`
-Then that skill is auto-detected as plain-format (markers absent, not based on skill.yaml presence)
+Then that skill is recognized as `plain-format` (no manifest, default)
 And the SKILL.md is copied as-is to .claude/skills/that-skill/SKILL.md
 And the references/ directory tree is copied to .claude/skills/that-skill/references/ via the existing copy_assets helper
-And the installed skill is recorded in the state tracking layer with format: plain and harnesses: [claude]
+And the installed skill is recorded in the state tracking layer with `format: plain` and `harnesses: [claude]`
 
-Given a bare SKILL.md that contains MiniJinja markers (e.g. `# {{ name }}`), with no skill.yaml
+Given a bare `SKILL.md` that contains MiniJinja markers (e.g. `# {{ name }}`), with no `skill.yaml`
 When the user runs `skillprism add owner/repo --skill that-skill`
-Then that skill is auto-detected as skillprism-format (markers present, independent of skill.yaml)
-And the render fails the same way `build` would fail on the same input (variable context is missing)
-And no files are written
-And the state tracking layer is not modified
+Then that skill is recognized as `plain-format` (no manifest declares skillprism) — the markers in the file are **not consulted**
+And the SKILL.md is copied as-is to each harness's project scope path (the markers will be visible in the output, which is the correct behavior for a plain copy)
+And the installed skill is recorded in the state tracking layer with `format: plain`
 
 Given an already-installed skill "my-skill" at the target scope
 When the user runs `skillprism add owner/repo --skill my-skill` without --force
 Then the user is prompted to overwrite (y/n/s/a)
 And if the user declines, no files are written
 
-Given a skillprism-format skill with undefined template variables
+Given a skillprism-format skill (manifest-declared) whose template references variables that are NOT defined in `skill.yaml`'s `variables:` block
 When the user runs `skillprism add owner/repo`
-Then the build fails with a validation error identifying the undefined variable
+Then the render fails with a validation error identifying the undefined variable
 And no output files are written
 
 Given a fetch failure (network error, invalid URL, repo not found, auth failure)
@@ -324,7 +348,7 @@ And the exit code is 0
 
   **Note on `--target dist`:** the `TargetScope::Dist` enum variant exists for `build --target dist` (writes to `./dist/` for inspection) but is not an install target — `add` and `remove` only operate on `project` and `user` scopes. The `--all` flag MUST therefore iterate `project` + `user` only, never `dist`; iterating `dist` would risk deleting files that were never installed and could nuke unrelated build output.
 
-  **Known UX sharp edge (P2 from PR #15 round 2):** `skillprism remove --all --force` silently removes every installed skill across both `project` and `user` scopes with no preview. The implementation PR MUST mitigate this — two reasonable contracts: (a) print the affected skills (name + scope) to stdout before deleting, and require the user to confirm with a final `y/N` prompt even when `--force` is set; or (b) require an additional `--all-scopes` flag to cross the project/user boundary (so `remove --all --force` defaults to the current scope, and `remove --all --force --all-scopes` is the explicit cross-scope variant). The planning doc pins the contract as one of (a) or (b); the implementation PR picks.
+  **Known UX sharp edge:** `skillprism remove --all --force` removes every installed skill across both `project` and `user` scopes with no preview. The implementation PR MUST mitigate this — two reasonable contracts: (a) print the affected skills (name + scope) to stdout before deleting, and require the user to confirm with a final `y/N` prompt even when `--force` is set; or (b) require an additional `--all-scopes` flag to cross the project/user boundary (so `remove --all --force` defaults to the current scope, and `remove --all --force --all-scopes` is the explicit cross-scope variant). The planning doc pins the contract as one of (a) or (b); the implementation PR picks.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an installed skill "my-skill" in project scope for claude and opencode
@@ -370,7 +394,7 @@ And the exit code is 1
 
   If a skill is already at the latest version (same `ref` in the upstream), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--force` flag skips confirmation (same flag name as `build`, `add`, and `remove`; using `--force` for consistency, not `--yes`). Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
 
-  **"At the latest ref" check (P1 from PR #15 round 2):** the upstream ref is established via `git ls-remote <url> <ref-spec>` — a lightweight, sub-second query that returns the SHA-1 the remote resolves the ref to, without cloning. The `git clone --depth 1` from DIST-I002 only runs when the SHA differs (or on first call, when no baseline exists). This keeps `update` cheap for the no-op case (which is the common case: most days, most skills are at the latest ref). The 5-minute timeout from the spike's fetch mechanism applies to the `git clone` path, not to the `ls-remote` query (which has a much shorter default timeout in `git` itself).
+  **"At the latest ref" check:** the upstream ref is established via `git ls-remote <url> <ref-spec>` — a lightweight, sub-second query that returns the SHA-1 the remote resolves the ref to, without cloning. The `git clone --depth 1` from DIST-I002 only runs when the SHA differs (or on first call, when no baseline exists). This keeps `update` cheap for the no-op case (which is the common case: most days, most skills are at the latest ref). The 5-minute timeout from the spike's fetch mechanism applies to the `git clone` path, not to the `ls-remote` query (which has a much shorter default timeout in `git` itself).
 
   **CLI flag consistency:** the `--diff` flag SHOULD have `dry-run` as a `visible_alias` (matching the existing `build --diff --dry-run` surface at `src/cli.rs:50`), so `skillprism update --dry-run` is a natural user expectation. The implementation PR is responsible for the alias; this planning doc just pins the intent.
 - **Acceptance Criteria (Gherkin):**
