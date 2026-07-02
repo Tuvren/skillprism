@@ -4,6 +4,8 @@ Acronym: **DIST** | Story Points: **32**
 
 **Dependencies:** Epic H (RELS) — release artifacts must exist before the v1.0.0 tag is cut; PRD non-goal `plugin-marketplace.md` reopened by operator directive (see `.constitution/prd/out-of-scope/plugin-marketplace.md` for the `[REOPENED 2026-07-02]` annotation; full PRD revision is a downstream follow-up tracked in `prd/changelog.md`).
 
+**Operator directive (audit trail):** the directive that reopened `plugin-marketplace.md` and triggered Epic I is recorded in `prd/changelog.md` v0.2.0 (2026-07-02 entry) and `tasks/changelog.md` v0.11.0 (Epic I Activated and Specified entry). The git history of this PR is the source of truth; the changelog entries are the canonical pointer.
+
 **Spike (prerequisite, COMPLETE):** `.constitution/spikes/SPK-DIST-I001.md` — the remote fetch methodology is decided. The spike recommends shelling out to `git` directly for shallow clones (§4.1), with a three-layer auth chain (§4.2) and a Vercel-parity source-URL parser (§4.3). All implementation tickets below reference the spike for the contracts and mechanisms they need.
 
 **Upstream amendments (this PR):** the network layer required by Epic I is unblocked by three constitutional changes in the same PR:
@@ -89,6 +91,17 @@ Given $XDG_CONFIG_HOME is set to /custom/config
 When the state layer resolves the state directory
 Then it uses /custom/config/skillprism/ instead of ~/.config/skillprism/
 
+Given a fresh state file on macOS with $XDG_CONFIG_HOME unset
+When the state layer resolves the state directory
+Then it uses ~/.config/skillprism/ (XDG fallback)
+And no ~/Library/Application Support path is consulted
+
+Given the state file is freshly created (no installs yet)
+When the file is read
+Then it contains exactly:
+  version: 1
+  skills: []
+
 Given the state file contains 3 installed skill records
 When the state layer queries for all installed skills
 Then it returns all 3 records with their full metadata
@@ -113,13 +126,17 @@ And the state file is atomically rewritten
 
   **Source URL parser (per spike §4.3):** produces a `ParsedSource` enum with variants `GitHub { url, ref, subpath, skill_filter }`, `GitLab { url, ref, subpath, skill_filter }`, `Git { url, ref }`, `Local { path }`, `WellKnown { url, index_path }`. Implemented in `src/distribution/source.rs`. Unit-tested against every accepted form and several rejection cases.
 
-  **Auto-detection (per spike §4.3 + the existing loader's `find_template_path` contract):** the discriminator is *what the template file actually contains*, not which sibling files exist. For each skill directory, locate the template via the existing `find_template_path` from `src/loader/project.rs:121` (which returns one of `SKILL.md.j2`, `SKILL.md`, or `None` — the existing `(j2, bare, ambiguous)` matching is the canonical source-of-truth and MUST be reused, not re-implemented):
+  **Auto-detection (per spike §4.3 + the existing loader's `find_template_path` contract):** the discriminator is *what the template file actually contains*, not which sibling files exist. For each skill directory, locate the template via the existing `find_template_path` from `src/loader/project.rs:121` (which returns one of `SKILL.md.j2`, `SKILL.md`, or `None` — the existing `(j2, bare, ambiguous)` matching is the canonical source-of-truth and MUST be reused, not re-implemented).
+
+  **Visibility fix (P1 from PR #15 review):** `find_template_path` and `discover_asset_dirs` are currently module-private in `src/loader/project.rs`. The new `src/distribution/` module needs to call them. The implementation PR MUST lift them to `pub(crate)` in `src/loader/project.rs:121` and `src/loader/project.rs:257` and re-export them through `src/loader/mod.rs` (currently empty). This is the minimum-surface change — no free-function extraction needed. The `copy_assets` helper at `src/router/write.rs:34` is already `pub` and is the right reference for the asset-copy side.
 
   1. **Template absent** → the directory is not a skill; the walk skips it.
   2. **Both `SKILL.md` and `SKILL.md.j2` exist** → the skill is **ambiguous**; `add` MUST surface `ProjectError::AmbiguousTemplate` verbatim, matching the `init` / `build` flow.
   3. **Exactly one template file exists** → the skill is `skillprism-format` if the template contains any MiniJinja variables (`{{` or `{%`), `plain-format` otherwise. The exact detection method (regex scan, parser-based, etc.) is implementation-owned and may evolve; the planning doc only pins the *semantic* of "plain-format = a file with no template variables." The semantic matters because the existing loader (`src/loader/project.rs:117-120` and the test at line 405) treats a bare `SKILL.md` as a MiniJinja template, so a plain-format copy MUST only run on files that are actually plain (no markers) — copying a marker-bearing file verbatim would leave unrendered `{{ ... }}` in the installed file.
      - `skillprism-format` → render per configured harness via the existing Load → Resolve → Validate → Render pipeline. The skill is recorded in the state layer with `format: skillprism`.
-     - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement). The skill is recorded in the state layer with `format: plain`.
+     - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement — see visibility fix above). The skill is recorded in the state layer with `format: plain`.
+
+  **Note on the bare-SKILL.md citation:** the test at `src/loader/project.rs:405` (`load_valid_project_with_bare_skill_md`) verifies the loader maps a bare `SKILL.md` to the template path; it does not run the renderer. The MiniJinja render behavior is the engine's responsibility. The contract that "a bare `SKILL.md` is a MiniJinja template" is grounded in the docstring at `src/loader/project.rs:117-120` and in the existing render path (DIST-I006 should add a test that invokes the engine on a bare `SKILL.md` containing `{{` markers to anchor the claim).
 
   `skill.yaml` is not a discriminator — it is consulted only when rendering a `skillprism-format` skill, to populate the variable context. The `--target` flag (default: project) controls where output is written (reuses `TargetScope`, but `add` only accepts `project` and `user` — see Gherkin below for the `dist` rejection). The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer (per DIST-I001 schema). Overwrite confirmation applies per existing safety model unless `--force`.
 - **Acceptance Criteria (Gherkin):**
@@ -161,6 +178,18 @@ When the command runs
 Then it exits with a non-zero status
 And the error names `--target` and lists the valid values: project, user
 And the state tracking layer is not modified
+
+Given the user is in a directory with no skillprism.yaml (no project root)
+When the user runs `skillprism add owner/repo --target user`
+Then the command does not invoke the build-style `find_project_root()` resolution
+And the skill is installed to ~/.config/<harness>/skills/ (the user scope) for each configured harness
+And the installed skill is recorded in the state tracking layer with scope: user
+
+Given the user is in a directory with no skillprism.yaml
+When the user runs `skillprism add owner/repo` (default --target project)
+Then the command fails with a clear error explaining that --target project requires being inside a project directory
+And the error suggests using --target user
+And the exit code is 2 (usage error)
 
 Given a skill directory containing both SKILL.md and SKILL.md.j2 (ambiguous template)
 When the user runs `skillprism add owner/repo --skill that-skill`
@@ -289,6 +318,8 @@ And the exit code is 1
 - **Description:** Implement the `skillprism update [skills...]` command. For each named skill (or all if none named), re-fetches the source at the latest version (per the spike's fetch mechanism in DIST-I002), re-renders/re-copies, and decides whether each file needs writing via per-file SHA-256 comparison against the `files` array stored in the state record (per spike §4.5). Only files whose hash differs from the stored hash are written, via the same atomic-write infrastructure as the build pipeline. The existing `Router::diff` is the display-only diff renderer used solely for the `--diff` flag's user-facing output, not as the change test.
 
   If a skill is already at the latest version (same `ref` in the upstream), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--force` flag skips confirmation (same flag name as `build`, `add`, and `remove`; using `--force` for consistency, not `--yes`). Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
+
+  **CLI flag consistency:** the `--diff` flag SHOULD have `dry-run` as a `visible_alias` (matching the existing `build --diff --dry-run` surface at `src/cli.rs:50`), so `skillprism update --dry-run` is a natural user expectation. The implementation PR is responsible for the alias; this planning doc just pins the intent.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an installed skill "my-skill" at ref "abc123"
@@ -360,6 +391,8 @@ And the state record is updated to version B
 - **Effort:** 3
 - **Dependencies:** DIST-I002, DIST-I003, DIST-I004, DIST-I005
 - **Description:** Update the README, CHANGELOG, Hugo website docs, and CLI reference to cover the new distribution commands. Add a "Distribution" section to the website (install from remote sources, the add/list/remove/update workflow, auto-detection of skillprism vs plain format, per-harness rendering on install, the `git` runtime dependency for distribution commands). Update the CLI reference page with the new commands and flags. Update the homepage to position skillprism as a distribution CLI with per-harness templating, not just a build tool. Add a "skillprism vs Vercel skills CLI" comparison page that is honest about what each tool does, grounded in the spike's analysis (Vercel's `simple-git` + `gh` + SSH fallback; skillprism's direct `git` shell-out). Update AGENTS.md with any new devenv commands.
+
+  **In addition:** update `Cargo.toml`'s `description` field (line 7) to reflect the v1.0.0 positioning. The current `"Build-time compiler for multi-harness agent skills"` is visibly wrong once Epic I ships — the package description is what `cargo search`, `cargo install --dry-run`, and clap's `#[command(about)]` (currently at `src/cli.rs:32`) all surface to the user. The new description MUST drop "build-time" and position skillprism as a distribution CLI with per-harness templating, in line with the README and Hugo homepage rewrites.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given the Hugo website at site/
