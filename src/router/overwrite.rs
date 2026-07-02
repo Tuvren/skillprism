@@ -62,7 +62,7 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
 ///
 /// Returns `true` if the caller should write the file, `false` if it should skip.
 /// Handles `skip_all` progression and abort exit internally.
-pub(super) fn resolve_overwrite(
+pub fn resolve_overwrite(
     path: &Path,
     force: bool,
     skip_all: &mut bool,

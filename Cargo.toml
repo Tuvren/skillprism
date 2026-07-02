@@ -21,6 +21,7 @@ ctrlc = "3.5"
 miette = { version = "7.6", features = ["derive"] }
 minijinja = { version = "2.20", features = ["json", "debug"] }
 serde = { version = "1", features = ["derive"] }
+sha2 = "0.10"
 similar = { version = "2.7", features = ["text"] }
 thiserror = "2"
 yaml_serde = "0.10"

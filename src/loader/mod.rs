@@ -15,3 +15,5 @@
 mod project;
 
 pub use project::*;
+
+pub use project::{discover_asset_dirs, find_template_path};

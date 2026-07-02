@@ -12,4 +12,19 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Placeholder for the `update` command implementation (DIST-I005).
+//! `skillprism update` command implementation.
+
+use super::add::InstallScopeArg;
+
+/// Runs the `update` command.
+#[allow(clippy::unnecessary_wraps)]
+pub fn run_update(
+    _skills: Vec<String>,
+    _target: Option<InstallScopeArg>,
+    _harnesses: Option<String>,
+    _diff: bool,
+    _force: bool,
+) -> Result<(), miette::Report> {
+    eprintln!("update: not yet implemented");
+    Ok(())
+}

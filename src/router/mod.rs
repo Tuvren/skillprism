@@ -28,6 +28,7 @@ use crate::cli::TargetScope;
 use crate::engine::HarnessOutput;
 use crate::resolver::ResolvedPair;
 
+pub use overwrite::resolve_overwrite;
 pub use paths::*;
 pub use write::*;
 

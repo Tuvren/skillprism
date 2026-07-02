@@ -19,6 +19,7 @@
 #![allow(dead_code)]
 
 pub mod add;
+pub mod install;
 pub mod list;
 pub mod network;
 pub mod remove;

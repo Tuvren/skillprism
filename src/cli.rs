@@ -21,6 +21,7 @@ use clap_mangen::Man;
 
 use miette::IntoDiagnostic;
 
+use crate::distribution::add::InstallScopeArg;
 use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
@@ -70,6 +71,88 @@ enum Command {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: ShellKind,
+    },
+    /// Install skills from a remote source or local path
+    Add {
+        /// Source to install from
+        source: String,
+
+        /// Install scope: project (default) or user
+        #[arg(long = "target", default_value = "project")]
+        target: InstallScopeArg,
+
+        /// Install only the named skill from a multi-skill source
+        #[arg(long = "skill")]
+        skill: Option<String>,
+
+        /// Comma-separated list of harnesses to install to
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+
+        /// Overwrite existing files without confirmation
+        #[arg(long = "force")]
+        force: bool,
+    },
+    /// List installed skills
+    #[command(visible_alias = "ls")]
+    List {
+        /// Filter by install scope: project or user
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Comma-separated list of harnesses to filter by
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+    },
+    /// Remove installed skills
+    #[command(visible_alias = "rm")]
+    Remove {
+        /// Skill names to remove
+        #[arg(required = false)]
+        skills: Vec<String>,
+
+        /// Filter by install scope: project or user
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Comma-separated list of harnesses to remove from
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+
+        /// Remove all installed skills
+        #[arg(long = "all")]
+        all: bool,
+
+        /// Allow removing across both project and user scopes
+        #[arg(long = "all-scopes")]
+        all_scopes: bool,
+
+        /// Skip confirmation prompts
+        #[arg(long = "force")]
+        force: bool,
+    },
+    /// Update installed skills to their latest source versions
+    #[command(visible_alias = "up")]
+    Update {
+        /// Skill names to update (default: all)
+        #[arg(required = false)]
+        skills: Vec<String>,
+
+        /// Filter by install scope: project or user
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Comma-separated list of harnesses to update
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+
+        /// Show diff without writing files
+        #[arg(long = "diff", visible_alias = "dry-run")]
+        diff: bool,
+
+        /// Skip confirmation prompts
+        #[arg(long = "force")]
+        force: bool,
     },
 }
 
@@ -142,6 +225,33 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => run_init(kind),
         Command::Completions { shell } => run_completions(shell),
+        Command::Add {
+            source,
+            target,
+            skill,
+            harnesses,
+            force,
+        } => crate::distribution::add::run_add(source, target, skill, harnesses, force),
+        Command::List { target, harnesses } => {
+            crate::distribution::list::run_list(target, harnesses.as_ref())
+        }
+        Command::Remove {
+            skills,
+            target,
+            harnesses,
+            all,
+            all_scopes,
+            force,
+        } => crate::distribution::remove::run_remove(
+            skills, target, harnesses, all, all_scopes, force,
+        ),
+        Command::Update {
+            skills,
+            target,
+            harnesses,
+            diff,
+            force,
+        } => crate::distribution::update::run_update(skills, target, harnesses, diff, force),
     }
 }
 

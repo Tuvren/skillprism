@@ -12,4 +12,50 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Placeholder for the `list` command implementation (DIST-I003).
+//! `skillprism list` command implementation.
+
+use crate::state::{InstallScope, StateStore};
+
+use super::add::InstallScopeArg;
+
+/// Runs the `list` command.
+pub fn run_list(
+    target: Option<InstallScopeArg>,
+    harnesses: Option<&String>,
+) -> Result<(), miette::Report> {
+    let store = StateStore::open().map_err(miette::Report::new)?;
+    let skills: Vec<_> = store
+        .skills()
+        .iter()
+        .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
+        .filter(|s| {
+            harnesses.is_none_or(|h| {
+                let wanted: Vec<_> = h.split(',').map(|x| x.trim().to_string()).collect();
+                s.harnesses
+                    .iter()
+                    .any(|installed| wanted.contains(installed))
+            })
+        })
+        .cloned()
+        .collect();
+
+    if skills.is_empty() {
+        println!("No skills installed");
+        return Ok(());
+    }
+
+    for skill in skills {
+        let r#ref = skill.r#ref.unwrap_or_else(|| "-".to_string());
+        let harnesses = skill.harnesses.join(", ");
+        println!(
+            "{name}\t{source}\t{ref}\t{scope:?}\t{harnesses}",
+            name = skill.name,
+            source = skill.source,
+            ref = r#ref,
+            scope = skill.scope,
+            harnesses = harnesses
+        );
+    }
+
+    Ok(())
+}

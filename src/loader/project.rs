@@ -118,7 +118,9 @@ impl ProjectLoader {
     /// latter exists purely so editors apply Markdown syntax highlighting to a file that
     /// is otherwise identical (still `MiniJinja` syntax, still rendered the same way).
     /// Having both in one directory is rejected rather than silently preferring one.
-    fn find_template_path(dir: &Path) -> Result<Option<std::path::PathBuf>, ProjectError> {
+    pub(crate) fn find_template_path(
+        dir: &Path,
+    ) -> Result<Option<std::path::PathBuf>, ProjectError> {
         let j2 = dir.join("SKILL.md.j2");
         let bare = dir.join("SKILL.md");
         match (j2.exists(), bare.exists()) {
@@ -254,7 +256,7 @@ impl ProjectLoader {
     /// here can be mistaken for one. Dot-directories (`.venv/`, `.git/`,
     /// `.ipynb_checkpoints/`, ...) are excluded — they're tooling/VCS artifacts, never
     /// content an author intends to ship alongside the skill.
-    fn discover_asset_dirs(dir: &Path) -> Result<Vec<std::path::PathBuf>, ProjectError> {
+    pub(crate) fn discover_asset_dirs(dir: &Path) -> Result<Vec<std::path::PathBuf>, ProjectError> {
         let mut asset_dirs = read_dir_entries(dir)?
             .into_iter()
             .map(|entry| entry.path())
@@ -269,6 +271,14 @@ impl ProjectLoader {
         asset_dirs.sort();
         Ok(asset_dirs)
     }
+}
+
+pub fn find_template_path(dir: &Path) -> Result<Option<std::path::PathBuf>, ProjectError> {
+    ProjectLoader::find_template_path(dir)
+}
+
+pub fn discover_asset_dirs(dir: &Path) -> Result<Vec<std::path::PathBuf>, ProjectError> {
+    ProjectLoader::discover_asset_dirs(dir)
 }
 
 fn read_dir_entries(dir: &Path) -> Result<Vec<std::fs::DirEntry>, ProjectError> {

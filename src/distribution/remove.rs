@@ -12,4 +12,20 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Placeholder for the `remove` command implementation (DIST-I004).
+//! `skillprism remove` command implementation.
+
+use super::add::InstallScopeArg;
+
+/// Runs the `remove` command.
+#[allow(clippy::unnecessary_wraps)]
+pub fn run_remove(
+    _skills: Vec<String>,
+    _target: Option<InstallScopeArg>,
+    _harnesses: Option<String>,
+    _all: bool,
+    _all_scopes: bool,
+    _force: bool,
+) -> Result<(), miette::Report> {
+    eprintln!("remove: not yet implemented");
+    Ok(())
+}
