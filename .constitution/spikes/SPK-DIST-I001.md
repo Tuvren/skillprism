@@ -5,7 +5,7 @@
 - **Target:** Determine how `skillprism add` should fetch skill sources from remote repositories, following learnings from Vercel's `skills` CLI (https://github.com/vercel-labs/skills) source code.
 
 ## 2. Codebase Baseline
-- **Current State:** skillprism has no network layer. All existing commands (`build`, `validate`, `init`, `completions`) operate on local files only. The constitution's `strategy.md` states "no network, no daemon, no IPC" and `constraints.md` states "single static binary, no runtime deps." ADR-004 mandates a synchronous pipeline (no async runtime).
+- **Current State:** skillprism has no network layer. All existing commands (`build`, `validate`, `init`, `completions`) operate on local files only. The constitution's `.constitution/architecture/strategy.md` (line 24) states "no network, no daemon, no IPC" and `.constitution/prd/constraints.md` states "single static binary, no runtime deps." ADR-004 mandates a synchronous pipeline (no async runtime).
 - **Discovered Constraints:**
   - ADR-004 (synchronous) — any HTTP client must be blocking, not async
   - ADR-003 (single crate) — new functionality lives in `src/` submodules
