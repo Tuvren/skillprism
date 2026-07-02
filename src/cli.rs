@@ -114,10 +114,6 @@ enum InitKind {
     Skill {
         /// Skill name
         name: String,
-
-        /// Comma-separated list of target harnesses (default: all built-in)
-        #[arg(short = 'H', long = "harnesses")]
-        harnesses: Option<String>,
     },
     /// Scaffold a new custom harness definition in harnesses/
     Harness {
@@ -186,6 +182,14 @@ fn run_build(
 
     let t2 = Instant::now();
     let outcome = Validator::validate(pairs);
+    for warning in &outcome.warnings {
+        eprintln!(
+            "[validate] warning: {skill} -> {harness}: {message}",
+            skill = warning.skill,
+            harness = warning.harness,
+            message = warning.message
+        );
+    }
     if !outcome.errors.is_empty() {
         let error_count = outcome.errors.len();
         for err in outcome.errors {
@@ -201,6 +205,11 @@ fn run_build(
             outcome.valid.len(),
             t = fmt_duration(t2.elapsed())
         );
+    }
+
+    if outcome.valid.is_empty() {
+        eprintln!("No skills to build.");
+        return Ok(());
     }
 
     if verbose {
@@ -434,8 +443,27 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
     let pairs = resolve_pairs(&model, &registry)?;
     let outcome = Validator::validate(pairs);
 
+    for pair in &outcome.valid {
+        println!("  ok: {} \u{2192} {}", pair.skill.name, pair.harness.id);
+    }
+    for warning in &outcome.warnings {
+        eprintln!(
+            "  warning: {} \u{2192} {}: {}",
+            warning.skill, warning.harness, warning.message
+        );
+    }
+
     if outcome.errors.is_empty() {
-        println!("Validation passed ({} skill(s))", outcome.valid.len());
+        let warn_count = outcome.warnings.len();
+        if warn_count > 0 {
+            println!(
+                "Validation passed ({} skill(s), {} warning(s))",
+                outcome.valid.len(),
+                warn_count
+            );
+        } else {
+            println!("Validation passed ({} skill(s))", outcome.valid.len());
+        }
         Ok(())
     } else {
         let error_count = outcome.errors.len();
@@ -471,10 +499,9 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             println!("Created project `{name}` in `{}`", dir.display());
             Ok(())
         }
-        InitKind::Skill { name, harnesses } => {
+        InitKind::Skill { name } => {
             let root = find_project_root()?;
-            let selected = parse_harness_list(harnesses);
-            crate::scaffold::skill::scaffold_skill(&root, &name, &selected).into_diagnostic()?;
+            crate::scaffold::skill::scaffold_skill(&root, &name).into_diagnostic()?;
             println!("Created skill `{name}`");
             Ok(())
         }

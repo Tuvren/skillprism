@@ -63,16 +63,11 @@ pub struct HarnessCapabilities {
     /// Whether the harness requires a manifest file.
     #[serde(default)]
     pub requires_manifest: bool,
-    /// Frontmatter parsing mode ("strict" or "lenient").
-    #[allow(dead_code)]
-    pub frontmatter_mode: String,
     /// Maximum allowed skill name length.
     #[serde(default = "default_name_max")]
-    #[allow(dead_code)]
     pub name_max_length: usize,
     /// Maximum allowed description length.
     #[serde(default = "default_desc_max")]
-    #[allow(dead_code)]
     pub description_max_length: usize,
     /// Whether `allowed-tools` is supported in skill config.
     #[serde(default)]

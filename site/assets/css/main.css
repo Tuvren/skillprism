@@ -1,0 +1,486 @@
+/* skillprism — design system
+   Subject: a build-time compiler for agent skills. One source refracts into many outputs.
+   Palette: dark terminal (void, surface, text, muted, amber accent)
+   Type: JetBrains Mono (display, compiler vernacular) + Inter (body)
+   Signature: CSS prism refraction in the hero
+
+   Color tokens — 5 named values */
+:root {
+  --void: #0e0e12;
+  --surface: #15151c;
+  --surface-raised: #1c1c26;
+  --text: #e8e6e3;
+  --muted: #8a8a96;
+  --amber: #e8a838;
+  --amber-dim: #b8862a;
+  --hairline: #2a2a36;
+  --code-bg: #121218;
+  --beam-claude: #d97757;
+  --beam-codex: #10a37f;
+  --beam-opencode: #6c8ae6;
+  --beam-factory: #a78bfa;
+  --beam-pi: #e8a838;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: var(--void);
+  color: var(--text);
+  line-height: 1.65;
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: var(--amber);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+a:hover { color: #f0c050; text-decoration: underline; text-decoration-color: var(--amber-dim); }
+
+::selection { background: var(--amber); color: var(--void); }
+
+/* Focus — visible, accessible, amber */
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+  border-radius: 2px;
+}
+
+/* ---- Header ---- */
+.site-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: rgba(14, 14, 18, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--hairline);
+}
+.nav {
+  max-width: 820px;
+  margin: 0 auto;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+}
+.nav-brand {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+.nav-brand::before {
+  content: "◈";
+  color: var(--amber);
+  margin-right: 8px;
+}
+.nav-brand:hover { color: var(--text); text-decoration: none; }
+.nav-links { list-style: none; display: flex; gap: 28px; }
+.nav-links a {
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+  transition: color 0.15s ease;
+}
+.nav-links a:hover { color: var(--text); text-decoration: none; }
+
+/* ---- Layout ---- */
+main {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 24px 96px;
+}
+
+/* ---- Typography ---- */
+h1, h2, h3, h4, h5 {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.03em;
+}
+h1 {
+  font-size: 2.2rem;
+  margin-bottom: 20px;
+  letter-spacing: -0.04em;
+}
+h2 {
+  font-size: 1.5rem;
+  margin-top: 56px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+h3 {
+  font-size: 1.15rem;
+  margin-top: 40px;
+  margin-bottom: 14px;
+  font-weight: 600;
+}
+h4 {
+  font-size: 1rem;
+  margin-top: 32px;
+  margin-bottom: 10px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+p { margin-bottom: 18px; }
+
+/* Lists */
+ul, ol { margin-bottom: 18px; padding-left: 22px; }
+li { margin-bottom: 8px; }
+
+/* ---- Code ---- */
+code {
+  font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+  font-size: 0.85em;
+  background: var(--surface-raised);
+  color: var(--amber);
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  padding: 20px 24px;
+  overflow-x: auto;
+  margin-bottom: 24px;
+  font-size: 0.85rem;
+  line-height: 1.6;
+}
+pre code {
+  background: none;
+  color: var(--text);
+  padding: 0;
+  font-size: inherit;
+}
+
+/* ---- Tables ---- */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 24px;
+  font-size: 0.9rem;
+}
+th, td {
+  padding: 12px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--hairline);
+}
+th {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+tr:hover td { background: var(--surface); }
+
+/* Blockquote */
+blockquote {
+  border-left: 3px solid var(--amber);
+  padding: 4px 0 4px 20px;
+  margin: 24px 0;
+  color: var(--muted);
+  font-style: italic;
+}
+
+hr { border: none; border-top: 1px solid var(--hairline); margin: 48px 0; }
+
+/* ---- Homepage: Prism Hero ---- */
+.prism-hero {
+  max-width: 100%;
+  margin: 0 -24px;
+  padding: 80px 24px 64px;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--void);
+  position: relative;
+  overflow: hidden;
+}
+.prism-hero-inner {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.prism-hero h1 {
+  font-size: 2.8rem;
+  margin-bottom: 0;
+  line-height: 1.15;
+}
+.prism-hero h1 .amber { color: var(--amber); }
+.prism-hero .tagline {
+  font-size: 1.15rem;
+  color: var(--muted);
+  max-width: 560px;
+  margin: 20px 0 36px;
+  line-height: 1.6;
+}
+.prism-hero .tagline code {
+  font-size: 0.9em;
+  color: var(--text);
+}
+.hero-cta {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+.btn {
+  display: inline-flex;
+  align-items: center;
+  padding: 11px 24px;
+  border-radius: 4px;
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  font-size: 0.9rem;
+  transition: all 0.15s ease;
+  letter-spacing: -0.01em;
+}
+.btn:hover { text-decoration: none; }
+.btn-primary {
+  background: var(--amber);
+  color: var(--void);
+}
+.btn-primary:hover {
+  background: #f0c050;
+  color: var(--void);
+}
+.btn-secondary {
+  border: 1px solid var(--hairline);
+  color: var(--text);
+  background: transparent;
+}
+.btn-secondary:hover {
+  border-color: var(--amber);
+  color: var(--amber);
+}
+
+/* The prism diagram — pure CSS, no JS */
+.prism-diagram {
+  margin: 56px -24px 0;
+  height: 160px;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.prism-source {
+  flex-shrink: 0;
+  width: 120px;
+  text-align: right;
+  padding-right: 20px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.prism-source .source-label {
+  color: var(--text);
+  font-weight: 600;
+}
+/* The prism body — a triangle */
+.prism-body {
+  flex-shrink: 0;
+  width: 0;
+  height: 0;
+  border-top: 60px solid transparent;
+  border-bottom: 60px solid transparent;
+  border-left: 48px solid var(--surface-raised);
+  position: relative;
+  z-index: 2;
+}
+/* Incoming beam */
+.prism-beam-in {
+  position: absolute;
+  left: 120px;
+  top: 50%;
+  width: 48px;
+  height: 2px;
+  background: var(--text);
+  transform: translateY(-50%);
+  z-index: 1;
+}
+/* Refracted beams — fanning out to the right */
+.prism-beams {
+  flex-grow: 1;
+  position: relative;
+  height: 100%;
+}
+.beam {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  height: 2px;
+  width: calc(100% - 80px);
+  transform-origin: left center;
+  border-radius: 1px;
+}
+.beam::after {
+  content: attr(data-label);
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+  padding-left: 8px;
+}
+.beam-1 { background: var(--beam-claude); transform: translateY(-50%) rotate(-18deg); }
+.beam-2 { background: var(--beam-codex); transform: translateY(-50%) rotate(-9deg); }
+.beam-3 { background: var(--beam-opencode); transform: translateY(-50%) rotate(0deg); }
+.beam-4 { background: var(--beam-factory); transform: translateY(-50%) rotate(9deg); }
+.beam-5 { background: var(--beam-pi); transform: translateY(-50%) rotate(18deg); }
+
+/* ---- How it works (not numbered — it's not a user sequence, it's a pipeline) ---- */
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1px;
+  margin: 40px 0;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.pipeline-step {
+  background: var(--surface);
+  padding: 28px 24px;
+}
+.pipeline-step .step-glyph {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.75rem;
+  color: var(--amber);
+  margin-bottom: 12px;
+  font-weight: 600;
+}
+.pipeline-step h3 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 1.1rem;
+}
+.pipeline-step p {
+  font-size: 0.9rem;
+  color: var(--muted);
+  margin-bottom: 0;
+}
+.pipeline-step p code {
+  font-size: 0.85em;
+  color: var(--text);
+}
+
+/* ---- Harness grid ---- */
+.harness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1px;
+  margin: 32px 0;
+  background: var(--hairline);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.harness-card {
+  background: var(--surface);
+  padding: 20px 16px;
+  text-align: center;
+}
+.harness-card .harness-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin: 0 auto 12px;
+}
+.harness-card code {
+  background: none;
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: block;
+  margin-bottom: 6px;
+}
+.harness-card p {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin-bottom: 0;
+  line-height: 1.4;
+}
+.harness-card p code {
+  display: inline;
+  font-size: 0.75rem;
+  color: var(--amber);
+  background: none;
+}
+
+/* ---- Doc index ---- */
+.doc-index { list-style: none; padding: 0; }
+.doc-index li {
+  padding: 14px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.doc-index li:last-child { border-bottom: none; }
+.doc-index li a {
+  font-family: "JetBrains Mono", monospace;
+  font-weight: 600;
+  color: var(--text);
+}
+.doc-index li a:hover { color: var(--amber); }
+
+/* ---- Callout (for spec compliance section) ---- */
+.callout {
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--amber);
+  border-radius: 0 6px 6px 0;
+  padding: 20px 24px;
+  margin: 32px 0;
+  background: var(--surface);
+}
+.callout p:last-child { margin-bottom: 0; }
+.callout code { color: var(--text); }
+
+/* ---- Footer ---- */
+.site-footer {
+  border-top: 1px solid var(--hairline);
+  padding: 28px 24px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.site-footer a { color: var(--muted); }
+.site-footer a:hover { color: var(--amber); }
+.site-footer .footer-mark {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--amber);
+  margin-right: 6px;
+}
+
+/* ---- Mobile ---- */
+@media (max-width: 640px) {
+  .prism-hero { padding: 48px 24px 40px; }
+  .prism-hero h1 { font-size: 1.8rem; }
+  .prism-hero .tagline { font-size: 1rem; }
+  .nav { padding: 0 16px; }
+  .nav-links { gap: 18px; }
+  .nav-links a { font-size: 13px; }
+  main { padding: 0 16px 64px; }
+  .prism-diagram { height: 120px; margin: 40px -16px 0; }
+  .prism-source { width: 80px; font-size: 0.65rem; padding-right: 12px; }
+  .beam { width: calc(100% - 50px); }
+  .beam::after { font-size: 0.6rem; }
+  .pipeline { grid-template-columns: 1fr; }
+}
+
+/* ---- Reduced motion ---- */
+@media (prefers-reduced-motion: reduce) {
+  * { animation: none !important; transition: none !important; }
+  html { scroll-behavior: auto; }
+}

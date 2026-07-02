@@ -17,6 +17,8 @@ cargo publish --dry-run
 devenv shell                                      # enter dev environment
 devenv test                                       # run pre-commit hooks via CI
 pre-commit run --all-files                        # manually run hooks (fmt + clippy)
+hugo server -s site                               # run the website locally (http://localhost:1313)
+hugo --gc --minify -s site                        # build the website to site/public/
 ```
 
 Clippy is deny-level (`#![deny(clippy::all, clippy::pedantic, clippy::nursery)]` in `main.rs`).
