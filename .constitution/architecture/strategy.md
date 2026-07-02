@@ -21,7 +21,7 @@ The CLI entrypoint dispatches to the appropriate pipeline variant or directly to
 
 1. **Natural decomposition** — A build-time compiler is inherently sequential: you must load configuration before you can validate it, validate before you render, render before you write. Pipe-and-filter makes the dependency chain explicit.
 2. **Validate reuses build stages** — The validate command (`VA-1`) shares Load → Resolve → Validate with the build command, reducing duplication by construction.
-3. **Single-binary constraint** — All filters run in-process. No network, no daemon, no IPC. The pipeline becomes a function composition chain.
+3. **Single-binary constraint** — All filters run in-process. The `build`, `validate`, `init`, and `completions` commands have no network, no daemon, no IPC. The `add` and `update` distribution commands (Epic I) perform network access by shelling out to `git` for shallow clones; this is the only network surface in skillprism, and it makes no persistent connections, no daemons, and no IPC. The pipeline becomes a function composition chain.
 4. **Collect-all-errors** — The Validate stage is a batch accumulator that inspects every skill before reporting, then passes the validated model to Render. This satisfies the operator's choice of collect-all-errors over fail-fast.
 
 ## Trade-offs Accepted

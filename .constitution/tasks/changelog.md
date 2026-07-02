@@ -1,16 +1,23 @@
 # Tasks Changelog
 
-## v0.11.0 — Epic I Activated: Distribution CLI
+## v0.11.0 — Epic I Activated and Specified: Distribution CLI
 
-- **Epic I (Distribution CLI)** planned and activated — 8 tickets, 35 story points
-- Expands skillprism from build-time compiler to distribution CLI (Vercel `skills` CLI competitor with per-harness templating)
-- New commands: `add` (fetch + auto-detect + render/copy), `list`, `remove`, `update`
-- Deferred to future epics: `find` (requires directory/registry backend), `use` (render-to-temp + agent launching)
-- Spike DIST-I001 gates all implementation: research Vercel's fetch methodology, recommend skillprism's network layer
-- State tracking via `~/.config/skillprism/` (system-wide, not per-project)
-- Reuses `--target project|user|dist` scope flag, atomic writes, scope confinement, collect-all-errors, `--diff` preview
-- Source format auto-detected per skill directory: skill.yaml + SKILL.md → render per-harness; SKILL.md only → copy as-is
-- PRD non-goal `plugin-marketplace.md` reopened by operator directive — PRD revision flagged as dependency
+- **Epic I (Distribution CLI)** planned, activated, and specified — 7 implementation tickets, 32 story points.
+- Expands skillprism from build-time compiler to distribution CLI (Vercel `skills` CLI competitor with per-harness templating).
+- New commands: `add` (fetch + auto-detect + render/copy), `list`, `remove`, `update`.
+- Deferred to future epics: `find` (requires directory/registry backend), `use` (render-to-temp + agent launching).
+- **Spike SPK-DIST-I001 complete** (`.constitution/spikes/SPK-DIST-I001.md`): remote fetch methodology resolved by reading the actual source of `vercel-labs/skills`. Recommendation: shell out to `git` directly for shallow clones. Three-layer auth chain (Vercel parity): `git clone` → `gh repo clone` (GitHub HTTPS only) → SSH with `BatchMode=yes`. Vercel-parity source URL parser (all 7 forms in v1). State file: single YAML at `~/.config/skillprism/installed.yaml`. Change detection: per-file SHA-256.
+- **Tickets specified** (7, not 8): the spike is no longer a ticket inside the epic; it lives in `.constitution/spikes/` as a free-floating prerequisite. The implementation tickets reference the spike for their contracts and mechanisms. Renumbered DIST-I001–DIST-I007 (state layer, `add`, `list`, `remove`, `update`, tests, docs).
+- **State tracking:** `~/.config/skillprism/installed.yaml` (system-wide, not per-project), mode 0o700, schema-versioned, atomic writes per ADR-005.
+- Reuses `--target project|user|dist` scope flag, atomic writes, scope confinement, collect-all-errors, `--diff` preview.
+- Source format auto-detected per skill directory: skill.yaml + SKILL.md → render per-harness; SKILL.md only → copy as-is.
+- **Upstream amendments in the same PR:**
+  - Stage 1 (PRD) v0.2.0: `prd/constraints.md` allows `git` as a documented runtime dep for distribution commands only.
+  - Stage 2 (Architecture) v0.2.2: `architecture/strategy.md` line 24 scopes the "no network" rule to non-distribution commands.
+  - Stage 3 (TechSpec) v0.11.0: `ADR-008: Network Layer for Distribution` documents the design.
+- **Critical path:** `DIST-I001` (state layer) → `DIST-I002` (`add`) → `DIST-I005` (`update`). After I001 lands, I002/I003/I004 can be worked in parallel. I006 and I007 depend on all command tickets.
+- **Release plan:** Epic I (32 SP) is the gate for the `v1.0.0` tag. Once archived, Epic J (deferred scope) is the natural successor.
+- PRD non-goal `plugin-marketplace.md` reopened by operator directive (recorded in `prd/changelog.md` v0.2.0); PRD revision is a downstream follow-up.
 
 ## v0.10.0 — Epic H Complete — All Release Readiness Tickets Delivered
 

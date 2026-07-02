@@ -1,5 +1,14 @@
 # Changelog — Stage 3 (TechSpec)
 
+### v0.11.0 — 2026-07-02 — ADR-008: Network Layer for Distribution
+
+- **New ADR: `ADR-008-network-layer-for-distribution.md`** documents the design for the `add` and `update` distribution commands' network access.
+- Shells out to `git` directly for shallow clones (no new Rust dependencies).
+- Three-layer auth chain (per Vercel parity): `git clone` → `gh repo clone` (GitHub HTTPS only) → SSH with `BatchMode=yes`.
+- Env vars: `GIT_TERMINAL_PROMPT=0`, `GIT_SSH_COMMAND=ssh -o BatchMode=yes`, `GIT_LFS_SKIP_SMUDGE=1`.
+- Companion changes: PRD `constraints.md` v0.2.0 (allows `git` as documented runtime dep for distribution commands), Architecture `strategy.md` v0.2.2 (scopes the network exception to distribution commands).
+- Implementation: new `src/distribution/network.rs` module; no changes to existing ADR-003/004/005 contracts.
+
 ### v0.10.0 — 2026-06-27 — Epic H Release Readiness
 
 - **Epic H (Release Readiness)** fully implemented and archived
