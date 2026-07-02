@@ -202,10 +202,17 @@ pub struct StateStore {
 impl StateStore {
     /// Opens the state store, creating the directory and empty file if needed.
     pub fn open() -> Result<Self, StateError> {
-        let dir = state_dir()?;
-        fs::create_dir_all(&dir)?;
+        Self::open_at(&state_dir()?)
+    }
+
+    /// Opens the state store at an explicit directory.
+    ///
+    /// This is primarily useful for tests and for tooling that needs to manage
+    /// an alternative state location without mutating environment variables.
+    pub fn open_at(dir: &Path) -> Result<Self, StateError> {
+        fs::create_dir_all(dir)?;
         #[cfg(unix)]
-        set_dir_mode(&dir, STATE_DIR_MODE)?;
+        set_dir_mode(dir, STATE_DIR_MODE)?;
 
         let path = dir.join("installed.yaml");
         let state = if path.exists() {
@@ -310,6 +317,9 @@ impl StateStore {
             }
         }
 
+        #[cfg(unix)]
+        set_file_mode(&tmp_path, STATE_FILE_MODE)?;
+
         fs::rename(&tmp_path, path)?;
         Ok(())
     }
@@ -337,11 +347,21 @@ fn home_dir() -> Result<PathBuf, StateError> {
 
 #[cfg(unix)]
 fn set_dir_mode(dir: &Path, mode: u32) -> io::Result<()> {
+    set_mode(dir, mode)
+}
+
+#[cfg(unix)]
+fn set_file_mode(path: &Path, mode: u32) -> io::Result<()> {
+    set_mode(path, mode)
+}
+
+#[cfg(unix)]
+fn set_mode(path: &Path, mode: u32) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
-    let metadata = fs::metadata(dir)?;
+    let metadata = fs::metadata(path)?;
     let mut permissions = metadata.permissions();
     permissions.set_mode(mode);
-    fs::set_permissions(dir, permissions)
+    fs::set_permissions(path, permissions)
 }
 
 /// Returns the current time as an RFC 3339 / ISO 8601 string.
@@ -410,6 +430,8 @@ mod tests {
     use super::*;
     use std::sync::Mutex;
 
+    // Serialises tests that touch the real state directory path. Tests that
+    // need an isolated directory use `StateStore::open_at` instead.
     static STATE_LOCK: Mutex<()> = Mutex::new(());
 
     fn temp_state_dir(name: &str) -> PathBuf {
@@ -419,31 +441,27 @@ mod tests {
             .join(name)
     }
 
-    fn with_temp_xdg<F>(name: &str, f: F)
+    fn with_temp_store<F>(name: &str, f: F)
     where
-        F: FnOnce(),
+        F: FnOnce(StateStore),
     {
         let _lock = STATE_LOCK.lock().unwrap();
         let dir = temp_state_dir(name);
         let _ = fs::remove_dir_all(&dir);
-        let xdg = dir.join("xdg_config");
-        unsafe {
-            std::env::set_var("XDG_CONFIG_HOME", &xdg);
-        }
-        f();
+        let store = StateStore::open_at(&dir).unwrap();
+        f(store);
         let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn creates_state_dir_with_mode_700() {
-        with_temp_xdg("dir_mode", || {
-            let _store = StateStore::open().unwrap();
-            let dir = state_dir().unwrap();
+        with_temp_store("dir_mode", |store| {
+            let dir = store.path().parent().unwrap();
             assert!(dir.exists());
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let mode = fs::metadata(&dir).unwrap().permissions().mode();
+                let mode = fs::metadata(dir).unwrap().permissions().mode();
                 assert_eq!(mode & 0o777, 0o700);
             }
         });
@@ -451,26 +469,49 @@ mod tests {
 
     #[test]
     fn creates_empty_state_file() {
-        with_temp_xdg("empty_file", || {
-            let store = StateStore::open().unwrap();
+        with_temp_store("empty_file", |store| {
             assert!(store.path().exists());
             assert_eq!(store.state().version, STATE_VERSION);
             assert!(store.skills().is_empty());
             let content = fs::read_to_string(store.path()).unwrap();
-            assert!(content.contains("version: 1"));
-            assert!(content.contains("skills: []"));
+            assert_eq!(content.trim(), "version: 1\nskills: []");
         });
     }
 
     #[test]
     fn state_file_has_mode_600() {
-        with_temp_xdg("file_mode", || {
-            let _store = StateStore::open().unwrap();
-            let path = state_dir().unwrap().join("installed.yaml");
+        with_temp_store("file_mode", |store| {
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
-                let mode = fs::metadata(&path).unwrap().permissions().mode();
+                let mode = fs::metadata(store.path()).unwrap().permissions().mode();
+                assert_eq!(mode & 0o777, 0o600);
+            }
+        });
+    }
+
+    #[test]
+    fn state_file_mode_600_persists_for_existing_tmp() {
+        with_temp_store("file_mode_existing_tmp", |mut store| {
+            // Pre-create a temp file with liberal permissions to ensure the
+            // final state file still ends up as 0o600.
+            let tmp = store.path().with_extension("tmp");
+            fs::write(&tmp, b"stale").unwrap();
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mut perms = fs::metadata(&tmp).unwrap().permissions();
+                perms.set_mode(0o644);
+                fs::set_permissions(&tmp, perms).unwrap();
+            }
+
+            store.upsert(dummy_skill("one"));
+            store.save().unwrap();
+
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let mode = fs::metadata(store.path()).unwrap().permissions().mode();
                 assert_eq!(mode & 0o777, 0o600);
             }
         });
@@ -478,8 +519,7 @@ mod tests {
 
     #[test]
     fn upsert_sorts_skills_alphabetically() {
-        with_temp_xdg("upsert_sort", || {
-            let mut store = StateStore::open().unwrap();
+        with_temp_store("upsert_sort", |mut store| {
             store.upsert(dummy_skill("charlie"));
             store.upsert(dummy_skill("alpha"));
             store.upsert(dummy_skill("bravo"));
@@ -492,8 +532,7 @@ mod tests {
 
     #[test]
     fn remove_deletes_record() {
-        with_temp_xdg("remove_record", || {
-            let mut store = StateStore::open().unwrap();
+        with_temp_store("remove_record", |mut store| {
             store.upsert(dummy_skill("keep"));
             store.upsert(dummy_skill("drop"));
             store.save().unwrap();
@@ -506,15 +545,53 @@ mod tests {
     }
 
     #[test]
-    fn xdg_config_home_overrides_default() {
-        with_temp_xdg("xdg_override", || {
-            let store = StateStore::open().unwrap();
-            let expected = std::env::var("XDG_CONFIG_HOME")
-                .map(PathBuf::from)
-                .unwrap()
-                .join("skillprism/installed.yaml");
-            assert_eq!(store.path(), expected);
+    fn roundtrip_preserves_full_record() {
+        with_temp_store("roundtrip", |mut store| {
+            let original = InstalledSkill {
+                name: "my-skill".to_string(),
+                source: "owner/repo".to_string(),
+                source_url: "https://github.com/owner/repo.git".to_string(),
+                source_type: SourceType::GitHub,
+                r#ref: Some("abc123".to_string()),
+                skill_path: Some("skills/pdf".to_string()),
+                scope: InstallScope::Project,
+                harnesses: vec!["claude".to_string(), "opencode".to_string()],
+                format: SkillFormat::Skillprism,
+                installed_at: "2026-07-02T14:23:45Z".to_string(),
+                updated_at: "2026-07-02T14:23:45Z".to_string(),
+                files: vec![InstalledFile {
+                    path: ".claude/skills/my-skill/SKILL.md".to_string(),
+                    hash: "sha256:abc123".to_string(),
+                }],
+            };
+            store.upsert(original.clone());
+            store.save().unwrap();
+
+            let reloaded = StateStore::open_at(store.path().parent().unwrap()).unwrap();
+            assert_eq!(reloaded.skills().len(), 1);
+            assert_eq!(reloaded.skills()[0], original);
         });
+    }
+
+    #[test]
+    fn xdg_config_home_overrides_default() {
+        let _lock = STATE_LOCK.lock().unwrap();
+        let dir = temp_state_dir("xdg_override");
+        let _ = fs::remove_dir_all(&dir);
+        let xdg = dir.join("xdg_config");
+        let prev = std::env::var("XDG_CONFIG_HOME").ok();
+        unsafe {
+            std::env::set_var("XDG_CONFIG_HOME", &xdg);
+        }
+
+        assert_eq!(state_dir().unwrap(), xdg.join("skillprism"));
+
+        if let Some(prev) = prev {
+            unsafe { std::env::set_var("XDG_CONFIG_HOME", prev) };
+        } else {
+            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
+        }
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -532,9 +609,7 @@ mod tests {
             std::env::set_var("HOME", &home);
         }
 
-        let expected = home.join(".config/skillprism/installed.yaml");
-        let store = StateStore::open().unwrap();
-        assert_eq!(store.path(), expected);
+        assert_eq!(state_dir().unwrap(), home.join(".config/skillprism"));
 
         if let Some(xdg) = prev_xdg {
             unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg) };
@@ -551,22 +626,21 @@ mod tests {
 
     #[test]
     fn atomic_write_is_atomic() {
-        with_temp_xdg("atomic", || {
-            let mut store = StateStore::open().unwrap();
+        with_temp_store("atomic", |mut store| {
             store.upsert(dummy_skill("one"));
             store.save().unwrap();
-            let tmp = state_dir().unwrap().join("installed.tmp");
+            let tmp = store.path().with_extension("tmp");
             assert!(!tmp.exists(), "temp file should be renamed away");
         });
     }
 
     #[test]
     fn unsupported_version_rejected() {
-        with_temp_xdg("bad_version", || {
-            let dir = state_dir().unwrap();
-            fs::create_dir_all(&dir).unwrap();
+        with_temp_store("bad_version", |store| {
+            let dir = store.path().parent().unwrap();
+            fs::create_dir_all(dir).unwrap();
             fs::write(dir.join("installed.yaml"), "version: 99\nskills: []\n").unwrap();
-            let err = StateStore::open().unwrap_err();
+            let err = StateStore::open_at(dir).unwrap_err();
             assert!(matches!(
                 err,
                 StateError::UnsupportedVersion { version: 99 }
