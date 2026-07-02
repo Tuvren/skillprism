@@ -9,7 +9,7 @@ let
     version = "0.163.3";
     src = pkgs.fetchurl {
       url = "https://github.com/gohugoio/hugo/releases/download/v${version}/hugo_extended_${version}_linux-amd64.tar.gz";
-      sha256 = "0ymz42r1785shpnq9rc14jfxf34fi10l1gn5l7xjlnd4x5crjwr5";
+      sha256 = "1gyiqizqwgk9dm9k06hzhp2szw5li6fadajjqbrcwrqirqp30d0j";
     };
     sourceRoot = ".";
     installPhase = ''
