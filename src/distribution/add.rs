@@ -12,28 +12,4 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
-
-mod cli;
-mod distribution;
-mod engine;
-mod loader;
-mod registry;
-mod resolver;
-mod router;
-mod scaffold;
-mod state;
-mod types;
-mod validator;
-
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 && args[1] == "__generate_man" {
-        if let Err(e) = cli::generate_man_page() {
-            eprintln!("{e:?}");
-            std::process::exit(1);
-        }
-        return;
-    }
-    cli::run();
-}
+//! Placeholder for the `add` command implementation (DIST-I002).

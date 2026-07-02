@@ -12,28 +12,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#![deny(clippy::all, clippy::pedantic, clippy::nursery)]
+//! Distribution CLI commands: add, list, remove, update.
 
-mod cli;
-mod distribution;
-mod engine;
-mod loader;
-mod registry;
-mod resolver;
-mod router;
-mod scaffold;
-mod state;
-mod types;
-mod validator;
+// Placeholder modules; dead-code warnings are temporary until each command is
+// implemented in its milestone.
+#![allow(dead_code)]
 
-fn main() {
-    let args: Vec<String> = std::env::args().collect();
-    if args.len() > 1 && args[1] == "__generate_man" {
-        if let Err(e) = cli::generate_man_page() {
-            eprintln!("{e:?}");
-            std::process::exit(1);
-        }
-        return;
-    }
-    cli::run();
-}
+pub mod add;
+pub mod list;
+pub mod network;
+pub mod remove;
+pub mod source;
+pub mod update;
