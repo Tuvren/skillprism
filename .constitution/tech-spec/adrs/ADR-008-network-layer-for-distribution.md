@@ -51,7 +51,7 @@ For non-GitHub hosts (GitLab, self-hosted), only layer 1 is used. The auth chain
   - Supports the full git URL space: private SSH-key repos, GitLab, self-hosted, refs (branch/tag/SHA), subpaths.
   - Honors ADR-003 (single crate — new code in `src/distribution/network.rs`).
   - Honors ADR-004 (synchronous — `Command::status` is blocking, no async runtime).
-  - Honors ADR-005 (atomic writes — downloaded files written via the existing `Router::write` infrastructure).
+  - Honors ADR-005 (atomic writes — rendered output is written via the existing `Router::write`; plain-format assets are copied via the existing `copy_assets` helper at `src/router/write.rs:34`; the state file uses the same temp-rename pattern. `Router::write` is the rendered-output writer, not a unified write path; copying a file is not a render).
   - Binary stays small (~500KB saved vs `ureq` + `rustls`).
 - **Negative:**
   - Adds a documented external dependency on `git` for the `add`/`update` commands only.

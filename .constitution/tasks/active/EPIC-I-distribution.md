@@ -53,7 +53,7 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
     - name: my-skill
       source: anthropics/skills@pdf                   # the input string the user passed
       sourceUrl: https://github.com/anthropics/skills.git
-      sourceType: github                              # github | gitlab | git | local | wellknown
+      sourceType: github                              # github | gitlab | git | local
       ref: main                                       # branch/tag/SHA at install time (null for local)
       skillPath: skills/pdf                           # subpath within the source (null if root)
       scope: project                                  # project | user
@@ -67,6 +67,10 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
         - path: .claude/skills/my-skill/references/api.md
           hash: sha256:def456...
   ```
+
+  **Field order and merge friendliness:** the top-level keys are emitted in declaration order (`version`, `skills`); the `skills[]` array is sorted alphabetically by `name`; per-record keys are emitted in declaration order. This matches Vercel's `src/local-lock.ts:80-85` pattern (alphabetical sort for deterministic output and clean git diffs) and prevents the implementation PR from picking a `serde` default that produces hard-to-merge diffs on concurrent updates.
+
+  **File mode:** `installed.yaml` is created with mode `0o600` (owner read/write only) via an explicit `OpenOptions::create().write(true).mode(0o600)`, matching the directory's `0o700` per-user guarantee. The umask-default `0o644` is NOT acceptable — the file contains source URLs, refs, and per-file SHA-256 hashes of every installed skill and must be unreadable to other users on the box.
 
   **Atomicity model:** every mutation of the state file (add, remove, update) MUST read the entire `installed.yaml`, compute the new in-memory state, and rewrite the entire file via a single temp-rename (the same ADR-005 pattern the build pipeline uses for output files). Per-record atomicity is not enough — partial-state writes would split the file across records.
 
@@ -128,7 +132,7 @@ And the state file is atomically rewritten
 
   **Auto-detection (per spike §4.3 + the existing loader's `find_template_path` contract):** the discriminator is *what the template file actually contains*, not which sibling files exist. For each skill directory, locate the template via the existing `find_template_path` from `src/loader/project.rs:121` (which returns one of `SKILL.md.j2`, `SKILL.md`, or `None` — the existing `(j2, bare, ambiguous)` matching is the canonical source-of-truth and MUST be reused, not re-implemented).
 
-  **Visibility fix (P1 from PR #15 review):** `find_template_path` and `discover_asset_dirs` are currently module-private in `src/loader/project.rs`. The new `src/distribution/` module needs to call them. The implementation PR MUST lift them to `pub(crate)` in `src/loader/project.rs:121` and `src/loader/project.rs:257` and re-export them through `src/loader/mod.rs` (currently empty). This is the minimum-surface change — no free-function extraction needed. The `copy_assets` helper at `src/router/write.rs:34` is already `pub` and is the right reference for the asset-copy side.
+  **Visibility fix (P1 from PR #15 review):** `find_template_path` and `discover_asset_dirs` are currently module-private in `src/loader/project.rs`. The new `src/distribution/` module needs to call them. The implementation PR MUST lift them to `pub(crate)` in `src/loader/project.rs:121` and `src/loader/project.rs:257` and add explicit re-exports to `src/loader/mod.rs` (which already contains `mod project;` and `pub use project::*;` — the lift adds `pub use project::find_template_path;` and `pub use project::discover_asset_dirs;` rather than starting from an empty file). This is the minimum-surface change — no free-function extraction needed. The `copy_assets` helper at `src/router/write.rs:34` is already `pub` and is the right reference for the asset-copy side.
 
   1. **Template absent** → the directory is not a skill; the walk skips it.
   2. **Both `SKILL.md` and `SKILL.md.j2` exist** → the skill is **ambiguous**; `add` MUST surface `ProjectError::AmbiguousTemplate` verbatim, matching the `init` / `build` flow.
@@ -138,7 +142,7 @@ And the state file is atomically rewritten
 
   **Note on the bare-SKILL.md citation:** the test at `src/loader/project.rs:405` (`load_valid_project_with_bare_skill_md`) verifies the loader maps a bare `SKILL.md` to the template path; it does not run the renderer. The MiniJinja render behavior is the engine's responsibility. The contract that "a bare `SKILL.md` is a MiniJinja template" is grounded in the docstring at `src/loader/project.rs:117-120` and in the existing render path (DIST-I006 should add a test that invokes the engine on a bare `SKILL.md` containing `{{` markers to anchor the claim).
 
-  `skill.yaml` is not a discriminator — it is consulted only when rendering a `skillprism-format` skill, to populate the variable context. The `--target` flag (default: project) controls where output is written (reuses `TargetScope`, but `add` only accepts `project` and `user` — see Gherkin below for the `dist` rejection). The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer (per DIST-I001 schema). Overwrite confirmation applies per existing safety model unless `--force`.
+  `skill.yaml` is not a discriminator — it is consulted only when rendering a `skillprism-format` skill, to populate the variable context. The `--target` flag (default: project) controls where output is written. **`add` enforces `--target` at parse time via a restricted `InstallScope { Project, User }` enum** (not the full `TargetScope` enum used by `build`) — clap rejects `dist` with a parse error (exit code 2) before the command runs. This pins the parse-time vs runtime check decision the earlier commit deferred. The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer (per DIST-I001 schema). Overwrite confirmation applies per existing safety model unless `--force`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a skillprism-format skill repo with skill.yaml + SKILL.md
@@ -160,6 +164,42 @@ Given a multi-skill repo with skills "alpha" and "beta"
 When the user runs `skillprism add owner/repo --skill alpha`
 Then only the "alpha" skill is installed
 And "beta" is not installed
+
+# Source form Gherkin (v1 — Vercel parity per spike §4.3)
+
+Given a public GitHub repo accessible via the `github:owner/repo` prefix
+When the user runs `skillprism add github:anthropics/skills`
+Then the prefix is normalized to `https://github.com/anthropics/skills.git`
+And the install proceeds the same as the `owner/repo` shorthand
+
+Given a GitLab.com repo accessible via the `gitlab:owner/repo` prefix
+When the user runs `skillprism add gitlab:mygroup/myskill`
+Then the prefix is normalized to `https://gitlab.com/mygroup/myskill.git`
+And the install proceeds
+
+Given a public GitHub repo with a tree URL including branch and subpath
+When the user runs `skillprism add https://github.com/owner/repo/tree/main/skills/pdf`
+Then the URL is normalized to clone `https://github.com/owner/repo.git` with `--branch main` and the source-walk is scoped to the `skills/pdf` subpath
+
+Given a self-hosted GitLab instance at `https://gitlab.example.com/`
+When the user runs `skillprism add https://gitlab.example.com/team/project`
+Then the install proceeds with `https://gitlab.example.com/team/project.git` (no `gh` fallback — the chain is git → SSH, GitLab-only)
+
+Given the source `owner/repo` and a `ref` fragment
+When the user runs `skillprism add owner/repo#v1.2.3`
+Then the install fetches the tag `v1.2.3` (not the default branch) and records `ref: v1.2.3` in the state
+
+Given the source `owner/repo` and a `ref` and `skill` fragment
+When the user runs `skillprism add owner/repo#main@pdf`
+Then the install fetches `main` and filters to the `pdf` skill only (same as `--skill pdf`)
+
+Given a `.well-known/agent-skills/index.json` endpoint published at `https://example.com/.well-known/agent-skills/index.json`
+When the user runs `skillprism add https://example.com`
+Then the index is fetched and the listed skills are installed per the manifest
+
+Given a source alias `coinbase/agentWallet` mapped to `coinbase/agentic-wallet-skills` in the alias map
+When the user runs `skillprism add coinbase/agentWallet`
+Then the alias is resolved to `coinbase/agentic-wallet-skills` and the install proceeds
 
 Given a repo with skills targeting claude and opencode
 When the user runs `skillprism add owner/repo --harnesses claude`
@@ -274,6 +314,8 @@ And the exit code is 0
 - **Description:** Implement the `skillprism remove [skills...]` command (alias: `rm`). Removes installed skills from the filesystem and the state tracking layer. The `--target` flag filters by scope. The `--harnesses` flag (`-H`, comma-separated) removes only from a specific harness's directory. The `--all` flag removes all installed skills. Interactive confirmation is shown unless `--force` is passed (the same flag name as the existing `build` command's skip-confirmation behavior; using `--force` for consistency, not `--yes`). Removal respects scope confinement (never deletes outside the determined scope path). After removing files, the state record is updated atomically per the DIST-I001 atomicity model.
 
   **Note on `--target dist`:** the `TargetScope::Dist` enum variant exists for `build --target dist` (writes to `./dist/` for inspection) but is not an install target — `add` and `remove` only operate on `project` and `user` scopes. The `--all` flag MUST therefore iterate `project` + `user` only, never `dist`; iterating `dist` would risk deleting files that were never installed and could nuke unrelated build output.
+
+  **Known UX sharp edge (P2 from PR #15 round 2):** `skillprism remove --all --force` silently removes every installed skill across both `project` and `user` scopes with no preview. The implementation PR MUST mitigate this — two reasonable contracts: (a) print the affected skills (name + scope) to stdout before deleting, and require the user to confirm with a final `y/N` prompt even when `--force` is set; or (b) require an additional `--all-scopes` flag to cross the project/user boundary (so `remove --all --force` defaults to the current scope, and `remove --all --force --all-scopes` is the explicit cross-scope variant). The planning doc pins the contract as one of (a) or (b); the implementation PR picks.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an installed skill "my-skill" in project scope for claude and opencode
@@ -318,6 +360,10 @@ And the exit code is 1
 - **Description:** Implement the `skillprism update [skills...]` command. For each named skill (or all if none named), re-fetches the source at the latest version (per the spike's fetch mechanism in DIST-I002), re-renders/re-copies, and decides whether each file needs writing via per-file SHA-256 comparison against the `files` array stored in the state record (per spike §4.5). Only files whose hash differs from the stored hash are written, via the same atomic-write infrastructure as the build pipeline. The existing `Router::diff` is the display-only diff renderer used solely for the `--diff` flag's user-facing output, not as the change test.
 
   If a skill is already at the latest version (same `ref` in the upstream), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--force` flag skips confirmation (same flag name as `build`, `add`, and `remove`; using `--force` for consistency, not `--yes`). Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
+
+  **"At the latest ref" check (P1 from PR #15 round 2):** the upstream ref is established via `git ls-remote <url> <ref-spec>` — a lightweight, sub-second query that returns the SHA-1 the remote resolves the ref to, without cloning. The `git clone --depth 1` from DIST-I002 only runs when the SHA differs (or on first call, when no baseline exists). This keeps `update` cheap for the no-op case (which is the common case: most days, most skills are at the latest ref). The 5-minute timeout from the spike's fetch mechanism applies to the `git clone` path, not to the `ls-remote` query (which has a much shorter default timeout in `git` itself).
+
+  **CLI flag consistency:** the `--diff` flag SHOULD have `dry-run` as a `visible_alias` (matching the existing `build --diff --dry-run` surface at `src/cli.rs:50`), so `skillprism update --dry-run` is a natural user expectation. The implementation PR is responsible for the alias; this planning doc just pins the intent.
 
   **CLI flag consistency:** the `--diff` flag SHOULD have `dry-run` as a `visible_alias` (matching the existing `build --diff --dry-run` surface at `src/cli.rs:50`), so `skillprism update --dry-run` is a natural user expectation. The implementation PR is responsible for the alias; this planning doc just pins the intent.
 - **Acceptance Criteria (Gherkin):**
@@ -392,7 +438,9 @@ And the state record is updated to version B
 - **Dependencies:** DIST-I002, DIST-I003, DIST-I004, DIST-I005
 - **Description:** Update the README, CHANGELOG, Hugo website docs, and CLI reference to cover the new distribution commands. Add a "Distribution" section to the website (install from remote sources, the add/list/remove/update workflow, auto-detection of skillprism vs plain format, per-harness rendering on install, the `git` runtime dependency for distribution commands). Update the CLI reference page with the new commands and flags. Update the homepage to position skillprism as a distribution CLI with per-harness templating, not just a build tool. Add a "skillprism vs Vercel skills CLI" comparison page that is honest about what each tool does, grounded in the spike's analysis (Vercel's `simple-git` + `gh` + SSH fallback; skillprism's direct `git` shell-out). Update AGENTS.md with any new devenv commands.
 
-  **In addition:** update `Cargo.toml`'s `description` field (line 7) to reflect the v1.0.0 positioning. The current `"Build-time compiler for multi-harness agent skills"` is visibly wrong once Epic I ships — the package description is what `cargo search`, `cargo install --dry-run`, and clap's `#[command(about)]` (currently at `src/cli.rs:32`) all surface to the user. The new description MUST drop "build-time" and position skillprism as a distribution CLI with per-harness templating, in line with the README and Hugo homepage rewrites.
+  **In addition:** update `Cargo.toml`'s `description` field (line 6) to reflect the v1.0.0 positioning. The current `"Build-time compiler for multi-harness agent skills"` is visibly wrong once Epic I ships — the package description is what `cargo search`, `cargo install --dry-run`, and clap's `#[command(about)]` (currently at `src/cli.rs:32`) all surface to the user. The new description MUST drop "build-time" and position skillprism as a distribution CLI with per-harness templating, in line with the README and Hugo homepage rewrites.
+
+  **Completions test update:** the `completions_bash_includes_subcommands` test at `src/cli.rs:593-615` currently asserts on the exact strings `"build"`, `"validate"`, `"init"`, `"completions"`. The implementation PR MUST update this test (or add an equivalent) to assert on the new subcommands `add`, `list`, `remove`, `update` (and any aliases — e.g., `ls` for `list`, `rm` for `remove`). Without this, the first completions run after Epic I lands will fail CI on a stale assertion.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given the Hugo website at site/
