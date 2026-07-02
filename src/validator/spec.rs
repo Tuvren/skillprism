@@ -110,22 +110,21 @@ pub fn check_spec(
 
     // --- name length: error over harness cap, warn over spec cap (if within harness) ---
     let name_max = harness.capabilities.name_max_length;
-    if name.len() > name_max {
+    let name_len = name.chars().count();
+    if name_len > name_max {
         errors.push(SpecError {
-            kind: SpecErrorKind::NameExceedsHarness { len: name.len(), max: name_max },
+            kind: SpecErrorKind::NameExceedsHarness { len: name_len, max: name_max },
             detail: format!(
-                "name is {len} characters but {harness_name} ({harness_id}) allows at most {name_max}",
-                len = name.len()
+                "name is {name_len} characters but {harness_name} ({harness_id}) allows at most {name_max}"
             ),
         });
-    } else if name.len() > SPEC_NAME_MAX {
+    } else if name_len > SPEC_NAME_MAX {
         // Only reachable when harness cap > spec cap (e.g. codex allows 100).
         warnings.push(SpecWarning {
             message: format!(
-                "name is {len} characters — over the spec's portable cap of {SPEC_NAME_MAX} \
+                "name is {name_len} characters — over the spec's portable cap of {SPEC_NAME_MAX} \
                  but within {harness_name}'s cap of {name_max}. The skill builds for \
-                 {harness_id} but may not be portable to harnesses with stricter limits.",
-                len = name.len()
+                 {harness_id} but may not be portable to harnesses with stricter limits."
             ),
         });
     }
@@ -172,9 +171,10 @@ pub fn check_spec(
         if compat_len == 0 {
             errors.push(SpecError {
                 kind: SpecErrorKind::CompatibilityEmpty,
-                detail: "compatibility is present but empty — the Agent Skills spec requires it \
-                         to be 1-{SPEC_COMPATIBILITY_MAX} characters when provided"
-                    .to_string(),
+                detail: format!(
+                    "compatibility is present but empty — the Agent Skills spec requires it \
+                     to be 1-{SPEC_COMPATIBILITY_MAX} characters when provided"
+                ),
             });
         } else if compat_len > SPEC_COMPATIBILITY_MAX {
             errors.push(SpecError {
