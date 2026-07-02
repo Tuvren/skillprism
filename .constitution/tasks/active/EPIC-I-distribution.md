@@ -53,7 +53,7 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
     - name: my-skill
       source: anthropics/skills@pdf                   # the input string the user passed
       sourceUrl: https://github.com/anthropics/skills.git
-      sourceType: github                              # github | gitlab | git | local
+      sourceType: github                              # github | gitlab | git | local | wellknown
       ref: main                                       # branch/tag/SHA at install time (null for local)
       skillPath: skills/pdf                           # subpath within the source (null if root)
       scope: project                                  # project | user
@@ -401,7 +401,7 @@ And the exit code is 1
 ```gherkin
 Given an installed skill "my-skill" at ref "abc123"
 When a newer ref "def456" is available and the user runs `skillprism update my-skill --force`
-Then the latest source is fetched via `git fetch` + checkout in the temp dir (or full re-clone — implementation choice)
+Then a fresh clone of the latest source is fetched via `git clone --depth 1 --branch def456 <url> <tempdir>` (full re-clone, not `git fetch` against a prior checkout — the per-file SHA-256 + atomic-rename infrastructure from DIST-I001 is designed around a fresh temp dir)
 And the new rendered output is computed per file
 And the SHA-256 of each file is compared against the state record's `files` array
 And only files whose hash differs are written atomically
