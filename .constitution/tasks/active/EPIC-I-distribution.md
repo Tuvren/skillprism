@@ -87,15 +87,15 @@ And the state file is atomically rewritten
 - **Type:** Feature
 - **Effort:** 8
 - **Dependencies:** DIST-I001, DIST-I002
-- **Description:** Implement the `skillprism add <source>` command. The source is a git URL, GitHub owner/repo shorthand, or local path. The command fetches the source (per the spike recommendation), walks it for skill directories, and for each skill auto-detects the format. **Auto-detection rules (explicit, non-overlapping):** the discriminator is *what's actually in the file*, not which sibling files exist. For each skill directory, locate the template via the existing `find_template_path` from `src/loader/project.rs:121` (one of `SKILL.md.j2`, `SKILL.md`, or `None`):
+- **Description:** Implement the `skillprism add <source>` command. The source is a git URL, GitHub owner/repo shorthand, or local path. The command fetches the source (per the spike recommendation — DIST-I001), walks it for skill directories, and for each skill auto-detects the format. **Auto-detection (semantic contract only; the detection methodology is owned by this ticket's implementation PR):** the discriminator is *what the template file actually contains*, not which sibling files exist. For each skill directory, locate the template via the existing `find_template_path` from `src/loader/project.rs:121` (which returns one of `SKILL.md.j2`, `SKILL.md`, or `None` — the existing `(j2, bare, ambiguous)` matching is the canonical source-of-truth and MUST be reused, not re-implemented):
 
-  1. **Template absent** (neither `SKILL.md` nor `SKILL.md.j2` exists) → the directory is not a skill. The walk skips it (no `add` per-directory action; the empty-repo behavior is Gherkin-pinned below).
-  2. **Both `SKILL.md` and `SKILL.md.j2` exist** → the skill is **ambiguous** and `add` MUST surface `ProjectError::AmbiguousTemplate` verbatim, matching the `init` / `build` flow. This is the existing loader's rule and is re-used as-is.
-  3. **Exactly one template file exists** → scan the template's text for MiniJinja markers (`{{` or `{%`, ignoring marker spans inside fenced code blocks). The implementation of the marker scan is owned by DIST-I003 — the planning doc only pins the contract:
-     - **Markers present** (`skillprism-format`) → render per configured harness via the existing Load → Resolve → Validate → Render pipeline. The skill is recorded in the state layer with `format: skillprism`.
-     - **Markers absent** (`plain-format`) → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`) **plus** copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` rule from `src/loader/project.rs:257` and `copy_assets` from `src/router/write.rs:34` (`add` MUST reuse them, not re-implement). The skill is recorded in the state layer with `format: plain`.
+  1. **Template absent** → the directory is not a skill; the walk skips it.
+  2. **Both `SKILL.md` and `SKILL.md.j2` exist** → the skill is **ambiguous**; `add` MUST surface `ProjectError::AmbiguousTemplate` verbatim, matching the `init` / `build` flow.
+  3. **Exactly one template file exists** → the skill is `skillprism-format` if the template contains any MiniJinja variables (`{{` or `{%`), `plain-format` otherwise. The exact detection method (regex scan, parser-based, etc.) is implementation-owned and may evolve with the spike's findings — the planning doc only pins the *semantic* of "plain-format = a file with no template variables." The semantic matters because the existing loader (`src/loader/project.rs:117-120` and the test at line 405) treats a bare `SKILL.md` as a MiniJinja template, so a plain-format copy MUST only run on files that are actually plain (no markers) — copying a marker-bearing file verbatim would leave unrendered `{{ ... }}` in the installed file.
+     - `skillprism-format` → render per configured harness via the existing Load → Resolve → Validate → Render pipeline. The skill is recorded in the state layer with `format: skillprism`.
+     - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement). The skill is recorded in the state layer with `format: plain`.
 
-  The marker-absence test is the actual semantic definition of "plain" — a file with no template variables is plain by definition, and using it avoids the bug where a bare `SKILL.md` author who happens to ship a `skill.yaml` (e.g., a future-metadata pattern) would be mis-classified. It also avoids MiniJinja corruption: per the doc comment at `src/loader/project.rs:117-120` and the test `load_valid_project_with_bare_skill_md` at line 405, the existing loader treats a bare `SKILL.md` as a MiniJinja template — copying it verbatim without checking for markers would leave unrendered `{{ ... }}` in the installed file. **`find_template_path` visibility:** the existing `find_template_path` on `ProjectLoader` (`src/loader/project.rs:121`) is currently private; the implementation of DIST-I002 or DIST-I003 must make it visible to the new `add` module — the canonical options are making it `pub(crate)` (preferred — keeps the rule in one place) or lifting it to a free function in `src/loader/mod.rs`. The exact visibility change is owned by the implementation PR. **`skill.yaml` is not a discriminator:** its presence or absence has no bearing on the format classification. A `skill.yaml` is consulted only when actually rendering a `skillprism-format` skill, to populate the variable context. **The plain-format path is a new code path** — it writes the template bytes and the discovered asset directories directly to the harness output path, then records the install in the state layer; it does not invoke `Engine::render` (which would MiniJinja-render the file and potentially corrupt a plain author). The `--target` flag (default: project) controls where output is written (reuses `TargetScope`, but `add` only accepts `project` and `user` — see Gherkin below for the `dist` rejection). The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer. Overwrite confirmation applies per existing safety model unless `--force`.
+  `skill.yaml` is not a discriminator — it is consulted only when rendering a `skillprism-format` skill, to populate the variable context. The `--target` flag (default: project) controls where output is written (reuses `TargetScope`, but `add` only accepts `project` and `user` — see Gherkin below for the `dist` rejection). The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer. Overwrite confirmation applies per existing safety model unless `--force`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a skillprism-format skill repo with skill.yaml + SKILL.md
@@ -152,7 +152,7 @@ And the installed skill is recorded in the state tracking layer with format: pla
 Given a bare SKILL.md that contains MiniJinja markers (e.g. `# {{ name }}`), with no skill.yaml
 When the user runs `skillprism add owner/repo --skill that-skill`
 Then that skill is auto-detected as skillprism-format (markers present, independent of skill.yaml)
-And the engine fails the render with a clear "no variable context" validation error (consistent with how `build` would fail on the same input)
+And the render fails the same way `build` would fail on the same input (variable context is missing)
 And no files are written
 And the state tracking layer is not modified
 
@@ -205,23 +205,23 @@ And the exit code is 0
 - **Type:** Feature
 - **Effort:** 3
 - **Dependencies:** DIST-I002
-- **Description:** Implement the `skillprism remove [skills...]` command (alias: `rm`). Removes installed skills from the filesystem and the state tracking layer. The `--target` flag filters by scope. The `--harnesses` flag (`-H`, comma-separated) removes only from a specific harness's directory. The `--all` flag removes all installed skills. Interactive confirmation is shown unless `--yes` (`-y`) is passed. Removal respects scope confinement (never deletes outside the determined scope path). After removing files, the state record is updated atomically. **Note on `--target dist`:** the `TargetScope::Dist` enum variant exists for `build --target dist` (writes to `./dist/` for inspection) but is not an install target — `add` and `remove` only operate on `project` and `user` scopes. The `--all` flag MUST therefore iterate `project` + `user` only, never `dist`; iterating `dist` would risk deleting files that were never installed and could nuke unrelated build output.
+- **Description:** Implement the `skillprism remove [skills...]` command (alias: `rm`). Removes installed skills from the filesystem and the state tracking layer. The `--target` flag filters by scope. The `--harnesses` flag (`-H`, comma-separated) removes only from a specific harness's directory. The `--all` flag removes all installed skills. Interactive confirmation is shown unless `--force` is passed (the same flag name as the existing `build` command's skip-confirmation behavior; using `--force` for consistency, not `--yes`). Removal respects scope confinement (never deletes outside the determined scope path). After removing files, the state record is updated atomically. **Note on `--target dist`:** the `TargetScope::Dist` enum variant exists for `build --target dist` (writes to `./dist/` for inspection) but is not an install target — `add` and `remove` only operate on `project` and `user` scopes. The `--all` flag MUST therefore iterate `project` + `user` only, never `dist`; iterating `dist` would risk deleting files that were never installed and could nuke unrelated build output.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an installed skill "my-skill" in project scope for claude and opencode
-When the user runs `skillprism remove my-skill --yes`
+When the user runs `skillprism remove my-skill --force`
 Then the skill files are deleted from .claude/skills/my-skill/ and .opencode/skills/my-skill/
 And the state record for "my-skill" is removed
 And the exit code is 0
 
 Given an installed skill "my-skill" for claude and opencode
-When the user runs `skillprism remove my-skill --harnesses claude --yes`
+When the user runs `skillprism remove my-skill --harnesses claude --force`
 Then only .claude/skills/my-skill/ is deleted
 And .opencode/skills/my-skill/ remains
 And the state record is updated to reflect only opencode
 
 Given 3 installed skills in project scope and 2 in user scope
-When the user runs `skillprism remove --all --yes`
+When the user runs `skillprism remove --all --force`
 Then all 5 installed skills are removed from both project and user scopes
 And the state file is empty
 And the `dist/` directory is NOT touched (dist is a build inspection target, not an install scope)
@@ -232,7 +232,7 @@ Then the command exits with code 2 (clap parse error)
 And the error message names `--target` and lists the valid values: project, user
 
 Given an installed skill "my-skill"
-When the user runs `skillprism remove my-skill` without --yes
+When the user runs `skillprism remove my-skill` without --force
 Then an interactive confirmation prompt is shown
 And if the user declines, no files are deleted
 
@@ -248,11 +248,11 @@ And the exit code is 1
 - **Type:** Feature
 - **Effort:** 5
 - **Dependencies:** DIST-I002, DIST-I003
-- **Description:** Implement the `skillprism update [skills...]` command. For each named skill (or all if none named), re-fetches the source at the latest version, computes the new render output (or copy output for plain-format skills) for the configured harnesses, and decides whether each file needs writing via a content-equality check against the existing file at the target path. Only files whose content actually changed are written. The change-detection method is owned by DIST-I006 when implemented (the spike does not gate it; a simple `String::eq` on read-vs-rendered is the obvious starting point, and `Router::diff` is the existing display-only diff renderer used solely for the `--diff` flag's user-facing output, never as the change test). If a skill is already at the latest version (same SHA), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--yes` flag skips confirmation. Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
+- **Description:** Implement the `skillprism update [skills...]` command. For each named skill (or all if none named), re-fetches the source at the latest version, computes the new render output (or copy output for plain-format skills) for the configured harnesses, and decides whether each file needs writing via a content-equality check against the existing file at the target path. Only files whose content actually changed are written. The change-detection method is owned by DIST-I006 when implemented (the spike does not gate it; the existing `Router::diff` is the display-only diff renderer used solely for the `--diff` flag's user-facing output, not as the change test). If a skill is already at the latest version (same SHA), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--force` flag skips confirmation (same flag name as `build`, `add`, and `remove`; using `--force` for consistency, not `--yes`). Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an installed skill "my-skill" at version "abc123"
-When a newer version "def456" is available and the user runs `skillprism update my-skill --yes`
+When a newer version "def456" is available and the user runs `skillprism update my-skill --force`
 Then the latest source is fetched
 And the new rendered output is compared against the installed files
 And the updated files are written atomically
@@ -271,7 +271,7 @@ Then a unified diff of the changes is printed to stdout
 And no files are modified
 
 Given 3 installed skills with updates available
-When the user runs `skillprism update --yes`
+When the user runs `skillprism update --force`
 Then all 3 skills are updated to their latest versions
 And all state records are updated
 
@@ -301,13 +301,13 @@ When the integration test runs `skillprism list`
 Then stdout contains both skill names with correct metadata
 
 Given both skills are installed
-When the integration test runs `skillprism remove --all --yes`
+When the integration test runs `skillprism remove --all --force`
 Then both skills are removed from all harness paths
 And the state tracking layer is empty
 And `skillprism list` outputs "No skills installed"
 
 Given a skillprism-format skill installed at version A
-When the fixture is updated to version B and the test runs `skillprism update --yes`
+When the fixture is updated to version B and the test runs `skillprism update --force`
 Then the installed files reflect version B
 And the state record is updated to version B
 ```
