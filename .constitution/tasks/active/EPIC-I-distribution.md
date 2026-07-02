@@ -52,7 +52,7 @@ And the spike report is saved to .constitution/spikes/SPK-DIST-I001.md
 - **Type:** Feature
 - **Effort:** 5
 - **Dependencies:** DIST-I001
-- **Description:** Implement a system-wide state tracking layer in `~/.config/skillprism/` that records installed skills. Each install record tracks: skill name, source URL, installed version (git SHA or tag), target scope (project|user), harnesses rendered to, install timestamp. The state file must be human-readable, atomically written (per ADR-005), and survive partial failures. The state file format is fixed to YAML (`installed.yaml`) — matches the rest of the project's `yaml_serde` choice and avoids a parallel JSON reader/writer. The state directory is created with mode `0o700` (per-user only) and is resolved via `XDG_CONFIG_HOME` with `~/.config/skillprism/` fallback. On macOS, `~/.config/` is a non-standard path (Apple's HIG is `~/Library/Application Support/skillprism/`); skillprism follows the XDG convention anyway because `XDG_CONFIG_HOME` is respected by enough cross-platform tooling to outweigh Apple-platform aesthetics, and a future ticket can layer in a macOS-specific path if it becomes a real complaint. A new `src/state/` module encapsulates read/write/query operations. This is the foundation for `list`, `remove`, and `update` — no CLI commands are wired yet. **Concurrency note:** ADR-005's temp-rename protects against partial writes within a single process but does **not** protect against two concurrent `skillprism add` invocations — both readers will compute new state, both will rename, and the second writer silently clobbers the first. v1 of the state layer does not support concurrent `add` calls in the same state directory; the state module MUST document this limitation and MUST recommend running the CLI in a single-writer fashion (CI jobs serialize, humans don't background two `add`s in parallel). A file lock is intentionally out of scope for v1 — add it as a follow-up ticket if real-world usage demands it.
+- **Description:** Implement a system-wide state tracking layer in `~/.config/skillprism/` that records installed skills. Each install record tracks: skill name, source URL, installed version (git SHA or tag), target scope (project|user), harnesses rendered to, install timestamp, and the source-format detection result (skillprism-format vs plain-format) so `update` can re-render consistently. The state file must be human-readable, atomically written (per ADR-005), and survive partial failures. The state file format is fixed to YAML (`installed.yaml`) — matches the rest of the project's `yaml_serde` choice and avoids a parallel JSON reader/writer. The state directory is created with mode `0o700` (per-user only) and is resolved via `XDG_CONFIG_HOME` with `~/.config/skillprism/` fallback. On macOS, `~/.config/` is a non-standard path (Apple's HIG is `~/Library/Application Support/skillprism/`); skillprism follows the XDG convention anyway because `XDG_CONFIG_HOME` is respected by enough cross-platform tooling to outweigh Apple-platform aesthetics, and a future ticket can layer in a macOS-specific path if it becomes a real complaint. A new `src/state/` module encapsulates read/write/query operations. This is the foundation for `list`, `remove`, and `update` — no CLI commands are wired yet. **Concurrency note:** ADR-005's temp-rename protects against partial writes within a single process but does **not** protect against two concurrent `skillprism add` invocations — both readers will compute new state, both will rename, and the second writer silently clobbers the first. v1 of the state layer does not support concurrent `add` calls in the same state directory; the state module MUST document this limitation and MUST recommend running the CLI in a single-writer fashion (CI jobs serialize, humans don't background two `add`s in parallel). A `flock` is intentionally out of scope for v1 — add it as a follow-up ticket if real-world usage demands it. The exact field set, ordering, and timestamp format (`installed.yaml` schema) is owned by DIST-I002 itself when it is implemented — the spike DIST-I001 does not gate this; DIST-I002 should pin the schema in its own implementation PR (with a `tests/fixtures/installed.yaml` and a schema-version field) so this ticket doesn't preempt the implementation design.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a fresh environment with no ~/.config/skillprism/ directory
@@ -87,7 +87,7 @@ And the state file is atomically rewritten
 - **Type:** Feature
 - **Effort:** 8
 - **Dependencies:** DIST-I001, DIST-I002
-- **Description:** Implement the `skillprism add <source>` command. The source is a git URL, GitHub owner/repo shorthand, or local path. The command fetches the source (per the spike recommendation), walks it for skill directories (reusing the existing `find_template_path` discovery logic), and for each skill auto-detects the format: if `skill.yaml` exists alongside `SKILL.md` (or `SKILL.md.j2`), it's skillprism-format → render per configured harness via the existing Load → Resolve → Validate → Render pipeline; if only `SKILL.md` exists, it's plain → copy as-is to each harness's output path. The `--target` flag (default: project) controls where output is written (reuses `TargetScope`). The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer. Overwrite confirmation applies per existing safety model unless `--force`. **Auto-detection rule:** the `add` flow re-uses `find_template_path` from `src/loader/project.rs`, which already treats `(SKILL.md, SKILL.md.j2)` co-presence as `ProjectError::AmbiguousTemplate`; the `add` flow MUST surface that same error verbatim (consistent with `init` / `build`) and not introduce a parallel detection rule. A bare `SKILL.md` without `skill.yaml` is plain-format; `skill.yaml` is required for skillprism-format detection.
+- **Description:** Implement the `skillprism add <source>` command. The source is a git URL, GitHub owner/repo shorthand, or local path. The command fetches the source (per the spike recommendation), walks it for skill directories, and for each skill auto-detects the format. **Auto-detection rules (explicit):** (a) If `skill.yaml` exists alongside `SKILL.md` (or `SKILL.md.j2`), the skill is `skillprism-format` → render per configured harness via the existing Load → Resolve → Validate → Render pipeline; (b) if only `SKILL.md` (or only `SKILL.md.j2`) exists with no `skill.yaml`, the skill is `plain-format` → copy `SKILL.md` (or `SKILL.md.j2` renamed to `SKILL.md`) verbatim to each harness's output path **plus** copy every direct subdirectory of the skill's source directory (the existing `discover_asset_dirs` rule from `src/loader/project.rs:257` and `copy_assets` from `src/router/write.rs:34` already implement this — `add` MUST reuse them, not re-implement); (c) if both `SKILL.md` and `SKILL.md.j2` exist, the skill is **ambiguous** and `add` MUST surface `ProjectError::AmbiguousTemplate` verbatim, matching the `init` / `build` flow. **`find_template_path` visibility:** the existing `find_template_path` on `ProjectLoader` (`src/loader/project.rs:121`) is currently private; the implementation of DIST-I002 or DIST-I003 must make it visible to the new `add` module — the canonical options are making it `pub(crate)` (preferred — keeps the rule in one place) or lifting it to a free function in `src/loader/mod.rs`. The exact visibility change is owned by the implementation PR. The `add` flow MUST NOT introduce a parallel `(j2, bare, ambiguous)` detection rule. **The `add` flow's plain-format path is a *new* code path** — it does not reuse the `Engine::render` pipeline (that pipeline MiniJinja-renders templates, which would corrupt a plain `SKILL.md`). It writes the `SKILL.md` bytes and the discovered asset directories directly to the harness output path, then records the install in the state layer with `format: plain`. The `--target` flag (default: project) controls where output is written (reuses `TargetScope`, but `add` only accepts `project` and `user` — see Gherkin below for the `dist` rejection). The `--skill` flag filters which skills to install from a multi-skill repo. The `--harnesses` flag (`-H`, comma-separated) filters which harnesses to render to (default: all in `skillprism.yaml` or all built-in if no project config) — reuses the flag name from the existing `init project` and `init skill` subcommands for internal consistency. After writing, the command records each installed skill in the state tracking layer. Overwrite confirmation applies per existing safety model unless `--force`.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given a skillprism-format skill repo with skill.yaml + SKILL.md
@@ -115,17 +115,31 @@ When the user runs `skillprism add owner/repo --harnesses claude`
 Then skills are only rendered/copied to .claude/skills/
 And .opencode/skills/ is not written
 
+Given a fetched repo with no skill directories anywhere (no SKILL.md* reachable)
+When the user runs `skillprism add owner/repo`
+Then the command exits with code 1
+And a clear error is printed to stderr naming the source and explaining that no skillprism-format or plain-format skills were found
+And no files are written
+And the state tracking layer is not modified
+
+Given the user invokes `skillprism add` with --target dist
+When clap parses the arguments
+Then the command exits with code 2 (clap parse error)
+And the error message names `--target` and lists the valid values: project, user
+And the state tracking layer is not modified
+
 Given a skill directory containing both SKILL.md and SKILL.md.j2 (ambiguous template)
 When the user runs `skillprism add owner/repo --skill that-skill`
 Then the command fails with ProjectError::AmbiguousTemplate (re-uses the existing loader rule from src/loader/project.rs)
 And no files are written
 And the state tracking layer is not modified
 
-Given a skill directory containing only SKILL.md (no skill.yaml, no SKILL.md.j2)
-When the user runs `skillprism add owner/repo --skill that-skill`
+Given a plain-format skill directory containing only SKILL.md (no skill.yaml, no SKILL.md.j2) but with a `references/` subdirectory
+When the user runs `skillprism add owner/repo --skill that-skill --harnesses claude`
 Then that skill is auto-detected as plain-format
-And the SKILL.md is copied as-is to each harness's project scope path
-And the installed skill is recorded in the state tracking layer as plain-format
+And the SKILL.md is copied as-is to .claude/skills/that-skill/SKILL.md
+And the references/ directory tree is copied to .claude/skills/that-skill/references/ via the existing copy_assets helper
+And the installed skill is recorded in the state tracking layer with format: plain and harnesses: [claude]
 
 Given an already-installed skill "my-skill" at the target scope
 When the user runs `skillprism add owner/repo --skill my-skill` without --force
@@ -197,6 +211,11 @@ Then all 5 installed skills are removed from both project and user scopes
 And the state file is empty
 And the `dist/` directory is NOT touched (dist is a build inspection target, not an install scope)
 
+Given the user invokes `skillprism remove` with --target dist
+When clap parses the arguments
+Then the command exits with code 2 (clap parse error)
+And the error message names `--target` and lists the valid values: project, user
+
 Given an installed skill "my-skill"
 When the user runs `skillprism remove my-skill` without --yes
 Then an interactive confirmation prompt is shown
@@ -214,7 +233,7 @@ And the exit code is 1
 - **Type:** Feature
 - **Effort:** 5
 - **Dependencies:** DIST-I002, DIST-I003
-- **Description:** Implement the `skillprism update [skills...]` command. For each named skill (or all if none named), re-fetches the source at the latest version, compares the new rendered output against the currently installed files (using the existing `--diff` comparison logic), and if there are changes, writes the updated files and updates the state record. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--yes` flag skips confirmation. If a skill is already at the latest version (same SHA), no action is taken and a "up to date" message is printed. Update respects all safety models (atomic writes, scope confinement, overwrite confirmation).
+- **Description:** Implement the `skillprism update [skills...]` command. For each named skill (or all if none named), re-fetches the source at the latest version, computes the new render output (or copy output for plain-format skills) for the configured harnesses, and decides whether each file needs writing via a content-equality check against the existing file at the target path. Only files whose content actually changed are written. The change-detection method is owned by DIST-I006 when implemented (the spike does not gate it; a simple `String::eq` on read-vs-rendered is the obvious starting point, and `Router::diff` is the existing display-only diff renderer used solely for the `--diff` flag's user-facing output, never as the change test). If a skill is already at the latest version (same SHA), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--yes` flag skips confirmation. Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given an installed skill "my-skill" at version "abc123"
