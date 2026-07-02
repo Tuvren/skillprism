@@ -14,12 +14,15 @@
   - The existing `TargetScope` (project/user/dist) and `HarnessPaths` (project_scope_path/user_scope_path) are the install targets
 
 ## 3. Options & Trade-offs
-- **Option A: Git clone (shell out to `git`)** — Zero new Rust deps. Works with any git URL (GitHub, GitLab, private, SSH). Requires `git` on PATH. Consistent with Vercel's approach if they also shell out. Stays synchronous. Risk: depends on external `git` binary being installed and the right version.
-- **Option B: Native HTTP (`ureq` + `rustls`)** — Adds ~2 Rust deps (~500KB binary). Can fetch tarballs/zipballs via GitHub APIs without git. Enables future HTTP registry. Still synchronous. Risk: TLS complexity, larger binary, API rate limits.
+- **Option A: Git clone (shell out to `git`)** — Zero new Rust deps. Works with any git URL (GitHub, GitLab, private, SSH). Requires `git` on PATH. Stays synchronous. Risk: depends on external `git` binary being installed and the right version, **and** conflicts with `.constitution/prd/constraints.md` "single static binary, no runtime deps" (the spike must resolve this — either bias toward Option B or propose a `constraints.md` amendment as a downstream PRD task).
+- **Option B: Native HTTP (`ureq` + `rustls`)** — Adds ~2 Rust deps (~500KB binary). Can fetch tarballs/zipballs via GitHub APIs without git. Enables future HTTP registry. Still synchronous. No external command dependency (compatible with `constraints.md`). Risk: TLS complexity, larger binary, API rate limits.
 - **Option C: Hybrid** — Git clone for repos now, add `ureq`+`rustls` only when a directory/registry API is built later. Smallest dep surface now.
-- **Vercel's actual method (preliminary, to be confirmed by reading source):** — Quick scan of `vercel-labs/skills` `src/git.ts` indicates Vercel uses `simple-git` (a Node wrapper that shells out to the `git` binary) with a `gh` CLI fallback for SSO-blocked HTTPS and an SSH retry path for auth errors. **TODO during spike:** confirm the full sub-path (caching policy, shallow-clone defaults, auth precedence) by reading the actual `src/` tree end-to-end, and verify that no `gh` runtime dependency is required when `gh` is not installed.
+
+## 3.1 Hypothesis (to be tested by the spike, not a finding)
+
+A preliminary scan of `vercel-labs/skills` `src/git.ts` *suggests* Vercel uses `simple-git` (a Node wrapper that shells out to the `git` binary) with a `gh` CLI fallback for SSO-blocked HTTPS and an SSH retry path for auth errors. **This is a starting hypothesis, not a conclusion.** The spike MUST read the actual `vercel-labs/skills` `src/` tree end-to-end and confirm or contradict it (caching policy, shallow-clone defaults, auth precedence, whether `gh` is a hard runtime dependency). The recommendation in §4 must be grounded in the confirmed finding, not the hypothesis.
 
 ## 4. Execution Directives
 - **Chosen Option:** (To be determined by spike research — fill in after reading Vercel's source)
 - **Why it fits:** (To be filled after research)
-- **Downstream Backlog Impact:** Unlocks DIST-I002 (state tracking layer) and DIST-I003 (`add` command implementation). No implementation tickets may proceed until this spike is complete.
+- **Downstream Backlog Impact:** Unlocks DIST-I002 (state tracking layer) and DIST-I003 (`add` command implementation). No implementation tickets may proceed until this spike is complete. If the chosen option requires amending `.constitution/prd/constraints.md` (e.g., to allow a documented external `git` dependency), the spike MUST also propose the amendment text and flag it as a Stage 1 (PRD) follow-up; the implementation PR cannot land until the PRD is updated.
