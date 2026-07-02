@@ -1,5 +1,17 @@
 # Tasks Changelog
 
+## v0.11.0 — Epic I Activated: Distribution CLI
+
+- **Epic I (Distribution CLI)** planned and activated — 8 tickets, 35 story points
+- Expands skillprism from build-time compiler to distribution CLI (Vercel `skills` CLI competitor with per-harness templating)
+- New commands: `add` (fetch + auto-detect + render/copy), `list`, `remove`, `update`
+- Deferred to future epics: `find` (requires directory/registry backend), `use` (render-to-temp + agent launching)
+- Spike DIST-I001 gates all implementation: research Vercel's fetch methodology, recommend skillprism's network layer
+- State tracking via `~/.config/skillprism/` (system-wide, not per-project)
+- Reuses `--target project|user|dist` scope flag, atomic writes, scope confinement, collect-all-errors, `--diff` preview
+- Source format auto-detected per skill directory: skill.yaml + SKILL.md → render per-harness; SKILL.md only → copy as-is
+- PRD non-goal `plugin-marketplace.md` reopened by operator directive — PRD revision flagged as dependency
+
 ## v0.10.0 — Epic H Complete — All Release Readiness Tickets Delivered
 
 - **Epic H (Release Readiness)** fully implemented and archived via `git mv`
