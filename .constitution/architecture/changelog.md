@@ -2,7 +2,7 @@
 
 ### v0.2.2 — 2026-07-02 — Strategy Amendment for Distribution Network Surface
 
-- **Amended `strategy.md` line 24** ("Single-binary constraint") to scope the "no network, no daemon, no IPC" rule to the `build`, `validate`, `init`, and `completions` commands.
+- **Amended `strategy.md` line 24** ("Single-binary core with distribution exception" — the header was renamed from "Single-binary constraint" as part of the same change) to scope the "no network, no daemon, no IPC" rule to the `build`, `validate`, `init`, and `completions` commands.
 - The `add` and `update` distribution commands (Epic I) perform network access by shelling out to `git` for shallow clones; this is the only network surface in skillprism, and it makes no persistent connections, no daemons, and no IPC.
 - Rationale: spike DIST-I001 (`.constitution/spikes/SPK-DIST-I001.md`) recommended `git clone` for fetching. The network access is the necessary consequence; the alternative (native HTTP) was rejected in the spike.
 - Companion change: `ADR-008: Network Layer for Distribution` (new in `.constitution/tech-spec/changelog.md` v0.11.0) documents the design.
