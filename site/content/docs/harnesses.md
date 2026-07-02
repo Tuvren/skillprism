@@ -72,7 +72,6 @@ capabilities:
   supports_subagent: false
   requires_sidecar: false
   requires_manifest: false
-  frontmatter_mode: lenient
   name_max_length: 64
   description_max_length: 1024
 paths:

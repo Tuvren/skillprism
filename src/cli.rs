@@ -183,7 +183,12 @@ fn run_build(
     let t2 = Instant::now();
     let outcome = Validator::validate(pairs);
     for warning in &outcome.warnings {
-        eprintln!("[validate] warning: {}", warning.message);
+        eprintln!(
+            "[validate] warning: {skill} -> {harness}: {message}",
+            skill = warning.skill,
+            harness = warning.harness,
+            message = warning.message
+        );
     }
     if !outcome.errors.is_empty() {
         let error_count = outcome.errors.len();

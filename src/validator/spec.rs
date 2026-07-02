@@ -58,6 +58,8 @@ pub enum SpecErrorKind {
     NameExceedsHarness { len: usize, max: usize },
     /// `compatibility` exceeds the spec's 500-character limit.
     CompatibilityTooLong { len: usize },
+    /// `compatibility` is present but empty; spec requires 1-500 characters.
+    CompatibilityEmpty,
 }
 
 /// A non-fatal portability warning — the value is within the harness cap but over the
@@ -167,7 +169,14 @@ pub fn check_spec(
     // --- compatibility length (spec cap only, no harness-specific cap) ---
     if let Some(compat) = skill.compatibility.as_ref() {
         let compat_len = compat.chars().count();
-        if compat_len > SPEC_COMPATIBILITY_MAX {
+        if compat_len == 0 {
+            errors.push(SpecError {
+                kind: SpecErrorKind::CompatibilityEmpty,
+                detail: "compatibility is present but empty — the Agent Skills spec requires it \
+                         to be 1-{SPEC_COMPATIBILITY_MAX} characters when provided"
+                    .to_string(),
+            });
+        } else if compat_len > SPEC_COMPATIBILITY_MAX {
             errors.push(SpecError {
                 kind: SpecErrorKind::CompatibilityTooLong { len: compat_len },
                 detail: format!(
@@ -424,6 +433,20 @@ mod tests {
         skill.compatibility = None;
         let (errors, _) = check_spec(&skill, &opencode());
         assert!(errors.is_empty());
+    }
+
+    #[test]
+    fn empty_compatibility_rejected() {
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.description = "Does things.".to_string();
+        skill.compatibility = Some(String::new());
+        let (errors, _) = check_spec(&skill, &opencode());
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.kind == SpecErrorKind::CompatibilityEmpty),
+            "empty compatibility should be rejected: {errors:?}"
+        );
     }
 
     #[test]

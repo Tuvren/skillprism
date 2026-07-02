@@ -8,8 +8,8 @@ description: "Build once, ship spec-compliant Agent Skills to every harness from
 <h1>One source,<br><span class="amber">five harnesses.</span></h1>
 <p class="tagline">skillprism is a build-time compiler. Write one <code>skill.yaml</code> + <code>SKILL.md</code> template, compile to Claude Code, Codex, OpenCode, Factory, and Pi — all from a single command. No per-harness copies, no drift.</p>
 <div class="hero-cta">
-<a href="{{% relref "docs/quickstart" %}}" class="btn btn-primary">Quickstart →</a>
-<a href="{{% relref "docs" %}}" class="btn btn-secondary">Read the docs</a>
+<a href="/skillprism/docs/quickstart/" class="btn btn-primary">Quickstart →</a>
+<a href="/skillprism/docs/" class="btn btn-secondary">Read the docs</a>
 </div>
 
 <div class="prism-diagram" aria-hidden="true">

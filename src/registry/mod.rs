@@ -192,7 +192,6 @@ name: OpenCode Custom
 version: 0.1.0
 capabilities:
   supports_subagent: false
-  frontmatter_mode: lenient
 paths:
   project_scope_path: custom/skills
   user_scope_path: custom/skills

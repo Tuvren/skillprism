@@ -140,6 +140,11 @@ pub enum ValidationError {
         harness: String,
         len: usize,
     },
+
+    /// The compatibility note is present but empty.
+    #[error("[{skill}] {harness}: compatibility is empty")]
+    #[diagnostic(help("Remove the field or provide a 1-500 character compatibility note."))]
+    CompatibilityEmpty { skill: String, harness: String },
 }
 
 /// A non-fatal portability warning — the skill builds for this harness, but a value
@@ -326,6 +331,10 @@ fn map_spec_error(
                 len,
             }
         }
+        spec::SpecErrorKind::CompatibilityEmpty => ValidationError::CompatibilityEmpty {
+            skill: skill.name.clone(),
+            harness: harness.id.clone(),
+        },
     }
 }
 
@@ -351,7 +360,8 @@ impl ValidationErrorKey for ValidationError {
             | Self::NameDirectoryMismatch { skill, harness, .. }
             | Self::EmptyDescription { skill, harness }
             | Self::ExceedsHarnessLimit { skill, harness, .. }
-            | Self::CompatibilityTooLong { skill, harness, .. } => (skill, harness),
+            | Self::CompatibilityTooLong { skill, harness, .. }
+            | Self::CompatibilityEmpty { skill, harness } => (skill, harness),
         }
     }
 }

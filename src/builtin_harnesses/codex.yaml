@@ -5,7 +5,6 @@ capabilities:
   supports_subagent: true
   requires_sidecar: true
   requires_manifest: true
-  frontmatter_mode: lenient
   name_max_length: 100
   description_max_length: 500
   supports_allowed_tools: false

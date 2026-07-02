@@ -38,7 +38,6 @@ pub fn scaffold_harness(project_root: &Path, name: &str) -> io::Result<()> {
                 supports_subagent: false\n  \
                 requires_sidecar: false\n  \
                 requires_manifest: false\n  \
-                frontmatter_mode: lenient\n  \
                 name_max_length: 64\n  \
                 description_max_length: 1024\n\
             paths:\n  \

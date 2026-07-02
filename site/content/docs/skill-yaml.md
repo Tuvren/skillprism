@@ -22,19 +22,19 @@ description: "Every metadata field and what it does"
 | `license` | string | License name or file reference | `{{ license }}` |
 | `compatibility` | string | ≤500 chars; environment requirements | `{{ compatibility }}` |
 | `metadata` | map<string,string> | Arbitrary key-value metadata | `{{ metadata.<key> }}` |
-| `allowed-tools` | string or list | Pre-approved tools (experimental) | `{{ allowed_tools }}` |
+| `allowed-tools` | string | Pre-approved tools (experimental) | `{{ allowed_tools }}` |
 | `when_to_use` | string | Trigger phrases (Claude Code) | `{{ when_to_use }}` |
 | `argument-hint` | string | Autocomplete hint, e.g. `[issue-number]` | `{{ argument_hint }}` |
-| `arguments` | string or list | Named positional arguments | `{{ arguments }}` |
+| `arguments` | list | Named positional arguments | `{{ arguments }}` |
 | `disable-model-invocation` | bool | Prevent automatic loading | `{{ disable_model_invocation }}` |
 | `user-invocable` | bool | Show/hide from `/` menu | `{{ user_invocable }}` |
-| `disallowed-tools` | string or list | Tools removed while skill is active | `{{ disallowed_tools }}` |
+| `disallowed-tools` | list | Tools removed while skill is active | `{{ disallowed_tools }}` |
 | `model` | string | Model override, e.g. `claude-sonnet-4-20250514` | `{{ model_override }}` |
 | `effort` | enum | `low`/`medium`/`high`/`xhigh`/`max` | `{{ effort }}` |
 | `context` | enum | `fork` (runs in separate subagent context) | `{{ context_fork }}` (boolean) |
 | `agent` | string | Subagent type when context is fork | `{{ agent }}` |
 | `hooks` | map | Lifecycle hooks (Claude Code) | `{{ hooks }}` |
-| `paths` | string or list | Glob patterns limiting activation | `{{ activation_paths }}` |
+| `paths` | list | Glob patterns limiting activation | `{{ activation_paths }}` |
 | `shell` | enum | `bash`/`powershell` | `{{ shell }}` |
 | `required-capabilities` | list | Harness capabilities this skill needs | `{{ required_capabilities }}` |
 | `variables` | map | Custom template values | `{{ <key> }}` (by name) |
