@@ -11,7 +11,9 @@
 
 ## Binary Distribution
 
-- Single static binary with no runtime dependencies.
+- Single static binary with no runtime dependencies, *except for the `git` binary which is required for the `add` and `update` distribution commands.*
+- The `git` binary is assumed to be present on the user's PATH. If it is missing, the OS-level `ENOENT` from `Command::status` surfaces as a normal runtime error (the same path as any missing external command); no dedicated startup gate is implemented.
+- The `build`, `validate`, `init`, and `completions` commands remain purely static-binary and have no runtime dependencies.
 - Binary is built from source via Cargo; no pre-built binary distribution for v1.
 
 ## Error Handling
