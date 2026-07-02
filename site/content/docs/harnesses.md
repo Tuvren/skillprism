@@ -25,8 +25,8 @@ A harness is an agent product that reads skills. skillprism ships with 5 built-i
 | `allowed-tools` | ✓ | ✗ | ✗ | ✗ | ✗ |
 | `disable-model-invocation` | ✓ | ✗ | ✗ | ✓ | ✓ |
 | `user-invocable` | ✓ | ✗ | ✗ | ✓ | ✗ |
-| `requires-manifest` | ✓ | ✓ | ✗ | ✗ | ✗ |
-| `requires-sidecar` | ✗ | ✓ | ✗ | ✗ | ✓ |
+| `manifest` | ✓ | ✓ | ✗ | ✗ | ✗ |
+| `sidecar` | ✗ | ✓ | ✗ | ✗ | ✓ |
 
 ## Length caps
 
