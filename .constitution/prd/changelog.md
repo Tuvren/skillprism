@@ -1,5 +1,12 @@
 # Changelog — Stage 1 (PRD)
 
+### v0.2.0 — 2026-07-02
+
+- Reopened `out-of-scope/plugin-marketplace.md` by operator directive (Epic I activation).
+  - The distribution CLI capabilities (`add` / `list` / `remove` / `update` for skill sources) are now in scope; the marketplace-specific facets (storefronts, publishing, discovery) remain deferred.
+  - `out-of-scope/plugin-marketplace.md` carries a `[REOPENED 2026-07-02]` banner explaining the partial-reopen status.
+  - Full PRD revision (capability additions, glossary updates, fresh out-of-scope re-categorization) is a downstream follow-up; this entry is the canonical record of the operator's directive until that revision lands.
+
 ### v0.1.2 — 2026-06-18
 
 - Fixed operator preference appendix: "Clap v5" → "Clap v4.6" to match actual dependency

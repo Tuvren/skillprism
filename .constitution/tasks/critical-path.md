@@ -47,6 +47,8 @@ flowchart LR
     I006 --> I008
 ```
 
+*Note: `Ixxx` in the diagram is shorthand for the full ticket IDs `DIST-I001` through `DIST-I008`.*
+
 ## Phasing Strategy
 
 | Phase | Scope | Status |
@@ -63,7 +65,8 @@ flowchart LR
 
 ## Notes
 
-- **PRD dependency:** Epic I reopens `.constitution/prd/out-of-scope/plugin-marketplace.md` (operator directive). The PRD should be revised to reflect the new distribution capabilities, but the Tasks stage proceeds based on the operator's explicit direction.
+- **Release plan:** Epic I must complete before the `v1.0.0` tag is cut. The `v1.0.0` milestone is no longer imminent — Epic I (35 SP) is now the gate, with `DIST-I001` (spike) → `DIST-I002` (state layer) → `DIST-I003` (`add`) as the critical path that blocks all other distribution work. Once Epic I is archived, Epic J (deferred scope: `find`, `use`, plus any spike-driven follow-ups) is the natural successor before tagging v1.0.0.
+- **PRD dependency:** Epic I reopens `.constitution/prd/out-of-scope/plugin-marketplace.md` (operator directive; the file carries a `[REOPENED 2026-07-02]` annotation and `prd/changelog.md` has a v0.2.0 entry). The full PRD revision that lifts the file out of `out-of-scope/` is a downstream follow-up; the Tasks stage proceeds based on the operator's explicit direction.
 - **Spike gate:** DIST-I001 is a hard gate — no implementation tickets (I002+) may proceed until the spike report is complete and the fetch methodology is chosen.
 - **Parallelism after spike:** After I001 + I002, tickets I003/I004/I005 can be worked in parallel (they depend only on I002). I006 depends on I003 (reuses add's fetch+render pipeline). I007 and I008 depend on all command tickets.
 - **Deferred scope:** `find` (requires directory/registry backend) and `use` (render-to-temp + agent launching) are deferred to future epics.
