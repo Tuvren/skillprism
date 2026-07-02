@@ -229,6 +229,7 @@ fn clone_timeout() -> Duration {
 
 fn git_base_env(cmd: &mut Command) {
     cmd.env("GIT_TERMINAL_PROMPT", "0")
+        .env("GIT_SSH_COMMAND", "ssh -o BatchMode=yes")
         .env("GIT_LFS_SKIP_SMUDGE", "1")
         .env("GIT_CONFIG_COUNT", "4")
         .env("GIT_CONFIG_KEY_0", "filter.lfs.required")
@@ -396,11 +397,11 @@ fn parse_github_repo_url(url: &str) -> Option<GitHubRepoInfo> {
         });
     }
 
-    let (scheme_host, path) = url.split_once("://")?;
-    if !scheme_host.ends_with("github.com") {
+    let (_scheme, after_scheme) = url.split_once("://")?;
+    let (host, path) = after_scheme.split_once('/').unwrap_or((after_scheme, ""));
+    if !host.eq_ignore_ascii_case("github.com") {
         return None;
     }
-    let path = path.split_once('/').map_or(path, |(_, p)| p);
     let path = path.split_once('?').map_or(path, |(p, _)| p);
     let path = path.strip_suffix(".git").unwrap_or(path);
     let (owner, repo) = path.split_once('/')?;
@@ -418,13 +419,15 @@ fn is_github_https_clone_url(url: &str) -> bool {
 fn try_gh_clone(repo: &GitHubRepoInfo, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {
     let mut clone_target = repo.slug.clone();
 
-    let probe = Command::new("gh")
+    let mut probe_cmd = Command::new("gh");
+    probe_cmd
         .args(["auth", "status", "-h", "github.com"])
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+        .stderr(Stdio::piped());
+    let probe =
+        run_command_with_timeout(probe_cmd, Duration::from_millis(GH_AUTH_PROBE_TIMEOUT_MS))?;
 
     if !probe.status.success() {
         return Err(NetworkError::FetchFailure {
@@ -456,13 +459,14 @@ fn try_gh_clone(repo: &GitHubRepoInfo, r#ref: Option<&str>) -> Result<PathBuf, N
         args.push(r.to_string());
     }
 
-    let status = Command::new("gh")
+    let mut clone_cmd = Command::new("gh");
+    clone_cmd
         .args(&args)
         .env("GIT_TERMINAL_PROMPT", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output()?;
+        .stderr(Stdio::piped());
+    let status = run_command_with_timeout(clone_cmd, clone_timeout())?;
 
     if status.status.success() {
         Ok(temp_dir)

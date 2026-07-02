@@ -58,6 +58,10 @@ pub enum InstallError {
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
 
+    /// Rendering a skill template failed.
+    #[error("{0}")]
+    Render(miette::Report),
+
     /// No skills were found in the source.
     #[error("no skillprism-format or plain-format skills found in {source_input}")]
     #[diagnostic(help(
@@ -106,7 +110,6 @@ pub struct InstallResult {
 }
 
 /// Installs all skills from a source into the target scope.
-#[allow(clippy::too_many_lines)]
 pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, InstallError> {
     let (source_path, cleanup_dir, source_url, source_type, r#ref, skill_path) = match &ctx.parsed {
         ParsedSource::Local { path } => (
@@ -171,7 +174,32 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
         }
     };
 
-    let skill_dirs = discover_skill_dirs(&source_path)?;
+    let result = install_discovered_skills(
+        ctx,
+        &source_path,
+        &source_url,
+        source_type,
+        r#ref.as_ref(),
+        skill_path.as_ref(),
+    );
+
+    if let Some(dir) = cleanup_dir {
+        let _ = network::cleanup_temp_dir(&dir);
+    }
+
+    result
+}
+
+#[allow(clippy::too_many_lines)]
+fn install_discovered_skills(
+    ctx: &InstallContext,
+    source_path: &Path,
+    source_url: &str,
+    source_type: SourceType,
+    r#ref: Option<&String>,
+    skill_path: Option<&String>,
+) -> Result<Vec<InstallResult>, InstallError> {
+    let skill_dirs = discover_skill_dirs(source_path)?;
     if skill_dirs.is_empty() {
         return Err(InstallError::NoSkillsFound {
             source_input: ctx.source_input.clone(),
@@ -203,27 +231,23 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
             SkillFormat::Skillprism => install_skillprism_skill(
                 ctx,
                 &skill_dir,
-                &source_url,
+                source_url,
                 source_type,
-                r#ref.as_ref(),
-                skill_path.as_ref(),
+                r#ref,
+                skill_path,
                 &mut skip_all,
             )?,
             SkillFormat::Plain => install_plain_skill(
                 ctx,
                 &skill_dir,
-                &source_url,
+                source_url,
                 source_type,
-                r#ref.as_ref(),
-                skill_path.as_ref(),
+                r#ref,
+                skill_path,
                 &mut skip_all,
             )?,
         };
         results.push(InstallResult { record });
-    }
-
-    if let Some(dir) = cleanup_dir {
-        let _ = network::cleanup_temp_dir(&dir);
     }
 
     Ok(results)
@@ -335,12 +359,8 @@ fn install_skillprism_skill(
     for harness_id in &ctx.harnesses {
         let pair = HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry)
             .map_err(resolve_to_install_error(&skill.name))?;
-        let output = Engine::render(&pair).map_err(|e| {
-            InstallError::Project(ProjectError::ConfigRead {
-                path: skill.name.clone(),
-                source: std::io::Error::other(e.to_string()),
-            })
-        })?;
+        let output =
+            Engine::render(&pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
 
         let target = install_scope_to_target(ctx.target_scope);
         let project_root = ctx
@@ -348,12 +368,7 @@ fn install_skillprism_skill(
             .as_deref()
             .unwrap_or_else(|| Path::new("."));
         let result = Router::write(&pair, &output, project_root, target, ctx.force, skip_all)
-            .map_err(|e| {
-                InstallError::Project(ProjectError::ConfigRead {
-                    path: skill.name.clone(),
-                    source: std::io::Error::other(e.to_string()),
-                })
-            })?;
+            .map_err(|e| InstallError::Render(miette::Report::new(e)))?;
 
         files.push(InstalledFile {
             path: result.written.skill_path.to_string_lossy().to_string(),
@@ -425,18 +440,25 @@ fn install_plain_skill(
         let mut skipped = Vec::new();
 
         if crate::router::resolve_overwrite(&skill_path_buf, ctx.force, skip_all, &mut skipped) {
-            fs::copy(&template, &skill_path_buf)?;
+            let template_bytes = fs::read(&template)?;
+            crate::router::atomic_write_bytes(&skill_path_buf, &template_bytes)?;
             files.push(InstalledFile {
                 path: skill_path_buf.to_string_lossy().to_string(),
-                hash: format!("sha256:{}", sha256_file(&skill_path_buf)?),
+                hash: format!("sha256:{}", sha256_bytes(&template_bytes)),
             });
-        }
 
-        let asset_dirs =
-            crate::loader::discover_asset_dirs(skill_dir).map_err(InstallError::Project)?;
-        if !asset_dirs.is_empty() {
-            crate::router::copy_assets(&asset_dirs, &skill_dir_out)?;
+            let asset_dirs =
+                crate::loader::discover_asset_dirs(skill_dir).map_err(InstallError::Project)?;
             for asset_dir in &asset_dirs {
+                let dir_name = asset_dir
+                    .file_name()
+                    .ok_or_else(|| ProjectError::ConfigRead {
+                        path: skill_name.clone(),
+                        source: std::io::Error::other("asset directory has no name"),
+                    })?
+                    .to_string_lossy()
+                    .to_string();
+                copy_dir(asset_dir, &skill_dir_out.join(&dir_name))?;
                 record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
             }
         }
@@ -585,6 +607,8 @@ fn resolve_to_install_error(skill_name: &str) -> impl FnOnce(ResolveError) -> In
     }
 }
 
+/// Copies a directory tree, materializing symlinks so that the destination is a
+/// self-contained snapshot with no references back to the source tree.
 fn copy_dir(src: &Path, dst: &Path) -> Result<(), InstallError> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
@@ -593,16 +617,31 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), InstallError> {
         let dst_path = dst.join(entry.file_name());
         let metadata = fs::symlink_metadata(&src_path)?;
         if metadata.is_symlink() {
-            let target = fs::read_link(&src_path)?;
-            #[cfg(unix)]
-            std::os::unix::fs::symlink(&target, &dst_path)?;
-            #[cfg(not(unix))]
-            fs::copy(&src_path, &dst_path)?;
+            copy_symlink_target(&src_path, &dst_path)?;
         } else if metadata.is_dir() {
             copy_dir(&src_path, &dst_path)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
+    }
+    Ok(())
+}
+
+fn copy_symlink_target(link: &Path, dst: &Path) -> Result<(), InstallError> {
+    let target = fs::read_link(link)?;
+    // Resolve relative symlinks against the link's parent so the target is read
+    // from inside the source tree, not from the destination path.
+    let resolved = if target.is_relative() {
+        link.parent()
+            .map_or_else(|| target.clone(), |parent| parent.join(&target))
+    } else {
+        target
+    };
+    let metadata = fs::symlink_metadata(&resolved)?;
+    if metadata.is_dir() {
+        copy_dir(&resolved, dst)?;
+    } else {
+        fs::copy(&resolved, dst)?;
     }
     Ok(())
 }

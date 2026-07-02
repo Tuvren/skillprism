@@ -18,6 +18,11 @@ use std::path::Path;
 
 /// Atomically writes content to a file by writing to a temp file then renaming.
 pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
+    atomic_write_bytes(path, content.as_bytes())
+}
+
+/// Atomically writes bytes to a file by writing to a temp file then renaming.
+pub fn atomic_write_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }

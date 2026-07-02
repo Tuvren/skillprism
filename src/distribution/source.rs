@@ -122,12 +122,21 @@ pub fn parse_source(input: &str) -> Result<ParsedSource, SourceParseError> {
 
     // gitlab:owner/repo -> https://gitlab.com/owner/repo.
     if let Some(rest) = input.strip_prefix("gitlab:") {
-        let rebuilt = append_fragment_ref(
-            &format!("https://gitlab.com/{rest}"),
-            fragment_ref.as_deref(),
-            fragment_skill_filter.as_deref(),
-        );
-        return parse_source(&rebuilt);
+        let (repo_part, skill_filter) = split_at_skill_filter(rest);
+        let rebuilt = format!("https://gitlab.com/{repo_part}");
+        let mut parsed = parse_source(&rebuilt)?;
+        if let ParsedSource::GitLab {
+            skill_filter: ref mut filter,
+            ..
+        } = parsed
+        {
+            if skill_filter.is_some() {
+                *filter = skill_filter.map(String::from);
+            } else {
+                filter.clone_from(&fragment_skill_filter);
+            }
+        }
+        return Ok(parsed);
     }
 
     // Full GitHub / GitLab URLs.
@@ -417,6 +426,21 @@ struct OwnerRepoAtSkill {
     skill_filter: String,
 }
 
+/// Splits a shorthand repo fragment such as `owner/repo@skill-name` into the
+/// repo part and an optional skill-filter suffix.
+fn split_at_skill_filter(input: &str) -> (&str, Option<&str>) {
+    let Some(at_pos) = input.rfind('@') else {
+        return (input, None);
+    };
+    let prefix = &input[..at_pos];
+    let parts: Vec<&str> = prefix.split('/').collect();
+    if parts.len() >= 2 && !parts[0].is_empty() && !parts[1].is_empty() {
+        (&input[..at_pos], Some(&input[at_pos + 1..]))
+    } else {
+        (input, None)
+    }
+}
+
 fn parse_owner_repo_at_skill(input: &str) -> Option<OwnerRepoAtSkill> {
     if !is_shorthand(input) {
         return None;
@@ -545,6 +569,18 @@ mod tests {
             panic!("expected GitLab");
         };
         assert_eq!(url, "https://gitlab.com/mygroup/myskill.git");
+    }
+
+    #[test]
+    fn gitlab_prefix_with_skill_filter() {
+        let ParsedSource::GitLab {
+            url, skill_filter, ..
+        } = parse_source("gitlab:mygroup/myskill@pdf").unwrap()
+        else {
+            panic!("expected GitLab");
+        };
+        assert_eq!(url, "https://gitlab.com/mygroup/myskill.git");
+        assert_eq!(skill_filter.as_deref(), Some("pdf"));
     }
 
     #[test]

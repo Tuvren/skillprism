@@ -231,7 +231,13 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             skill,
             harnesses,
             force,
-        } => crate::distribution::add::run_add(source, target, skill, harnesses, force),
+        } => match crate::distribution::add::run_add(source, target, skill, harnesses, force) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                eprintln!("{e:?}");
+                std::process::exit(e.exit_code());
+            }
+        },
         Command::List { target, harnesses } => {
             crate::distribution::list::run_list(target, harnesses.as_ref())
         }
@@ -748,6 +754,22 @@ mod tests {
         assert!(
             output.contains("completions"),
             "bash completions should include completions"
+        );
+        assert!(
+            output.contains("add"),
+            "bash completions should include add"
+        );
+        assert!(
+            output.contains("list"),
+            "bash completions should include list"
+        );
+        assert!(
+            output.contains("remove"),
+            "bash completions should include remove"
+        );
+        assert!(
+            output.contains("update"),
+            "bash completions should include update"
         );
     }
 

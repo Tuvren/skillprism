@@ -18,6 +18,8 @@
 // implemented in its milestone.
 #![allow(dead_code)]
 
+use std::fmt;
+
 pub mod add;
 pub mod install;
 pub mod list;
@@ -25,3 +27,33 @@ pub mod network;
 pub mod remove;
 pub mod source;
 pub mod update;
+
+/// Error type for distribution CLI commands that carries an explicit process
+/// exit code separate from the wrapped diagnostic report.
+#[derive(Debug)]
+pub enum CommandError {
+    /// A usage error (e.g. invalid flags, missing project). Exits with code 2.
+    Usage(miette::Report),
+    /// A runtime error. Exits with code 1.
+    Runtime(miette::Report),
+}
+
+impl CommandError {
+    /// Returns the exit code the CLI should use for this error.
+    pub const fn exit_code(&self) -> i32 {
+        match self {
+            Self::Usage(_) => 2,
+            Self::Runtime(_) => 1,
+        }
+    }
+}
+
+impl fmt::Display for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Usage(r) | Self::Runtime(r) => fmt::Display::fmt(r, f),
+        }
+    }
+}
+
+impl std::error::Error for CommandError {}

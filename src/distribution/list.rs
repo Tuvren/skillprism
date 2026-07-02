@@ -47,12 +47,16 @@ pub fn run_list(
     for skill in skills {
         let r#ref = skill.r#ref.unwrap_or_else(|| "-".to_string());
         let harnesses = skill.harnesses.join(", ");
+        let scope = match skill.scope {
+            InstallScope::Project => "project",
+            InstallScope::User => "user",
+        };
         println!(
-            "{name}\t{source}\t{ref}\t{scope:?}\t{harnesses}",
+            "{name}\t{source}\t{ref}\t{scope}\t{harnesses}",
             name = skill.name,
             source = skill.source,
             ref = r#ref,
-            scope = skill.scope,
+            scope = scope,
             harnesses = harnesses
         );
     }

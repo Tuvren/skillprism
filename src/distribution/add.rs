@@ -23,6 +23,7 @@ use crate::loader::ProjectLoader;
 use crate::state::{InstallScope, StateStore};
 use crate::types::ProjectError;
 
+use super::CommandError;
 use super::install::{InstallContext, InstallError, install_source};
 use super::source::parse_source;
 
@@ -54,16 +55,19 @@ pub fn run_add(
     skill_filter: Option<String>,
     harnesses: Option<String>,
     force: bool,
-) -> Result<(), miette::Report> {
+) -> Result<(), CommandError> {
     let scope = InstallScope::from(target);
 
     let project_root = match scope {
-        InstallScope::Project => Some(find_project_root()?),
+        InstallScope::Project => Some(find_project_root().map_err(CommandError::Usage)?),
         InstallScope::User => find_project_root().ok(),
     };
 
-    let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses)?;
-    let parsed = parse_source(&source).map_err(InstallError::from)?;
+    let selected_harnesses =
+        determine_harnesses(project_root.as_deref(), harnesses).map_err(CommandError::Runtime)?;
+    let parsed = parse_source(&source)
+        .map_err(InstallError::from)
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
     // Combine explicit --skill flag with any skill filter embedded in the source.
     let parsed = if let Some(filter) = skill_filter {
@@ -81,13 +85,17 @@ pub fn run_add(
         force,
     };
 
-    let results = install_source(&ctx).map_err(miette::Report::new)?;
+    let results =
+        install_source(&ctx).map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
-    let mut store = StateStore::open().map_err(miette::Report::new)?;
+    let mut store =
+        StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     for result in results {
         store.upsert(result.record);
     }
-    store.save().map_err(miette::Report::new)?;
+    store
+        .save()
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
     Ok(())
 }
