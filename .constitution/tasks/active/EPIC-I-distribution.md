@@ -183,7 +183,7 @@ Then the URL is normalized to clone `https://github.com/owner/repo.git` with `--
 
 Given a self-hosted GitLab instance at `https://gitlab.example.com/`
 When the user runs `skillprism add https://gitlab.example.com/team/project`
-Then the install proceeds with `https://gitlab.example.com/team/project.git` (no `gh` fallback — the chain is git → SSH, GitLab-only)
+Then the install proceeds with `https://gitlab.example.com/team/project.git` — the auth chain is **`git clone` only**: no `gh` fallback (the `gh` CLI is GitHub-only) and no SSH fallback (the SSH retry in the auth chain is also GitHub-only). Skillprism relies on the user's own git credential resolution (SSH agent, `~/.netrc`, git credential helper) for the GitLab case.
 
 Given the source `owner/repo` and a `ref` fragment
 When the user runs `skillprism add owner/repo#v1.2.3`
@@ -200,6 +200,15 @@ Then the index is fetched and the listed skills are installed per the manifest
 Given a source alias `coinbase/agentWallet` mapped to `coinbase/agentic-wallet-skills` in the alias map
 When the user runs `skillprism add coinbase/agentWallet`
 Then the alias is resolved to `coinbase/agentic-wallet-skills` and the install proceeds
+
+Given a source `unknown/repo` that has no entry in the alias map
+When the user runs `skillprism add unknown/repo`
+Then the parser falls through to the `owner/repo` shorthand path (no special "unknown alias" error — an unknown alias is indistinguishable from a regular shorthand)
+
+Given a source `   ` (whitespace only) entered as an alias
+When the user runs `skillprism add '   '`
+Then the command fails with a clear error: "source cannot be empty or whitespace"
+And the exit code is 2 (usage error)
 
 Given a repo with skills targeting claude and opencode
 When the user runs `skillprism add owner/repo --harnesses claude`
@@ -362,8 +371,6 @@ And the exit code is 1
   If a skill is already at the latest version (same `ref` in the upstream), no action is taken and an "up to date" message is printed. The `--harnesses` flag (`-H`, comma-separated) restricts the update to a specific harness subset — same flag name as `init`, `add`, and `list`. The `--diff` flag shows what would change without writing. The `--force` flag skips confirmation (same flag name as `build`, `add`, and `remove`; using `--force` for consistency, not `--yes`). Update respects all safety models (atomic writes, scope confinement, overwrite confirmation) and writes only to `project` and `user` scopes (same `--target dist` rejection as `add` and `remove`).
 
   **"At the latest ref" check (P1 from PR #15 round 2):** the upstream ref is established via `git ls-remote <url> <ref-spec>` — a lightweight, sub-second query that returns the SHA-1 the remote resolves the ref to, without cloning. The `git clone --depth 1` from DIST-I002 only runs when the SHA differs (or on first call, when no baseline exists). This keeps `update` cheap for the no-op case (which is the common case: most days, most skills are at the latest ref). The 5-minute timeout from the spike's fetch mechanism applies to the `git clone` path, not to the `ls-remote` query (which has a much shorter default timeout in `git` itself).
-
-  **CLI flag consistency:** the `--diff` flag SHOULD have `dry-run` as a `visible_alias` (matching the existing `build --diff --dry-run` surface at `src/cli.rs:50`), so `skillprism update --dry-run` is a natural user expectation. The implementation PR is responsible for the alias; this planning doc just pins the intent.
 
   **CLI flag consistency:** the `--diff` flag SHOULD have `dry-run` as a `visible_alias` (matching the existing `build --diff --dry-run` surface at `src/cli.rs:50`), so `skillprism update --dry-run` is a natural user expectation. The implementation PR is responsible for the alias; this planning doc just pins the intent.
 - **Acceptance Criteria (Gherkin):**

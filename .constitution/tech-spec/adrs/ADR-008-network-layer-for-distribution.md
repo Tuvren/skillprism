@@ -25,7 +25,8 @@ git clone --depth 1 [--branch <ref>] [--single-branch] <url> <tempdir>
 
 - `GIT_TERMINAL_PROMPT=0` — disables interactive password prompts.
 - `GIT_SSH_COMMAND=ssh -o BatchMode=yes` — SSH fails fast on missing keys (no interactive password prompts).
-- `GIT_LFS_SKIP_SMUDGE=1` — skips LFS filtering (skills are plain text; LFS-tracked files are out of scope for v1).
+- `GIT_LFS_SKIP_SMUDGE=1` — partially mitigates LFS, but only effective when git-lfs is installed (see below).
+- `GIT_CONFIG_COUNT=4` plus `GIT_CONFIG_KEY_0..3` / `GIT_CONFIG_VALUE_0..3` — applies the git config overrides `filter.lfs.required=false`, `filter.lfs.smudge=`, `filter.lfs.clean=`, `filter.lfs.process=` (matching Vercel's per-clone config in `vercel-labs/skills` `src/git.ts:78-86`, but via env vars to avoid the per-clone config-file cleanup complication). This is the full mitigation: when git-lfs is NOT installed, git sees `filter.lfs.process=` (empty) and skips the filter entirely, so checkout succeeds even with `.gitattributes` referencing LFS. Skills are plain text, so LFS-tracked files are not a v1 concern, but a source repo that incidentally has LFS-tracked files anywhere in the tree (e.g., binary assets alongside skills) will still clone on minimal images without git-lfs installed.
 
 **Auth chain (three layers, GitHub HTTPS only):**
 
@@ -52,7 +53,7 @@ For non-GitHub hosts (GitLab, self-hosted), only layer 1 is used. The auth chain
   - Honors ADR-003 (single crate — new code in `src/distribution/network.rs`).
   - Honors ADR-004 (synchronous — `Command::status` is blocking, no async runtime).
   - Honors ADR-005 (atomic writes — rendered output is written via the existing `Router::write`; plain-format assets are copied via the existing `copy_assets` helper at `src/router/write.rs:34`; the state file uses the same temp-rename pattern. `Router::write` is the rendered-output writer, not a unified write path; copying a file is not a render).
-  - Binary stays small (~500KB saved vs `ureq` + `rustls`).
+  - Binary stays small — no native TLS stack to ship. (The exact magnitude vs a hypothetical native-HTTP alternative is not benchmarked here; the qualitative point is that `git` is a pre-existing system dep, not a compiled-in TLS implementation.)
 - **Negative:**
   - Adds a documented external dependency on `git` for the `add`/`update` commands only.
   - The `gh` CLI fallback requires another optional binary on PATH.
