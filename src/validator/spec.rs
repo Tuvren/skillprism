@@ -312,7 +312,7 @@ mod tests {
     }
 
     #[test]
-    fn description_within_spec_passes_everywhere() {
+    fn description_at_spec_cap_errors_on_stricter_harness() {
         let mut skill = test_skill("my-agent", vec![]);
         skill.description = "x".repeat(1024);
         let (errors, warnings) = check_spec(&skill, &claude());
