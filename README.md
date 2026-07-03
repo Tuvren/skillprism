@@ -140,9 +140,9 @@ skillprism add owner/repo
 # From a full Git URL (GitHub, GitLab, etc.)
 skillprism add https://github.com/owner/repo.git
 
-# With a specific ref or subpath
-skillprism add owner/repo --skill my-skill
+# Pin to a specific ref or filter to one skill from a multi-skill repo
 skillprism add owner/repo#v1.0.0
+skillprism add owner/repo --skill my-skill
 
 # From a local path
 skillprism add ./path/to/skills

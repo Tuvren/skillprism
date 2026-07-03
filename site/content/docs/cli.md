@@ -156,7 +156,7 @@ skillprism remove my-skill
 skillprism remove my-skill another-skill
 skillprism remove --all
 skillprism remove --all --all-scopes --force
-skillprism remove --target project -H claude
+skillprism remove --all --target project -H claude
 ```
 
 | Argument | Description |

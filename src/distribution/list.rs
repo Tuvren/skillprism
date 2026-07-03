@@ -14,7 +14,7 @@
 
 //! `skillprism list` command implementation.
 
-use crate::state::{InstallScope, InstalledSkill, StateStore};
+use crate::state::{InstallScope, InstalledSkill, SkillFormat, StateStore};
 
 use super::add::InstallScopeArg;
 
@@ -61,15 +61,20 @@ fn filter_skills(
 fn print_skill(skill: &InstalledSkill) {
     let r#ref = skill.r#ref.clone().unwrap_or_else(|| "-".to_string());
     let harnesses = skill.harnesses.join(", ");
+    let format = match skill.format {
+        SkillFormat::Skillprism => "skillprism",
+        SkillFormat::Plain => "plain",
+    };
     let scope = match skill.scope {
         InstallScope::Project => "project",
         InstallScope::User => "user",
     };
     println!(
-        "{name}\t{source}\t{ref}\t{scope}\t{harnesses}",
+        "{name}\t{source}\t{ref}\t{format}\t{scope}\t{harnesses}",
         name = skill.name,
         source = skill.source,
         ref = r#ref,
+        format = format,
         scope = scope,
         harnesses = harnesses
     );

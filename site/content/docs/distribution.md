@@ -25,15 +25,18 @@ skillprism add owner/repo -H claude,opencode
 
 ### Source formats
 
-`add` accepts three source forms:
+`add` accepts these source forms:
 
 | Form | Example | Description |
 |------|---------|-------------|
 | GitHub shorthand | `owner/repo` | Expands to `https://github.com/owner/repo.git` |
-| Full URL | `https://github.com/owner/repo.git` | Any valid Git remote URL |
+| GitHub prefix | `github:owner/repo` | Explicit `github:` prefix form |
+| GitLab shorthand | `gitlab:owner/repo` | GitLab via `gitlab:` prefix |
+| Full HTTPS URL | `https://github.com/owner/repo.git` | Any valid Git remote HTTPS URL |
+| SSH URL | `git@github.com:owner/repo.git` | SSH Git URL |
 | Local path | `./path/to/skills` | A directory with `skillprism.yaml` and `skills/` |
 
-Append `#<ref>` to any remote source to pin to a specific branch, tag, or commit (e.g., `owner/repo#v2.0.0`). Append `/<subpath>` to install from a subdirectory within a repo (e.g., `owner/repo/skills/my-skill`).
+Append `#<ref>` to any remote source to pin to a specific branch, tag, or commit (e.g., `owner/repo#v2.0.0`). Append `/<subpath>` to install from a subdirectory within a repo (e.g., `owner/repo/skills/my-skill`). Both can be combined: `owner/repo/skills/my-skill#v1.0.0`.
 
 ### Format auto-detection
 
