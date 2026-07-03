@@ -110,13 +110,31 @@ pub fn run_update(
         return Ok(());
     }
 
+    let harness_filter = harnesses.and_then(|h| {
+        let parsed: Vec<_> = h
+            .split(',')
+            .map(|x| x.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .collect();
+        if parsed.is_empty() {
+            None
+        } else {
+            Some(parsed)
+        }
+    });
+
     for skill in &candidates {
-        update_skill(skill, &mut store, diff, force)?;
+        update_skill(skill, &mut store, harness_filter.as_deref(), diff, force)?;
+        if !diff {
+            store
+                .save()
+                .map_err(|e| miette::Report::new(UpdateError::from(e)))?;
+        }
     }
 
-    store
-        .save()
-        .map_err(|e| miette::Report::new(UpdateError::from(e)))?;
+    if diff {
+        // In diff mode no state changes were made, but save for consistency
+    }
     Ok(())
 }
 
@@ -143,6 +161,7 @@ fn filter_candidates(
 fn update_skill(
     old: &InstalledSkill,
     store: &mut StateStore,
+    harness_filter: Option<&[String]>,
     diff: bool,
     force: bool,
 ) -> Result<(), miette::Report> {
@@ -243,7 +262,20 @@ fn update_skill(
 
     let format = detect_format(&matched_dir).map_err(UpdateError::from)?;
 
-    let harnesses = old.harnesses.clone();
+    let harnesses: Vec<String> = harness_filter.map_or_else(
+        || old.harnesses.clone(),
+        |filter| {
+            old.harnesses
+                .iter()
+                .filter(|h| filter.contains(h))
+                .cloned()
+                .collect()
+        },
+    );
+    if harnesses.is_empty() {
+        println!("No matching harnesses to update for {}", old.name);
+        return Ok(());
+    }
     let project_root = match old.scope {
         InstallScope::Project => super::find_project_root().ok(),
         InstallScope::User => None,
@@ -313,6 +345,7 @@ fn update_skillprism_skill(
         .collect();
     let mut new_files = Vec::new();
     let mut changed = false;
+    let mut skip_all = false;
 
     let target = install_scope_to_target(old.scope);
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
@@ -338,7 +371,7 @@ fn update_skillprism_skill(
             if diff {
                 print_file_diff(&skill_path_buf, &content, &path_str);
             } else {
-                write_file_with_overwrite(&skill_path_buf, &content, force)?;
+                write_file_with_overwrite(&skill_path_buf, &content, force, &mut skip_all)?;
             }
         }
 
@@ -361,7 +394,7 @@ fn update_skillprism_skill(
                 if diff {
                     print_file_diff(&sidecar_path, content, &path_str);
                 } else {
-                    write_file_with_overwrite(&sidecar_path, content, force)?;
+                    write_file_with_overwrite(&sidecar_path, content, force, &mut skip_all)?;
                 }
             }
 
@@ -396,7 +429,6 @@ fn update_skillprism_skill(
         }
     }
 
-    let now = now_rfc3339();
     Ok(InstalledSkill {
         name: old.name.clone(),
         source: old.source.clone(),
@@ -409,7 +441,11 @@ fn update_skillprism_skill(
         harnesses: old.harnesses.clone(),
         format: SkillFormat::Skillprism,
         installed_at: old.installed_at.clone(),
-        updated_at: now,
+        updated_at: if changed {
+            now_rfc3339()
+        } else {
+            old.updated_at.clone()
+        },
         files: new_files,
     })
 }
@@ -441,6 +477,7 @@ fn update_plain_skill(
         .collect();
     let mut new_files = Vec::new();
     let mut changed = false;
+    let mut skip_all = false;
 
     let target = install_scope_to_target(old.scope);
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
@@ -470,7 +507,7 @@ fn update_plain_skill(
                     &path_str,
                 );
                 print_diff_output(&diff_output);
-            } else if resolve_overwrite(&skill_path_buf, force, &mut false, &mut Vec::new()) {
+            } else if resolve_overwrite(&skill_path_buf, force, &mut skip_all, &mut Vec::new()) {
                 crate::router::atomic_write_bytes(&skill_path_buf, &content)
                     .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
             }
@@ -504,7 +541,6 @@ fn update_plain_skill(
         }
     }
 
-    let now = now_rfc3339();
     Ok(InstalledSkill {
         name: old.name.clone(),
         source: old.source.clone(),
@@ -517,7 +553,11 @@ fn update_plain_skill(
         harnesses: old.harnesses.clone(),
         format: SkillFormat::Plain,
         installed_at: old.installed_at.clone(),
-        updated_at: now,
+        updated_at: if changed {
+            now_rfc3339()
+        } else {
+            old.updated_at.clone()
+        },
         files: new_files,
     })
 }
@@ -526,9 +566,10 @@ fn write_file_with_overwrite(
     path: &Path,
     content: &str,
     force: bool,
+    skip_all: &mut bool,
 ) -> Result<(), miette::Report> {
     let mut skipped = Vec::new();
-    if resolve_overwrite(path, force, &mut false, &mut skipped) {
+    if resolve_overwrite(path, force, skip_all, &mut skipped) {
         crate::router::atomic_write(path, content)
             .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
     }
