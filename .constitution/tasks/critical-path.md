@@ -1,11 +1,10 @@
-# Critical Path — Stage 4 v0.11.0
+# Critical Path — Stage 4 v0.12.0
 
 ## Active Backlog Summary
 
-- **Total Active Story Points:** 32
-- **Active Epic:** Epic I (Distribution CLI) — 32 points
-- **Spike (prerequisite, COMPLETE):** `.constitution/spikes/SPK-DIST-I001.md` — remote fetch methodology resolved. Implementation tickets reference the spike for contracts and mechanisms.
-- **Completed:** Epic A (Foundation) — 9 points, Epic B (Pipeline) — 16 points, Epic C (DX) — 10 points, Epic D (SAFE) — 16 points, Epic E (SCAFF) — 7 points, Epic F (TEST) — 8 points, Epic G (CLEAN) — 9 points, Epic H (RELS) — 13 points = 88 total delivered
+- **Total Active Story Points:** 0
+- **Completed:** Epic A (Foundation) — 9 points, Epic B (Pipeline) — 16 points, Epic C (DX) — 10 points, Epic D (SAFE) — 16 points, Epic E (SCAFF) — 7 points, Epic F (TEST) — 8 points, Epic G (CLEAN) — 9 points, Epic H (RELS) — 13 points, **Epic I (Distribution CLI) — 32 points** = 120 total delivered
+- **No active epics.** The next epic (Epic J, deferred scope: `find`, `use`, plus any spike-driven follow-ups) is the natural successor before tagging v1.0.0.
 
 ## Critical Path
 
@@ -56,18 +55,13 @@ flowchart LR
 | Phase 6 | Testing & CI | ✅ Epic F — Completed |
 | Phase 7 | Code Quality | ✅ Epic G — Completed |
 | Phase 8 | Release Readiness | ✅ Epic H — Completed |
-| Phase 9 | Distribution CLI | 🔵 Epic I — Active (32 SP) |
+| Phase 9 | Distribution CLI | ✅ Epic I — Completed (32 SP) |
 
-**8 epics completed (88 SP). 1 epic active (32 SP).**
+**9 epics completed (120 SP). No active epics.**
 
 ## Notes
 
-- **Release plan:** Epic I must complete before the `v1.0.0` tag is cut. The `v1.0.0` milestone is no longer imminent — Epic I (32 SP) is the gate. With the spike complete, the critical path is `DIST-I001` (state layer) → `DIST-I002` (`add`) → `DIST-I005` (`update`). Once Epic I is archived, Epic J (deferred scope: `find`, `use`, plus any spike-driven follow-ups) is the natural successor before tagging v1.0.0.
-- **PRD dependency:** Epic I reopens `.constitution/prd/out-of-scope/plugin-marketplace.md` (operator directive; the file carries a `[REOPENED 2026-07-02]` annotation and `prd/changelog.md` has a v0.2.0 entry). The full PRD revision that lifts the file out of `out-of-scope/` is a downstream follow-up; the Tasks stage proceeds based on the operator's explicit direction.
-- **Spike status:** SPK-DIST-I001 is complete (see `.constitution/spikes/SPK-DIST-I001.md`). The implementation tickets in Epic I reference the spike for the contracts and mechanisms they need; no further spikes are required to start implementation.
-- **Upstream amendments (this PR):** the network layer is unblocked by:
-  - **Stage 1 (PRD) v0.2.0:** `.constitution/prd/constraints.md` allows `git` as a documented runtime dependency for distribution commands only.
-  - **Stage 2 (Architecture) v0.2.2:** `.constitution/architecture/strategy.md` line 24 scopes the "no network" rule to non-distribution commands.
-  - **Stage 3 (TechSpec) v0.11.0:** `ADR-008: Network Layer for Distribution` documents the design.
-- **Parallelism after I001:** After DIST-I001 lands, tickets DIST-I002 / DIST-I003 / DIST-I004 can be worked in parallel (they depend only on I001). DIST-I005 depends on I002 (reuses `add`'s fetch+render pipeline). DIST-I006 and DIST-I007 depend on all command tickets.
-- **Deferred scope:** `find` (requires directory/registry backend), `use` (render-to-temp + agent launching), and the `flock` follow-up are all deferred to future epics or follow-up tickets.
+- **Release plan:** Epic I is complete. The next epic (Epic J, deferred scope: `find`, `use`, plus any spike-driven follow-ups) is the natural successor before tagging v1.0.0.
+- **PRD dependency:** Epic I reopens `.constitution/prd/out-of-scope/plugin-marketplace.md` (operator directive; the file carries a `[REOPENED 2026-07-02]` annotation and `prd/changelog.md` has a v0.2.0 entry). The full PRD revision that lifts the file out of `out-of-scope/` is a downstream follow-up.
+- **Spike status:** SPK-DIST-I001 is complete (see `.constitution/spikes/SPK-DIST-I001.md`).
+- **Architecture boundary preserved:** The distribution commands (`add`, `list`, `remove`, `update`) are the only network surface in skillprism. The static-binary, zero-network guarantee holds for all other commands.
