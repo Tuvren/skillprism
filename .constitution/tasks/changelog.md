@@ -1,5 +1,15 @@
 # Tasks Changelog
 
+## v0.13.0 — Epic I Reopened: Phase 2 (Distribution Polish)
+
+- **Epic I reopened** on existing branch `feat/epic-i-distribution` — 3 new tickets (5 SP) added for Phase 2:
+  - **DIST-I008** — Interactive `add` prompts: harness selection, scope choice, summary confirmation via `dialoguer`
+  - **DIST-I009** — npm launcher: thin JS gateway that downloads + execs the Release binary (Biome pattern)
+  - **DIST-I010** — Agent auto-detection: probe `~/.claude`, `~/.config/opencode/`, etc. when no config exists
+- **`find` deferral wording revised:** Can query Vercel's `skills.sh` API directly — no registry needed. Deferred on priority, not infrastructure.
+- Post-mortem driven: gaps identified by comparing Epic I output against Vercel's `skills` CLI v1.5.14.
+- 120 SP delivered + 5 SP active = 125 SP total
+
 ## v0.12.0 — Epic I Complete: Distribution CLI
 
 - **Epic I (Distribution CLI)** fully implemented and archived via `git mv`

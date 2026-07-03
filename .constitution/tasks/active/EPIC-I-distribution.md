@@ -1,6 +1,6 @@
 # Epic I — Distribution CLI
 
-Acronym: **DIST** | Story Points: **32**
+Acronym: **DIST** | Story Points: **37** (32 original + 5 phase 2)
 
 **Dependencies:** Epic H (RELS) — release artifacts must exist before the v1.0.0 tag is cut; PRD non-goal `plugin-marketplace.md` reopened by operator directive (see `.constitution/prd/out-of-scope/plugin-marketplace.md` for the `[REOPENED 2026-07-02]` annotation; full PRD revision is a downstream follow-up tracked in `prd/changelog.md`).
 
@@ -24,11 +24,14 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
 - `list` — show installed skills from state
 - `remove` — delete installed skills + update state
 - `update` — re-fetch latest, render/copy, update state
+- **Interactive `add`** (GAP-A) — when no `--harnesses`/`--target` flags, prompt user for selections
+- **npm launcher** (GAP-B) — thin npm package that downloads + execs the Release binary
+- **Agent auto-detection** (GAP-C) — probe common agent paths when no config exists
 
 **Deferred to future epics:**
-- `find` — requires a directory/registry backend that doesn't exist yet
-- `use` — render to temp + launch agent (convenience command, adds process-launching complexity)
-- Harness coverage expansion — keep 5 built-in harnesses; grow via community contributions (`init harness` + `harnesses/<name>.yaml`)
+- `find` — ecosystem skill search. Can be implemented by querying Vercel's `skills.sh` API directly (no registry needed). Deferred on implementation priority, not infrastructure availability.
+- `use` — render to temp + launch agent (convenience command, adds process-launching complexity). Explicitly ruled out for now.
+<!-- - Harness coverage expansion — keep 5 built-in harnesses; grow via community contributions (`init harness` + `harnesses/<name>.yaml`) -->
 
 **Key contracts (resolved by the spike):**
 - **Fetch method:** `git clone --depth 1 [--branch <ref>] [--single-branch] <url> <tempdir>` via `std::process::Command`. No new Rust dependencies.
@@ -490,4 +493,69 @@ And a "Prerequisites" note documents that `git` must be on PATH for `add` and `u
 Given the CHANGELOG.md
 When it is updated
 Then an "Unreleased" entry documents the new distribution commands
+```
+
+---
+
+#### DIST-I008 Interactive `add` Prompts
+- **Type:** Feature
+- **Effort:** 2
+- **Dependencies:** DIST-I002, DIST-I011 (agent auto-detection)
+- **Description:** When `--harnesses` is not provided and no `skillprism.yaml` exists, prompt the user interactively to select which harnesses to install to. When `--target` is not provided, prompt the user to choose project or user scope. Show a summary before executing. Reuse `--force` to skip prompts. Use `dialoguer` crate for interactive multi-select and confirm prompts.
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given no --harnesses flag and no skillprism.yaml
+When the user runs skillprism add owner/repo
+Then the user is prompted to select harnesses interactively
+And detected agents are pre-selected by default
+
+Given no --target flag
+When the user runs skillprism add owner/repo
+Then the user is prompted to choose project or user scope
+
+Given all selections made and user confirms
+When the installation proceeds
+Then the selected scope and harnesses are used
+```
+
+---
+
+#### DIST-I009 npm Launcher
+- **Type:** Feature
+- **Effort:** 1
+- **Dependencies:** Release CI (Epic H)
+- **Description:** Create a thin npm package (`npm/` at repo root) whose `bin` entry is a small JS launcher script. On `npx skillprism` or `npm install -g skillprism`, the launcher detects the platform, downloads the correct pre-built binary from the latest GitHub Release, caches it, and execs it. The binary is never built from npm — the npm package is purely a download + exec gateway. Modeled after Biome's approach (`@biomejs/biome`).
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given the npm package is scaffolding exists
+When node npm/bin/cli.mjs --help is run
+Then it downloads the correct binary for the platform
+And forwards --help to the binary
+And prints the help output
+
+Given the binary is cached
+When node npm/bin/cli.mjs list is run a second time
+Then it uses the cached binary
+```
+
+---
+
+#### DIST-I010 Agent Auto-Detection
+- **Type:** Feature
+- **Effort:** 2
+- **Dependencies:** None
+- **Description:** Implement a module that probes common agent installation paths (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`, `~/.factory/`, `~/.pi/`) to detect which agents the user has installed. Used as default harness set when no `skillprism.yaml` or `--harnesses` flag is provided. Detection is purely filesystem-based (no API calls). Used by DIST-I008 to pre-select detected agents in the interactive prompt.
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given no skillprism.yaml and no --harnesses flag
+When add probes for installed agents
+Then it checks ~/.claude, ~/.config/opencode, ~/.codex, ~/.factory, ~/.pi
+
+Given ~/.claude exists but ~/.opencode does not
+When detection runs
+Then only claude is returned as detected
+
+Given a skillprism.yaml with configured harnesses exists
+When add runs
+Then auto-detection is skipped (config takes precedence)
 ```
