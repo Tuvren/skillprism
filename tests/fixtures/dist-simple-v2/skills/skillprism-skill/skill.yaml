@@ -1,0 +1,5 @@
+name: skillprism-skill
+description: A skillprism-format skill for distribution testing
+skillprism: '1'
+variables:
+  version: B

@@ -1,0 +1,253 @@
+// Copyright 2026 Oscar Yáñez Cisterna (@SkrOYC)
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use assert_cmd::Command;
+use tempfile::TempDir;
+
+fn project_root() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
+}
+
+fn fixtures_dir() -> PathBuf {
+    project_root().join("tests/fixtures")
+}
+
+fn copy_fixture(name: &str) -> TempDir {
+    let tmp = TempDir::with_prefix(format!("skillprism_{name}_")).unwrap();
+    let src = fixtures_dir().join(name);
+    cp_dir(&src, tmp.path()).unwrap();
+    tmp
+}
+
+fn cp_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        let dst_path = dst.join(entry.file_name());
+        if ty.is_dir() {
+            cp_dir(&entry.path(), &dst_path)?;
+        } else {
+            fs::copy(entry.path(), dst_path)?;
+        }
+    }
+    Ok(())
+}
+
+/// Creates a temporary state directory and returns both paths.
+struct TestEnv {
+    project: TempDir,
+    _state: TempDir,
+    state_config: PathBuf,
+}
+
+impl TestEnv {
+    fn new(fixture: &str) -> Self {
+        let project = copy_fixture(fixture);
+        let state = TempDir::with_prefix("skillprism_state_").unwrap();
+        let state_config = state.path().to_path_buf();
+        Self {
+            project,
+            _state: state,
+            state_config,
+        }
+    }
+
+    fn project_dir(&self) -> &Path {
+        self.project.path()
+    }
+
+    fn bin(&self) -> Command {
+        let mut cmd = Command::cargo_bin("skillprism").unwrap();
+        cmd.current_dir(self.project_dir())
+            .env("XDG_CONFIG_HOME", &self.state_config);
+        cmd
+    }
+}
+
+const SKILLPRISM_SKILL: &str = "skillprism-skill";
+const PLAIN_SKILL: &str = "plain-skill";
+
+#[test]
+fn distribution_lifecycle_add_list_remove() {
+    let env = TestEnv::new("dist-simple");
+
+    // --- add ---
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--force")
+        .assert()
+        .success();
+
+    // Verify both skills installed to each harness
+    for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
+        for harness in &["claude", "opencode"] {
+            let output_path = env
+                .project_dir()
+                .join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            assert!(
+                output_path.exists(),
+                "expected {skill} at {}",
+                output_path.display()
+            );
+        }
+    }
+
+    // Verify skillprism-skill rendered through harness (content differs per harness)
+    let claude_content = fs::read_to_string(
+        env.project_dir()
+            .join(format!(".claude/skills/{SKILLPRISM_SKILL}/SKILL.md")),
+    )
+    .unwrap();
+    assert!(claude_content.contains("Harness: claude"));
+    let opencode_content = fs::read_to_string(
+        env.project_dir()
+            .join(format!(".opencode/skills/{SKILLPRISM_SKILL}/SKILL.md")),
+    )
+    .unwrap();
+    assert!(opencode_content.contains("Harness: opencode"));
+
+    // Verify plain-skill copied as-is (same content in both harnesses)
+    for harness in &["claude", "opencode"] {
+        let content = fs::read_to_string(
+            env.project_dir()
+                .join(format!(".{harness}/skills/{PLAIN_SKILL}/SKILL.md")),
+        )
+        .unwrap();
+        assert!(content.contains("Version: A"));
+    }
+
+    // --- list ---
+    let list_result = env.bin().arg("list").assert().success();
+    let list_stdout = String::from_utf8_lossy(&list_result.get_output().stdout);
+    assert!(
+        list_stdout.contains(SKILLPRISM_SKILL),
+        "list should contain {}",
+        SKILLPRISM_SKILL
+    );
+    assert!(
+        list_stdout.contains(PLAIN_SKILL),
+        "list should contain {}",
+        PLAIN_SKILL
+    );
+
+    // --- remove ---
+    env.bin()
+        .arg("remove")
+        .arg("--all")
+        .arg("--force")
+        .assert()
+        .success();
+
+    // Verify files removed
+    for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
+        for harness in &["claude", "opencode"] {
+            let output_path = env
+                .project_dir()
+                .join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            assert!(
+                !output_path.exists(),
+                "{skill} should be removed from {}",
+                output_path.display()
+            );
+        }
+    }
+
+    // Verify list shows empty
+    let list_after_result = env.bin().arg("list").assert().success();
+    let list_after_stdout = String::from_utf8_lossy(&list_after_result.get_output().stdout);
+    assert!(
+        list_after_stdout.contains("No skills installed"),
+        "list after remove should show empty, got: {list_after_stdout}"
+    );
+}
+
+#[test]
+fn distribution_add_rejects_dist_target() {
+    let env = TestEnv::new("dist-simple");
+
+    let result = env
+        .bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--target")
+        .arg("dist")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&result.get_output().stderr);
+    assert!(
+        stderr.contains("invalid value") || stderr.contains("dist"),
+        "should reject --target dist, got: {stderr}"
+    );
+}
+
+#[test]
+fn distribution_remove_nonexistent_skill_fails() {
+    let env = TestEnv::new("dist-simple");
+
+    // First add a skill to create state
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--force")
+        .assert()
+        .success();
+
+    // Then try to remove a non-existent skill
+    let result = env
+        .bin()
+        .arg("remove")
+        .arg("nonexistent")
+        .arg("--force")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&result.get_output().stderr);
+    assert!(
+        stderr.contains("not found")
+            || stderr.contains("No matches")
+            || stderr.contains("nonexistent"),
+        "should report skill not found, got: {stderr}"
+    );
+}
+
+#[test]
+fn distribution_update_no_skills_in_state() {
+    let env = TestEnv::new("dist-simple");
+
+    // First add a skill so state exists, then remove it so state is empty
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--force")
+        .assert()
+        .success();
+    env.bin()
+        .arg("remove")
+        .arg("--all")
+        .arg("--force")
+        .assert()
+        .success();
+
+    // Now update with empty state
+    let result = env.bin().arg("update").assert().success();
+    let stdout = String::from_utf8_lossy(&result.get_output().stdout);
+    assert!(
+        stdout.contains("No installed skills"),
+        "update with empty state should print 'No installed skills', got: {stdout}"
+    );
+}
