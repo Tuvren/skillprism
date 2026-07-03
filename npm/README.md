@@ -1,4 +1,4 @@
-# @tuvren/skillprism — npm launcher
+# skillprism — npm launcher
 
 This package is a thin downloader gateway for the `skillprism` CLI. The real
 binary is a compiled Rust artifact published via GitHub Releases.

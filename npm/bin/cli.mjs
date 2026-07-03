@@ -6,13 +6,11 @@
 // Pattern: Biome (@biomejs/biome), esbuild, Playwright.
 // The Rust binary is the real artifact — this package is just a gateway.
 
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
-import { readFile, unlink } from "node:fs/promises";
+import { createWriteStream, existsSync, mkdirSync, renameSync, chmodSync, rmSync } from "node:fs";
+import { unlink } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawn } from "node:child_process";
-import { createGunzip } from "node:zlib";
-import { createHash } from "node:crypto";
 import { pipeline } from "node:stream/promises";
 
 const REPO = "tuvren/skillprism";
@@ -46,7 +44,10 @@ async function getLatestVersion() {
     headers: { Accept: "application/vnd.github.v3+json", "User-Agent": "skillprism-npm" },
   });
   if (!res.ok) {
-    throw new Error(`Failed to fetch latest release: ${res.status} ${res.statusText}`);
+    const hint = process.env.SKILLPRISM_VERSION
+      ? ""
+      : " Set SKILLPRISM_VERSION to a specific version to bypass the API rate limit.";
+    throw new Error(`Failed to fetch latest release: ${res.status} ${res.statusText}.${hint}`);
   }
   const data = await res.json();
   return data.tag_name.replace(/^v/, "");
@@ -69,7 +70,6 @@ async function downloadBinary(version) {
 
   // Extract binary from the tarball (xz-compressed, no outer dir flattening)
   // The tarball contains: skillprism-<target>/skillprism
-  const binaryPath = getBinaryPath(version);
   mkdirSync(join(CACHE_DIR, `extract-${version}-${target}`), { recursive: true });
 
   await extractTarXz(tmpFile, join(CACHE_DIR, `extract-${version}-${target}`));
@@ -83,7 +83,6 @@ async function downloadBinary(version) {
   );
   const finalPath = getBinaryPath(version);
 
-  const { renameSync, chmodSync } = await import("node:fs");
   renameSync(extractedBinary, finalPath);
   chmodSync(finalPath, 0o755);
 
