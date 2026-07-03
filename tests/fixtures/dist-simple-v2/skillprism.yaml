@@ -1,5 +1,0 @@
-name: dist-test
-harnesses:
-  - claude
-  - opencode
-skills_dir: skills
