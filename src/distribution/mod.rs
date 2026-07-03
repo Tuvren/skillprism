@@ -21,6 +21,7 @@
 use std::fmt;
 
 pub mod add;
+pub mod detect;
 pub mod install;
 pub mod list;
 pub mod network;
