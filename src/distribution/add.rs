@@ -14,16 +14,15 @@
 
 //! `skillprism add` command implementation.
 
-use std::path::{Path, PathBuf};
-
-use clap::ValueEnum;
-use miette::IntoDiagnostic;
+use std::path::Path;
 
 use crate::loader::ProjectLoader;
 use crate::state::{InstallScope, StateStore};
 use crate::types::ProjectError;
+use clap::ValueEnum;
 
 use super::CommandError;
+use super::find_project_root;
 use super::install::{InstallContext, InstallError, install_source};
 use super::source::parse_source;
 
@@ -59,7 +58,14 @@ pub fn run_add(
     let scope = InstallScope::from(target);
 
     let project_root = match scope {
-        InstallScope::Project => Some(find_project_root().map_err(CommandError::Usage)?),
+        InstallScope::Project => Some(
+            find_project_root()
+                .map_err(|_| {
+                    CommandError::Usage(miette::miette!(
+                        "No skillprism.yaml found. Run `skillprism init project <name>` to create one, or cd into a skillprism project."
+                    ))
+                })?,
+        ),
         InstallScope::User => find_project_root().ok(),
     };
 
@@ -98,23 +104,6 @@ pub fn run_add(
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
     Ok(())
-}
-
-fn find_project_root() -> Result<PathBuf, miette::Report> {
-    let cwd = std::env::current_dir().into_diagnostic()?;
-    let mut dir = cwd.as_path();
-    loop {
-        if dir.join("skillprism.yaml").exists() {
-            return Ok(dir.to_path_buf());
-        }
-        if let Some(parent) = dir.parent() {
-            dir = parent;
-        } else {
-            return Err(miette::miette!(
-                "No skillprism.yaml found. Run `skillprism init project <name>` to create one, or cd into a skillprism project."
-            ));
-        }
-    }
 }
 
 fn determine_harnesses(

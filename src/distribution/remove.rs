@@ -15,7 +15,7 @@
 //! `skillprism remove` command implementation.
 
 use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use miette::IntoDiagnostic;
 
@@ -38,6 +38,12 @@ pub fn run_remove(
     all_scopes: bool,
     force: bool,
 ) -> Result<(), CommandError> {
+    if all && !skills.is_empty() {
+        return Err(CommandError::Usage(miette::miette!(
+            "--all cannot be combined with named skills"
+        )));
+    }
+
     let scopes = determine_scopes(target, all_scopes);
     let harness_filter = parse_harness_filter(harnesses);
     let project_root = find_project_root().ok();
@@ -47,9 +53,12 @@ pub fn run_remove(
     let removals = select_removals(store.skills(), &scopes, skills, all, &harness_filter);
 
     if removals.is_empty() {
-        return Err(CommandError::Runtime(miette::miette!(
-            "No matching installed skills found"
-        )));
+        let requested = if skills.len() == 1 {
+            format!("Skill '{}' is not installed", skills[0])
+        } else {
+            format!("Skills [{}] are not installed", skills.join(", "))
+        };
+        return Err(CommandError::Runtime(miette::miette!(requested)));
     }
 
     let affected = describe_affected(&removals);
@@ -67,7 +76,7 @@ pub fn run_remove(
         }
     }
 
-    apply_removals_to_state(&mut store, removals)?;
+    apply_removals_to_state(&mut store, removals, project_root.as_deref())?;
     store
         .save()
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
@@ -212,6 +221,7 @@ const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
 fn apply_removals_to_state(
     store: &mut StateStore,
     removals: Vec<RemovalAction>,
+    project_root: Option<&Path>,
 ) -> Result<(), CommandError> {
     for (skill, harnesses_to_remove) in removals {
         if harnesses_to_remove.len() >= skill.harnesses.len() {
@@ -221,7 +231,7 @@ fn apply_removals_to_state(
 
         let mut record = skill;
         for harness_id in &harnesses_to_remove {
-            remove_harness_files_from_record(&mut record, harness_id)?;
+            remove_harness_files_from_record(&mut record, harness_id, project_root)?;
         }
         record
             .harnesses
@@ -234,20 +244,23 @@ fn apply_removals_to_state(
 fn remove_harness_files_from_record(
     record: &mut InstalledSkill,
     harness_id: &str,
+    project_root: Option<&Path>,
 ) -> Result<(), CommandError> {
     let registry = HarnessRegistry::with_builtins();
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(record.scope);
-    let root = match record.scope {
-        InstallScope::Project => {
-            find_project_root().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?
-        }
-        InstallScope::User => PathBuf::from("."),
+    let root: &Path = match record.scope {
+        InstallScope::Project => project_root.ok_or_else(|| {
+            CommandError::Usage(miette::miette!(
+                "--target project requires being inside a skillprism project"
+            ))
+        })?,
+        InstallScope::User => Path::new("."),
     };
 
-    let skill_path = router::resolve_skill_path(&root, &harness, &record.name, target)
+    let skill_path = router::resolve_skill_path(root, &harness, &record.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let skill_dir = skill_path
         .parent()
@@ -326,5 +339,53 @@ mod tests {
             &["opencode".to_string()],
         );
         assert!(removals.is_empty());
+    }
+
+    #[test]
+    fn apply_partial_harness_removal_updates_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let claude_file = root.join(".claude/skills/alpha/SKILL.md");
+        let opencode_file = root.join(".opencode/skills/alpha/SKILL.md");
+        std::fs::create_dir_all(claude_file.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(opencode_file.parent().unwrap()).unwrap();
+        std::fs::write(&claude_file, b"claude").unwrap();
+        std::fs::write(&opencode_file, b"opencode").unwrap();
+
+        let state_dir = tmp.path().join("state");
+        let mut store = StateStore::open_at(&state_dir).unwrap();
+        store.upsert(InstalledSkill {
+            name: "alpha".to_string(),
+            source: "owner/alpha".to_string(),
+            source_url: "https://github.com/owner/alpha.git".to_string(),
+            source_type: SourceType::GitHub,
+            r#ref: Some("main".to_string()),
+            skill_path: None,
+            scope: InstallScope::Project,
+            harnesses: vec!["claude".to_string(), "opencode".to_string()],
+            format: SkillFormat::Skillprism,
+            installed_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            files: vec![
+                InstalledFile {
+                    path: claude_file.to_string_lossy().to_string(),
+                    hash: "sha256:a".to_string(),
+                },
+                InstalledFile {
+                    path: opencode_file.to_string_lossy().to_string(),
+                    hash: "sha256:b".to_string(),
+                },
+            ],
+        });
+        store.save().unwrap();
+
+        let action = (store.skills()[0].clone(), vec!["claude".to_string()]);
+        apply_removals_to_state(&mut store, vec![action], Some(root)).unwrap();
+
+        assert_eq!(store.skills().len(), 1);
+        let updated = &store.skills()[0];
+        assert_eq!(updated.harnesses, vec!["opencode"]);
+        assert_eq!(updated.files.len(), 1);
+        assert!(updated.files[0].path.contains(".opencode"));
     }
 }
