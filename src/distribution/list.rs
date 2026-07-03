@@ -14,7 +14,7 @@
 
 //! `skillprism list` command implementation.
 
-use crate::state::{InstallScope, StateStore};
+use crate::state::{InstallScope, InstalledSkill, StateStore};
 
 use super::add::InstallScopeArg;
 
@@ -24,8 +24,26 @@ pub fn run_list(
     harnesses: Option<&String>,
 ) -> Result<(), miette::Report> {
     let store = StateStore::open().map_err(miette::Report::new)?;
-    let skills: Vec<_> = store
-        .skills()
+    let skills = filter_skills(store.skills(), target, harnesses);
+
+    if skills.is_empty() {
+        println!("No skills installed");
+        return Ok(());
+    }
+
+    for skill in skills {
+        print_skill(&skill);
+    }
+
+    Ok(())
+}
+
+fn filter_skills(
+    skills: &[InstalledSkill],
+    target: Option<InstallScopeArg>,
+    harnesses: Option<&String>,
+) -> Vec<InstalledSkill> {
+    skills
         .iter()
         .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
         .filter(|s| {
@@ -37,29 +55,86 @@ pub fn run_list(
             })
         })
         .cloned()
-        .collect();
+        .collect()
+}
 
-    if skills.is_empty() {
-        println!("No skills installed");
-        return Ok(());
+fn print_skill(skill: &InstalledSkill) {
+    let r#ref = skill.r#ref.clone().unwrap_or_else(|| "-".to_string());
+    let harnesses = skill.harnesses.join(", ");
+    let scope = match skill.scope {
+        InstallScope::Project => "project",
+        InstallScope::User => "user",
+    };
+    println!(
+        "{name}\t{source}\t{ref}\t{scope}\t{harnesses}",
+        name = skill.name,
+        source = skill.source,
+        ref = r#ref,
+        scope = scope,
+        harnesses = harnesses
+    );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{InstalledFile, SkillFormat, SourceType, now_rfc3339};
+
+    fn sample_skill(name: &str, scope: InstallScope, harnesses: &[&str]) -> InstalledSkill {
+        InstalledSkill {
+            name: name.to_string(),
+            source: format!("owner/{name}"),
+            source_url: format!("https://github.com/owner/{name}.git"),
+            source_type: SourceType::GitHub,
+            r#ref: Some("main".to_string()),
+            skill_path: None,
+            scope,
+            harnesses: harnesses.iter().map(|h| (*h).to_string()).collect(),
+            format: SkillFormat::Skillprism,
+            installed_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            files: vec![InstalledFile {
+                path: format!("{name}.md"),
+                hash: "sha256:abc".to_string(),
+            }],
+        }
     }
 
-    for skill in skills {
-        let r#ref = skill.r#ref.unwrap_or_else(|| "-".to_string());
-        let harnesses = skill.harnesses.join(", ");
-        let scope = match skill.scope {
-            InstallScope::Project => "project",
-            InstallScope::User => "user",
-        };
-        println!(
-            "{name}\t{source}\t{ref}\t{scope}\t{harnesses}",
-            name = skill.name,
-            source = skill.source,
-            ref = r#ref,
-            scope = scope,
-            harnesses = harnesses
+    #[test]
+    fn filter_by_scope() {
+        let skills = vec![
+            sample_skill("alpha", InstallScope::Project, &["claude"]),
+            sample_skill("beta", InstallScope::User, &["opencode"]),
+        ];
+        let filtered = filter_skills(&skills, Some(InstallScopeArg::User), None);
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "beta");
+    }
+
+    #[test]
+    fn filter_by_harness() {
+        let skills = vec![
+            sample_skill("alpha", InstallScope::Project, &["claude", "opencode"]),
+            sample_skill("beta", InstallScope::Project, &["opencode"]),
+        ];
+        let filtered = filter_skills(&skills, None, Some(&"claude".to_string()));
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "alpha");
+    }
+
+    #[test]
+    fn filter_by_scope_and_harness() {
+        let skills = vec![
+            sample_skill("alpha", InstallScope::Project, &["claude"]),
+            sample_skill("beta", InstallScope::User, &["claude"]),
+            sample_skill("gamma", InstallScope::User, &["opencode"]),
+        ];
+        let filtered = filter_skills(
+            &skills,
+            Some(InstallScopeArg::User),
+            Some(&"claude".to_string()),
         );
+        assert_eq!(filtered.len(), 1);
+        assert_eq!(filtered[0].name, "beta");
     }
-
-    Ok(())
 }
