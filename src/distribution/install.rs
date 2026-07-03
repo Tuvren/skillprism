@@ -352,7 +352,7 @@ fn install_skillprism_skill(
     skill_path: Option<&String>,
     skip_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
-    let (skill, temp_project) = load_skill_into_temp_project(skill_dir, &ctx.harnesses)?;
+    let (skill, _temp_project) = load_skill_into_temp_project(skill_dir, &ctx.harnesses)?;
     let registry = build_registry_for_harnesses(&ctx.harnesses);
     let mut files = Vec::new();
 
@@ -381,10 +381,6 @@ fn install_skillprism_skill(
                 hash: format!("sha256:{}", sha256_file(sidecar)?),
             });
         }
-    }
-
-    if let Some(dir) = temp_project {
-        let _ = fs::remove_dir_all(dir);
     }
 
     Ok(build_record(
@@ -458,7 +454,7 @@ fn install_plain_skill(
                     })?
                     .to_string_lossy()
                     .to_string();
-                copy_dir(asset_dir, &skill_dir_out.join(&dir_name))?;
+                copy_dir(asset_dir, &skill_dir_out.join(&dir_name), asset_dir)?;
                 record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
             }
         }
@@ -476,10 +472,19 @@ fn install_plain_skill(
     ))
 }
 
+/// RAII guard that removes a temporary render project directory on drop.
+struct TempProject(PathBuf);
+
+impl Drop for TempProject {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 fn load_skill_into_temp_project(
     skill_dir: &Path,
     harnesses: &[String],
-) -> Result<(SkillModel, Option<PathBuf>), InstallError> {
+) -> Result<(SkillModel, TempProject), InstallError> {
     let temp_dir = std::env::temp_dir().join(format!(
         "skillprism-render-{}-{}",
         std::process::id(),
@@ -500,7 +505,7 @@ fn load_skill_into_temp_project(
 
     let skill_name = skill_dir_name(skill_dir);
     let dest = temp_dir.join("skills").join(&skill_name);
-    copy_dir(skill_dir, &dest)?;
+    copy_dir(skill_dir, &dest, skill_dir)?;
 
     let model = ProjectLoader::load(&temp_dir)?;
     let skill = model
@@ -511,7 +516,7 @@ fn load_skill_into_temp_project(
             source_input: skill_dir.to_string_lossy().to_string(),
         })?;
 
-    Ok((skill, Some(temp_dir)))
+    Ok((skill, TempProject(temp_dir)))
 }
 
 fn build_registry_for_harnesses(harnesses: &[String]) -> HarnessRegistry {
@@ -609,7 +614,10 @@ fn resolve_to_install_error(skill_name: &str) -> impl FnOnce(ResolveError) -> In
 
 /// Copies a directory tree, materializing symlinks so that the destination is a
 /// self-contained snapshot with no references back to the source tree.
-fn copy_dir(src: &Path, dst: &Path) -> Result<(), InstallError> {
+///
+/// `src_root` is the top-level directory being copied; any symlink whose target
+/// resolves outside that root is rejected.
+fn copy_dir(src: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -617,9 +625,9 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), InstallError> {
         let dst_path = dst.join(entry.file_name());
         let metadata = fs::symlink_metadata(&src_path)?;
         if metadata.is_symlink() {
-            copy_symlink_target(&src_path, &dst_path)?;
+            copy_symlink_target(&src_path, &dst_path, src_root)?;
         } else if metadata.is_dir() {
-            copy_dir(&src_path, &dst_path)?;
+            copy_dir(&src_path, &dst_path, src_root)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
@@ -627,7 +635,7 @@ fn copy_dir(src: &Path, dst: &Path) -> Result<(), InstallError> {
     Ok(())
 }
 
-fn copy_symlink_target(link: &Path, dst: &Path) -> Result<(), InstallError> {
+fn copy_symlink_target(link: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
     let target = fs::read_link(link)?;
     // Resolve relative symlinks against the link's parent so the target is read
     // from inside the source tree, not from the destination path.
@@ -637,11 +645,34 @@ fn copy_symlink_target(link: &Path, dst: &Path) -> Result<(), InstallError> {
     } else {
         target
     };
-    let metadata = fs::symlink_metadata(&resolved)?;
+
+    let canonical_root = std::fs::canonicalize(src_root).unwrap_or_else(|_| src_root.to_path_buf());
+    let canonical_target = std::fs::canonicalize(&resolved).map_err(|e| {
+        InstallError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "symlink {} points to missing or unreadable target {}: {e}",
+                link.display(),
+                resolved.display()
+            ),
+        ))
+    })?;
+    if !canonical_target.starts_with(&canonical_root) {
+        return Err(InstallError::Io(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            format!(
+                "symlink {} escapes the source directory (points to {})",
+                link.display(),
+                canonical_target.display()
+            ),
+        )));
+    }
+
+    let metadata = fs::symlink_metadata(&canonical_target)?;
     if metadata.is_dir() {
-        copy_dir(&resolved, dst)?;
+        copy_dir(&canonical_target, dst, src_root)?;
     } else {
-        fs::copy(&resolved, dst)?;
+        fs::copy(&canonical_target, dst)?;
     }
     Ok(())
 }
@@ -667,4 +698,59 @@ fn hex_encode(bytes: &[u8]) -> String {
         out.push(char::from(HEX[(byte & 0x0f) as usize]));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Write;
+
+    #[test]
+    fn copy_dir_materializes_in_tree_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        let dst = tmp.path().join("dst");
+        fs::create_dir(&src).unwrap();
+        fs::write(src.join("real.txt"), b"hello").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(src.join("real.txt"), src.join("link.txt")).unwrap();
+        #[cfg(not(unix))]
+        fs::copy(src.join("real.txt"), src.join("link.txt")).unwrap();
+
+        copy_dir(&src, &dst, &src).unwrap();
+
+        assert!(dst.join("real.txt").exists());
+        assert!(dst.join("link.txt").exists());
+        assert!(
+            !fs::symlink_metadata(dst.join("link.txt"))
+                .unwrap()
+                .is_symlink()
+        );
+    }
+
+    #[test]
+    fn copy_dir_rejects_escaping_symlink() {
+        let tmp = tempfile::tempdir().unwrap();
+        let src = tmp.path().join("src");
+        let dst = tmp.path().join("dst");
+        let secret = tmp.path().join("secret.txt");
+        fs::create_dir(&src).unwrap();
+        let mut f = fs::File::create(&secret).unwrap();
+        f.write_all(b"secret").unwrap();
+        drop(f);
+
+        #[cfg(unix)]
+        {
+            let target = PathBuf::from("..").join("..").join("secret.txt");
+            std::os::unix::fs::symlink(&target, src.join("escape.txt")).unwrap();
+        }
+        #[cfg(not(unix))]
+        {
+            // Windows symlinks may require privileges; skip this assertion.
+            return;
+        }
+
+        let result = copy_dir(&src, &dst, &src);
+        assert!(result.is_err(), "expected symlink escape to be rejected");
+    }
 }
