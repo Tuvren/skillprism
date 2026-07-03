@@ -5,8 +5,8 @@ description: "Build once, ship spec-compliant Agent Skills to every harness from
 
 <section class="prism-hero">
 <div class="prism-hero-inner">
-<h1>One source,<br><span class="amber">five harnesses.</span></h1>
-<p class="tagline">skillprism is a build-time compiler. Write one <code>skill.yaml</code> + <code>SKILL.md</code> template, compile to Claude Code, Codex, OpenCode, Factory, and Pi — all from a single command. No per-harness copies, no drift.</p>
+<h1>One source,<br><span class="amber">any harness.</span></h1>
+<p class="tagline">skillprism is a distribution CLI with per-harness templating. Install skills from any Git repo, compile from local sources — every rendered <code>SKILL.md</code> is compliant with the <a href="https://agentskills.io/specification">Agent Skills spec</a>. No per-harness copies, no drift.</p>
 <div class="hero-cta">
 <a href="/skillprism/docs/quickstart/" class="btn btn-primary">Quickstart →</a>
 <a href="/skillprism/docs/" class="btn btn-secondary">Read the docs</a>
@@ -34,9 +34,9 @@ skill.yaml
 
 <div class="pipeline">
 <div class="pipeline-step">
-<div class="step-glyph">$ init</div>
-<h3>Scaffold</h3>
-<p><code>skillprism init project my-skills</code> creates a project with a sample skill and config.</p>
+<div class="step-glyph">$ add</div>
+<h3>Install</h3>
+<p><code>skillprism add owner/repo</code> fetches a remote skill repo, auto-detects each skill's format, and renders it once per harness.</p>
 </div>
 <div class="pipeline-step">
 <div class="step-glyph">$ author</div>
@@ -48,6 +48,26 @@ skill.yaml
 <h3>Compile</h3>
 <p><code>skillprism build</code> renders each skill once per configured harness, writing to each harness's expected path.</p>
 </div>
+</div>
+
+## Install & manage skills
+
+```bash
+# Install from a GitHub repo
+skillprism add owner/repo
+
+# List installed skills
+skillprism list
+
+# Update to the latest version
+skillprism update
+
+# Remove when no longer needed
+skillprism remove my-skill
+```
+
+<div class="callout">
+<p>Each installed skill is tracked in the state layer (<code>~/.config/skillprism/installed.yaml</code>). Updates use <code>git ls-remote</code> for a lightweight up-to-date check before pulling new content.</p>
 </div>
 
 ## Supported harnesses

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased — Distribution CLI
+
+- **Distribution commands** — New `add`, `list` (`ls`), `remove` (`rm`), and `update` (`up`) subcommands for installing skills from remote Git repositories and local paths, managing their lifecycle, and keeping them up to date. Each installed skill is auto-detected as skillprism-format (rendered through MiniJinja per harness) or plain-format (copied as-is). Update performs lightweight `git ls-remote` up-to-date checks and per-file SHA-256 content comparison. State is tracked in `~/.config/skillprism/installed.yaml`.
+
 ## Unreleased — QoL for skill authors
 
 - **Spec-compliant scaffolds** — `init skill` and `init project` now emit `SKILL.md` with the YAML frontmatter (`name` + `description`) the [Agent Skills spec](https://agentskills.io/specification) requires. Previously the scaffold produced frontmatter-less skills that no client could discover.
