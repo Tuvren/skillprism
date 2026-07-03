@@ -14,18 +14,317 @@
 
 //! `skillprism remove` command implementation.
 
+use std::io::{self, Write};
+use std::path::{Path, PathBuf};
+
+use miette::IntoDiagnostic;
+
+use crate::cli::TargetScope;
+use crate::registry::HarnessRegistry;
+use crate::router;
+use crate::state::{InstallScope, InstalledSkill, StateStore};
+
+use super::CommandError;
 use super::add::InstallScopeArg;
+use super::find_project_root;
 
 /// Runs the `remove` command.
-#[allow(clippy::unnecessary_wraps)]
+#[allow(clippy::too_many_lines)]
 pub fn run_remove(
-    _skills: Vec<String>,
-    _target: Option<InstallScopeArg>,
-    _harnesses: Option<String>,
-    _all: bool,
-    _all_scopes: bool,
-    _force: bool,
-) -> Result<(), miette::Report> {
-    eprintln!("remove: not yet implemented");
+    skills: &[String],
+    target: Option<InstallScopeArg>,
+    harnesses: Option<String>,
+    all: bool,
+    all_scopes: bool,
+    force: bool,
+) -> Result<(), CommandError> {
+    let scopes = determine_scopes(target, all_scopes);
+    let harness_filter = parse_harness_filter(harnesses);
+    let project_root = find_project_root().ok();
+
+    let mut store =
+        StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let removals = select_removals(store.skills(), &scopes, skills, all, &harness_filter);
+
+    if removals.is_empty() {
+        return Err(CommandError::Runtime(miette::miette!(
+            "No matching installed skills found"
+        )));
+    }
+
+    let affected = describe_affected(&removals);
+    if force {
+        for line in &affected {
+            println!("{line}");
+        }
+    } else {
+        prompt_confirm(&affected)?;
+    }
+
+    for (skill, harnesses_to_remove) in &removals {
+        for harness_id in harnesses_to_remove {
+            remove_skill_files(skill, harness_id, project_root.as_deref())?;
+        }
+    }
+
+    apply_removals_to_state(&mut store, removals)?;
+    store
+        .save()
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+
     Ok(())
+}
+
+fn determine_scopes(target: Option<InstallScopeArg>, all_scopes: bool) -> Vec<InstallScope> {
+    if all_scopes {
+        return vec![InstallScope::Project, InstallScope::User];
+    }
+    match target {
+        Some(InstallScopeArg::User) => vec![InstallScope::User],
+        Some(InstallScopeArg::Project) | None => vec![InstallScope::Project],
+    }
+}
+
+fn parse_harness_filter(harnesses: Option<String>) -> Vec<String> {
+    harnesses
+        .map(|h| {
+            h.split(',')
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// A removal action: the skill record and the harnesses to remove from it.
+type RemovalAction = (InstalledSkill, Vec<String>);
+
+fn select_removals(
+    skills: &[InstalledSkill],
+    scopes: &[InstallScope],
+    names: &[String],
+    all: bool,
+    harness_filter: &[String],
+) -> Vec<RemovalAction> {
+    skills
+        .iter()
+        .filter(|s| scopes.contains(&s.scope))
+        .filter(|s| all || names.contains(&s.name))
+        .map(|s| {
+            let to_remove: Vec<_> = if harness_filter.is_empty() {
+                s.harnesses.clone()
+            } else {
+                s.harnesses
+                    .iter()
+                    .filter(|h| harness_filter.contains(h))
+                    .cloned()
+                    .collect()
+            };
+            (s.clone(), to_remove)
+        })
+        .filter(|(_, to_remove)| !to_remove.is_empty())
+        .collect()
+}
+
+fn describe_affected(removals: &[RemovalAction]) -> Vec<String> {
+    removals
+        .iter()
+        .map(|(skill, harnesses)| {
+            format!(
+                "{name} ({scope}): {harnesses}",
+                name = skill.name,
+                scope = match skill.scope {
+                    InstallScope::Project => "project",
+                    InstallScope::User => "user",
+                },
+                harnesses = harnesses.join(", ")
+            )
+        })
+        .collect()
+}
+
+fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
+    println!("The following skills will be removed:");
+    for line in affected {
+        println!("  {line}");
+    }
+    print!("Are you sure? [y/N] ");
+    io::stdout()
+        .flush()
+        .into_diagnostic()
+        .map_err(CommandError::Runtime)?;
+
+    let mut input = String::new();
+    io::stdin()
+        .read_line(&mut input)
+        .into_diagnostic()
+        .map_err(CommandError::Runtime)?;
+
+    let trimmed = input.trim().to_lowercase();
+    if trimmed != "y" && trimmed != "yes" {
+        return Err(CommandError::Runtime(miette::miette!("Removal cancelled")));
+    }
+    Ok(())
+}
+
+fn remove_skill_files(
+    skill: &InstalledSkill,
+    harness_id: &str,
+    project_root: Option<&Path>,
+) -> Result<(), CommandError> {
+    let registry = HarnessRegistry::with_builtins();
+    let harness = registry
+        .resolve(harness_id)
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let target = install_scope_to_target(skill.scope);
+    let root = match skill.scope {
+        InstallScope::Project => project_root.ok_or_else(|| {
+            CommandError::Usage(miette::miette!(
+                "--target project requires being inside a skillprism project"
+            ))
+        })?,
+        InstallScope::User => Path::new("."),
+    };
+
+    let skill_path = router::resolve_skill_path(root, &harness, &skill.name, target)
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let skill_dir = skill_path
+        .parent()
+        .expect("skill path should have a parent directory")
+        .to_path_buf();
+
+    if skill_dir.exists() {
+        std::fs::remove_dir_all(&skill_dir)
+            .into_diagnostic()
+            .map_err(CommandError::Runtime)?;
+    }
+
+    Ok(())
+}
+
+const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
+    match scope {
+        InstallScope::Project => TargetScope::Project,
+        InstallScope::User => TargetScope::User,
+    }
+}
+
+fn apply_removals_to_state(
+    store: &mut StateStore,
+    removals: Vec<RemovalAction>,
+) -> Result<(), CommandError> {
+    for (skill, harnesses_to_remove) in removals {
+        if harnesses_to_remove.len() >= skill.harnesses.len() {
+            store.remove(&skill.name);
+            continue;
+        }
+
+        let mut record = skill;
+        for harness_id in &harnesses_to_remove {
+            remove_harness_files_from_record(&mut record, harness_id)?;
+        }
+        record
+            .harnesses
+            .retain(|h| !harnesses_to_remove.contains(h));
+        store.upsert(record);
+    }
+    Ok(())
+}
+
+fn remove_harness_files_from_record(
+    record: &mut InstalledSkill,
+    harness_id: &str,
+) -> Result<(), CommandError> {
+    let registry = HarnessRegistry::with_builtins();
+    let harness = registry
+        .resolve(harness_id)
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let target = install_scope_to_target(record.scope);
+    let root = match record.scope {
+        InstallScope::Project => {
+            find_project_root().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?
+        }
+        InstallScope::User => PathBuf::from("."),
+    };
+
+    let skill_path = router::resolve_skill_path(&root, &harness, &record.name, target)
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let skill_dir = skill_path
+        .parent()
+        .expect("skill path should have a parent directory")
+        .to_path_buf();
+
+    record
+        .files
+        .retain(|f| !Path::new(&f.path).starts_with(&skill_dir));
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::state::{InstalledFile, SkillFormat, SourceType, now_rfc3339};
+
+    fn sample_skill(name: &str, scope: InstallScope, harnesses: &[&str]) -> InstalledSkill {
+        InstalledSkill {
+            name: name.to_string(),
+            source: format!("owner/{name}"),
+            source_url: format!("https://github.com/owner/{name}.git"),
+            source_type: SourceType::GitHub,
+            r#ref: Some("main".to_string()),
+            skill_path: None,
+            scope,
+            harnesses: harnesses.iter().map(|h| (*h).to_string()).collect(),
+            format: SkillFormat::Skillprism,
+            installed_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            files: vec![InstalledFile {
+                path: format!("{name}.md"),
+                hash: "sha256:abc".to_string(),
+            }],
+        }
+    }
+
+    #[test]
+    fn select_all_in_scope() {
+        let skills = vec![
+            sample_skill("alpha", InstallScope::Project, &["claude"]),
+            sample_skill("beta", InstallScope::User, &["opencode"]),
+        ];
+        let removals = select_removals(&skills, &[InstallScope::Project], &[], true, &[]);
+        assert_eq!(removals.len(), 1);
+        assert_eq!(removals[0].0.name, "alpha");
+        assert_eq!(removals[0].1, vec!["claude"]);
+    }
+
+    #[test]
+    fn select_by_name_and_harness_filter() {
+        let skills = vec![sample_skill(
+            "alpha",
+            InstallScope::Project,
+            &["claude", "opencode"],
+        )];
+        let removals = select_removals(
+            &skills,
+            &[InstallScope::Project],
+            &["alpha".to_string()],
+            false,
+            &["claude".to_string()],
+        );
+        assert_eq!(removals.len(), 1);
+        assert_eq!(removals[0].1, vec!["claude"]);
+    }
+
+    #[test]
+    fn select_skips_non_matching_harness() {
+        let skills = vec![sample_skill("alpha", InstallScope::Project, &["claude"])];
+        let removals = select_removals(
+            &skills,
+            &[InstallScope::Project],
+            &["alpha".to_string()],
+            false,
+            &["opencode".to_string()],
+        );
+        assert!(removals.is_empty());
+    }
 }

@@ -248,9 +248,15 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             all,
             all_scopes,
             force,
-        } => crate::distribution::remove::run_remove(
-            skills, target, harnesses, all, all_scopes, force,
-        ),
+        } => match crate::distribution::remove::run_remove(
+            &skills, target, harnesses, all, all_scopes, force,
+        ) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                eprintln!("{e:?}");
+                std::process::exit(e.exit_code());
+            }
+        },
         Command::Update {
             skills,
             target,

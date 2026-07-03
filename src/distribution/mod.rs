@@ -28,6 +28,32 @@ pub mod remove;
 pub mod source;
 pub mod update;
 
+use std::path::PathBuf;
+
+use crate::types::ProjectError;
+
+/// Locates the nearest project root by walking up from the current directory
+/// looking for `skillprism.yaml`.
+pub fn find_project_root() -> Result<PathBuf, ProjectError> {
+    let cwd = std::env::current_dir().map_err(|e| ProjectError::ConfigRead {
+        path: ".".to_string(),
+        source: e,
+    })?;
+    let mut dir = cwd.as_path();
+    loop {
+        if dir.join("skillprism.yaml").exists() {
+            return Ok(dir.to_path_buf());
+        }
+        if let Some(parent) = dir.parent() {
+            dir = parent;
+        } else {
+            return Err(ProjectError::ConfigNotFound {
+                path: cwd.join("skillprism.yaml").to_string_lossy().to_string(),
+            });
+        }
+    }
+}
+
 /// Error type for distribution CLI commands that carries an explicit process
 /// exit code separate from the wrapped diagnostic report.
 #[derive(Debug)]
