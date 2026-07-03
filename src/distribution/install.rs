@@ -174,12 +174,17 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
         }
     };
 
+    let resolved_ref = cleanup_dir
+        .as_deref()
+        .and_then(|dir| network::git_dir_head(dir).ok());
+
     let result = install_discovered_skills(
         ctx,
         &source_path,
         &source_url,
         source_type,
         r#ref.as_ref(),
+        resolved_ref,
         skill_path.as_ref(),
     );
 
@@ -190,13 +195,14 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
     result
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
 fn install_discovered_skills(
     ctx: &InstallContext,
     source_path: &Path,
     source_url: &str,
     source_type: SourceType,
     r#ref: Option<&String>,
+    resolved_ref: Option<String>,
     skill_path: Option<&String>,
 ) -> Result<Vec<InstallResult>, InstallError> {
     let skill_dirs = discover_skill_dirs(source_path)?;
@@ -234,6 +240,7 @@ fn install_discovered_skills(
                 source_url,
                 source_type,
                 r#ref,
+                resolved_ref.clone(),
                 skill_path,
                 &mut skip_all,
             )?,
@@ -243,6 +250,7 @@ fn install_discovered_skills(
                 source_url,
                 source_type,
                 r#ref,
+                resolved_ref.clone(),
                 skill_path,
                 &mut skip_all,
             )?,
@@ -275,7 +283,7 @@ fn skill_filter_from_parsed(parsed: &ParsedSource) -> Option<String> {
     }
 }
 
-fn skill_dir_name(dir: &Path) -> String {
+pub fn skill_dir_name(dir: &Path) -> String {
     dir.file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_default()
@@ -343,12 +351,14 @@ pub fn detect_format(skill_dir: &Path) -> Result<SkillFormat, InstallError> {
     )
 }
 
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 fn install_skillprism_skill(
     ctx: &InstallContext,
     skill_dir: &Path,
     source_url: &str,
     source_type: SourceType,
     r#ref: Option<&String>,
+    resolved_ref: Option<String>,
     skill_path: Option<&String>,
     skip_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
@@ -389,18 +399,21 @@ fn install_skillprism_skill(
         source_url,
         source_type,
         r#ref,
+        resolved_ref,
         skill_path,
         SkillFormat::Skillprism,
         files,
     ))
 }
 
+#[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 fn install_plain_skill(
     ctx: &InstallContext,
     skill_dir: &Path,
     source_url: &str,
     source_type: SourceType,
     r#ref: Option<&String>,
+    resolved_ref: Option<String>,
     skill_path: Option<&String>,
     skip_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
@@ -466,6 +479,7 @@ fn install_plain_skill(
         source_url,
         source_type,
         r#ref,
+        resolved_ref,
         skill_path,
         SkillFormat::Plain,
         files,
@@ -473,7 +487,14 @@ fn install_plain_skill(
 }
 
 /// RAII guard that removes a temporary render project directory on drop.
-struct TempProject(PathBuf);
+pub struct TempProject(PathBuf);
+
+impl TempProject {
+    /// Returns a reference to the temporary directory path.
+    pub fn path(&self) -> &Path {
+        &self.0
+    }
+}
 
 impl Drop for TempProject {
     fn drop(&mut self) {
@@ -481,7 +502,7 @@ impl Drop for TempProject {
     }
 }
 
-fn load_skill_into_temp_project(
+pub fn load_skill_into_temp_project(
     skill_dir: &Path,
     harnesses: &[String],
 ) -> Result<(SkillModel, TempProject), InstallError> {
@@ -519,7 +540,7 @@ fn load_skill_into_temp_project(
     Ok((skill, TempProject(temp_dir)))
 }
 
-fn build_registry_for_harnesses(harnesses: &[String]) -> HarnessRegistry {
+pub fn build_registry_for_harnesses(harnesses: &[String]) -> HarnessRegistry {
     let registry = HarnessRegistry::with_builtins();
     for id in harnesses {
         let _ = registry.resolve(id); // ensure it exists
@@ -527,7 +548,7 @@ fn build_registry_for_harnesses(harnesses: &[String]) -> HarnessRegistry {
     registry
 }
 
-const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
+pub const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
     match scope {
         InstallScope::Project => TargetScope::Project,
         InstallScope::User => TargetScope::User,
@@ -541,6 +562,7 @@ fn build_record(
     source_url: &str,
     source_type: SourceType,
     r#ref: Option<&String>,
+    resolved_ref: Option<String>,
     skill_path: Option<&String>,
     format: SkillFormat,
     files: Vec<InstalledFile>,
@@ -552,6 +574,7 @@ fn build_record(
         source_url: source_url.to_string(),
         source_type,
         r#ref: r#ref.cloned(),
+        resolved_ref,
         skill_path: skill_path.cloned(),
         scope: ctx.target_scope,
         harnesses: ctx.harnesses.clone(),
@@ -562,7 +585,7 @@ fn build_record(
     }
 }
 
-fn record_asset_hashes(
+pub fn record_asset_hashes(
     src_dir: &Path,
     dst_base: &Path,
     files: &mut Vec<InstalledFile>,
@@ -578,7 +601,7 @@ fn record_asset_hashes(
     Ok(())
 }
 
-fn walk_files(dir: &Path) -> Result<Vec<PathBuf>, InstallError> {
+pub fn walk_files(dir: &Path) -> Result<Vec<PathBuf>, InstallError> {
     let mut files = Vec::new();
     if !dir.exists() {
         return Ok(files);
@@ -617,7 +640,7 @@ fn resolve_to_install_error(skill_name: &str) -> impl FnOnce(ResolveError) -> In
 ///
 /// `src_root` is the top-level directory being copied; any symlink whose target
 /// resolves outside that root is rejected.
-fn copy_dir(src: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
+pub fn copy_dir(src: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;

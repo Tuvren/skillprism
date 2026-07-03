@@ -87,6 +87,7 @@ mod tests {
             source_url: format!("https://github.com/owner/{name}.git"),
             source_type: SourceType::GitHub,
             r#ref: Some("main".to_string()),
+            resolved_ref: None,
             skill_path: None,
             scope,
             harnesses: harnesses.iter().map(|h| (*h).to_string()).collect(),

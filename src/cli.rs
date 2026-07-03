@@ -263,7 +263,13 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             harnesses,
             diff,
             force,
-        } => crate::distribution::update::run_update(skills, target, harnesses, diff, force),
+        } => crate::distribution::update::run_update(
+            &skills,
+            target,
+            harnesses.as_ref(),
+            diff,
+            force,
+        ),
     }
 }
 

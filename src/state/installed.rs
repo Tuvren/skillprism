@@ -131,6 +131,9 @@ pub struct InstalledSkill {
     pub source_type: SourceType,
     /// Git ref (branch/tag/SHA) at install time; `None` for local sources.
     pub r#ref: Option<String>,
+    /// Resolved upstream SHA the `ref` pointed to at install/update time.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub resolved_ref: Option<String>,
     /// Subpath within the source that contained the skill; `None` if root.
     pub skill_path: Option<String>,
     /// Install scope: project or user.
@@ -553,6 +556,7 @@ mod tests {
                 source_url: "https://github.com/owner/repo.git".to_string(),
                 source_type: SourceType::GitHub,
                 r#ref: Some("abc123".to_string()),
+                resolved_ref: Some("abc123".to_string()),
                 skill_path: Some("skills/pdf".to_string()),
                 scope: InstallScope::Project,
                 harnesses: vec!["claude".to_string(), "opencode".to_string()],
@@ -661,6 +665,7 @@ mod tests {
             source_url: "https://github.com/owner/repo.git".to_string(),
             source_type: SourceType::GitHub,
             r#ref: Some("main".to_string()),
+            resolved_ref: None,
             skill_path: None,
             scope: InstallScope::Project,
             harnesses: vec!["claude".to_string()],

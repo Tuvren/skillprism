@@ -150,6 +150,17 @@ pub fn git_remote_head(url: &str, r#ref: &str) -> Result<Option<String>, Network
     Ok(None)
 }
 
+/// Reads the current `HEAD` SHA of a local git repository.
+pub fn git_dir_head(dir: &Path) -> Result<String, NetworkError> {
+    let output = run_git_output(&[
+        "-C".to_string(),
+        dir.to_string_lossy().to_string(),
+        "rev-parse".to_string(),
+        "HEAD".to_string(),
+    ])?;
+    Ok(output.trim().to_string())
+}
+
 /// Removes a temporary directory, validating that it lives under the system
 /// temp directory first.
 pub fn cleanup_temp_dir(dir: &Path) -> Result<(), NetworkError> {
