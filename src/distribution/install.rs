@@ -34,7 +34,7 @@ use crate::state::{
 use crate::types::{ProjectError, SkillModel};
 
 use super::network::{self, NetworkError};
-use super::source::{ParsedSource, SourceParseError};
+use super::source::{ParsedSource, SourceParseError, mask_credentials};
 
 /// Errors that can occur during installation.
 #[derive(Debug, Diagnostic, Error)]
@@ -282,7 +282,7 @@ fn install_discovered_skills(
     eprintln!(
         "Found {count} skill{} in {}",
         if count == 1 { "" } else { "s" },
-        ctx.source_input
+        mask_credentials(&ctx.source_input)
     );
 
     let mut results = Vec::new();

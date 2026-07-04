@@ -534,7 +534,6 @@ fn update_plain_skill(
         let mut written = false;
 
         if is_changed {
-            changed = true;
             if diff {
                 let existing = fs::read_to_string(&skill_path_buf).ok();
                 let diff_output = crate::router::diff::compute_diff(
@@ -547,6 +546,9 @@ fn update_plain_skill(
                 crate::router::atomic_write_bytes(&skill_path_buf, &content)
                     .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
                 written = true;
+            }
+            if written {
+                changed = true;
             }
         }
 
@@ -662,8 +664,6 @@ fn update_asset_dir(
         return Ok(());
     }
 
-    *changed = true;
-
     let mut copied = false;
     if diff {
         for (_, dst_file, hash) in &expected {
@@ -687,6 +687,7 @@ fn update_asset_dir(
     }
 
     if copied {
+        *changed = true;
         for (_, dst_file, hash) in expected {
             new_files.push(InstalledFile {
                 path: dst_file.to_string_lossy().to_string(),

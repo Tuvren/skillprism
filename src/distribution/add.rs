@@ -27,7 +27,7 @@ use super::CommandError;
 use super::detect::detect_installed_agents;
 use super::find_project_root;
 use super::install::{InstallContext, InstallError, install_source};
-use super::source::parse_source;
+use super::source::{mask_credentials, parse_source};
 
 /// Target scope for distribution install commands (`project` or `user`).
 ///
@@ -222,7 +222,7 @@ fn confirm_install(
     let harness_list = harnesses.join(", ");
 
     println!("Install summary:");
-    println!("  source:    {source}");
+    println!("  source:    {}", mask_credentials(source));
     println!("  scope:     {scope_label}");
     println!("  harnesses: {harness_list}");
 

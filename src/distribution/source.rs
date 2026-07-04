@@ -51,6 +51,18 @@ pub enum SourceParseError {
     UnsafeSubpath { subpath: String },
 }
 
+/// Redacts embedded credentials (e.g. `https://token@github.com/owner/repo.git`)
+/// from source strings so they can be safely printed to stderr, logs, or shell
+/// history.
+pub fn mask_credentials(source: &str) -> String {
+    if let Some((scheme, rest)) = source.split_once("://") {
+        if let Some((_, path)) = rest.split_once('@') {
+            return format!("{scheme}://***@{path}");
+        }
+    }
+    source.to_string()
+}
+
 /// A parsed source ready for fetching.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParsedSource {
