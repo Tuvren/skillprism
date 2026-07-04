@@ -6,6 +6,8 @@ Acronym: **DIST** | Story Points: **37** (32 original + 5 Phase 2)
 
 **Dependencies:** Epic H (RELS) — release artifacts must exist before the v1.0.0 tag is cut; PRD non-goal `plugin-marketplace.md` reopened by operator directive (see `.constitution/prd/out-of-scope/plugin-marketplace.md` for the `[REOPENED 2026-07-02]` annotation; full PRD revision is a downstream follow-up tracked in `prd/changelog.md`).
 
+**Phase 2 note:** agent auto-detection (DIST-I010) is used as contextual information (e.g. a "Detected agents" hint in the interactive `add` prompt), not as a default selection. Users must explicitly choose which harnesses to install to.
+
 **Operator directive (audit trail):** the directive that reopened `plugin-marketplace.md` and triggered Epic I is recorded in `prd/changelog.md` v0.2.0 (2026-07-02 entry) and `tasks/changelog.md` v0.11.0 (Epic I Activated and Specified entry). The git history of this PR is the source of truth; the changelog entries are the canonical pointer.
 
 **Spike (prerequisite, COMPLETE):** `.constitution/spikes/SPK-DIST-I001.md` — the remote fetch methodology is decided. The spike recommends shelling out to `git` directly for shallow clones (§4.1), with a three-layer auth chain (§4.2) and a Vercel-parity source-URL parser (§4.3). All implementation tickets below reference the spike for the contracts and mechanisms they need.
@@ -502,14 +504,15 @@ Then an "Unreleased" entry documents the new distribution commands
 #### DIST-I008 Interactive `add` Prompts
 - **Type:** Feature
 - **Effort:** 2
-- **Dependencies:** DIST-I002, DIST-I011 (agent auto-detection)
-- **Description:** When `--harnesses` is not provided and no `skillprism.yaml` exists, prompt the user interactively to select which harnesses to install to. When `--target` is not provided, prompt the user to choose project or user scope. Show a summary before executing. Reuse `--force` to skip prompts. Use `dialoguer` crate for interactive multi-select and confirm prompts.
+- **Dependencies:** DIST-I002, DIST-I010
+- **Description:** When `--harnesses` is not provided and no `skillprism.yaml` exists, prompt the user interactively to select which harnesses to install to. When `--target` is not provided, prompt the user to choose project or user scope. Show a summary before executing. Reuse `--force` to skip prompts. Use `dialoguer` crate for interactive multi-select and confirm prompts. No harnesses are pre-selected; detected agents are shown as a hint only. The user must explicitly choose which agents to install to.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given no --harnesses flag and no skillprism.yaml
 When the user runs skillprism add owner/repo
 Then the user is prompted to select harnesses interactively
-And detected agents are pre-selected by default
+And no harnesses are pre-selected
+And detected agents are shown as a hint
 
 Given no --target flag
 When the user runs skillprism add owner/repo
@@ -546,7 +549,7 @@ Then it uses the cached binary
 - **Type:** Feature
 - **Effort:** 2
 - **Dependencies:** None
-- **Description:** Implement a module that probes common agent installation paths (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`, `~/.factory/`, `~/.pi/`) to detect which agents the user has installed. Used as default harness set when no `skillprism.yaml` or `--harnesses` flag is provided. Detection is purely filesystem-based (no API calls). Used by DIST-I008 to pre-select detected agents in the interactive prompt.
+- **Description:** Implement a module that probes common agent installation paths (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`, `~/.factory/`, `~/.pi/`) to detect which agents the user has installed. Detection is purely filesystem-based (no API calls). Used by DIST-I008 to display a "Detected agents" hint in the interactive `add` prompt; detected agents are **not** pre-selected.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given no skillprism.yaml and no --harnesses flag
@@ -557,7 +560,8 @@ Given ~/.claude exists but ~/.opencode does not
 When detection runs
 Then only claude is returned as detected
 
-Given a skillprism.yaml with configured harnesses exists
-When add runs
-Then auto-detection is skipped (config takes precedence)
+Given the interactive add harness prompt is shown
+When agents are detected
+Then a hint lists the detected agents
+And no harnesses are pre-selected
 ```

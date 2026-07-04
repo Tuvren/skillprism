@@ -232,10 +232,19 @@ fn install_discovered_skills(
         skill_dirs
     };
 
+    let count = filtered.len();
+    eprintln!(
+        "Found {count} skill{} in {}",
+        if count == 1 { "" } else { "s" },
+        ctx.source_input
+    );
+
     let mut results = Vec::new();
     let mut skip_all = false;
 
     for skill_dir in filtered {
+        let name = skill_dir_name(&skill_dir);
+        eprintln!("Installing {name}...");
         let format = detect_format(&skill_dir)?;
         let record = match format {
             SkillFormat::Skillprism => install_skillprism_skill(

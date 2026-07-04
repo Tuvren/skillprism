@@ -68,7 +68,7 @@ flowchart LR
 
 ## Notes
 
-- **Epic I completed (2026-07-04):** All 10 tickets delivered, including Phase 2 (agent auto-detection, interactive `add` prompts, npm launcher). Archived via `git mv`.
+- **Epic I completed (2026-07-04):** All 10 tickets delivered, including Phase 2 (agent auto-detection as a hint, interactive `add` prompts, npm launcher). Archived via `git mv`.
 - **Architecture boundary preserved:** The distribution commands (`add`, `list`, `remove`, `update`) are the only network surface in skillprism. The npm launcher downloads binaries but the Rust binary itself makes no network calls beyond `git`.
 - **`find` deferred:** Can be implemented by querying Vercel's `skills.sh` API when prioritized — no registry backend needed.
 - **`use` command:** Explicitly ruled out. Not in scope.

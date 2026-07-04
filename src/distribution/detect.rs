@@ -15,8 +15,8 @@
 //! Auto-detection of installed agent harnesses.
 //!
 //! Probes common agent installation paths to determine which harnesses the
-//! user has installed. Used as default harness set when no `skillprism.yaml`
-//! or `--harnesses` flag is provided.
+//! user has installed. Used as contextual information (e.g. hints in the
+//! interactive `add` prompt), not as a default selection.
 
 use std::path::{Path, PathBuf};
 

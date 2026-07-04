@@ -96,6 +96,8 @@ pub fn run_add(
     let results =
         install_source(&ctx).map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
+    print_install_summary(&results, scope);
+
     let mut store =
         StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     for result in results {
@@ -175,10 +177,12 @@ fn determine_harnesses(
     }
 
     let detected = detect_installed_agents();
-    let checked_items: Vec<(&str, bool)> = BUILTIN_HARNESS_IDS
-        .iter()
-        .map(|h| (*h, detected.iter().any(|d| d == h)))
-        .collect();
+    if !detected.is_empty() {
+        eprintln!("Detected agents: {}", detected.join(", "));
+    }
+
+    let checked_items: Vec<(&str, bool)> =
+        BUILTIN_HARNESS_IDS.iter().map(|h| (*h, false)).collect();
 
     let selections = MultiSelect::new()
         .with_prompt("Select harnesses to install to (space to toggle, enter to confirm)")
@@ -225,6 +229,26 @@ fn confirm_install(
         .default(true)
         .interact()
         .map_err(|e| CommandError::Runtime(miette::miette!("Failed to read confirmation: {e}")))
+}
+
+fn print_install_summary(results: &[super::install::InstallResult], scope: InstallScope) {
+    let scope_label = match scope {
+        InstallScope::Project => "project",
+        InstallScope::User => "user",
+    };
+    let count = results.len();
+    if count == 0 {
+        println!("No skills installed.");
+        return;
+    }
+    println!(
+        "Installed {count} skill{scope_suffix} to {scope_label} scope:",
+        scope_suffix = if count == 1 { "" } else { "s" },
+    );
+    for result in results {
+        let harness_list = result.record.harnesses.join(", ");
+        println!("  - {} -> {harness_list}", result.record.name);
+    }
 }
 
 fn embed_skill_filter(
