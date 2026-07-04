@@ -62,6 +62,11 @@ pub enum InstallError {
     #[error("{0}")]
     Render(miette::Report),
 
+    /// State persistence failed.
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    State(#[from] crate::state::StateError),
+
     /// No skills were found in the source.
     #[error("no skillprism-format or plain-format skills found in {source_input}")]
     #[diagnostic(help(
@@ -119,7 +124,14 @@ pub struct InstallResult {
 }
 
 /// Installs all skills from a source into the target scope.
-pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, InstallError> {
+///
+/// `on_installed` is called after each individual skill is installed so callers
+/// can persist incremental state. If a later skill fails, earlier skills that
+/// were successfully installed remain recorded.
+pub fn install_source(
+    ctx: &InstallContext,
+    mut on_installed: impl FnMut(&InstalledSkill) -> Result<(), InstallError>,
+) -> Result<Vec<InstallResult>, InstallError> {
     let (source_path, cleanup_dir, source_url, source_type, r#ref, skill_path) = match &ctx.parsed {
         ParsedSource::Local { path } => (
             path.clone(),
@@ -206,6 +218,7 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
         effective_ref.as_ref(),
         resolved_ref,
         skill_path.as_ref(),
+        &mut on_installed,
     );
 
     if let Some(dir) = cleanup_dir {
@@ -216,6 +229,7 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
 }
 
 #[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
+#[allow(clippy::too_many_arguments)]
 fn install_discovered_skills(
     ctx: &InstallContext,
     source_path: &Path,
@@ -224,6 +238,7 @@ fn install_discovered_skills(
     r#ref: Option<&String>,
     resolved_ref: Option<String>,
     skill_path: Option<&String>,
+    on_installed: &mut impl FnMut(&InstalledSkill) -> Result<(), InstallError>,
 ) -> Result<Vec<InstallResult>, InstallError> {
     let skill_dirs = discover_skill_dirs(source_path)?;
     if skill_dirs.is_empty() {
@@ -284,6 +299,7 @@ fn install_discovered_skills(
                 &mut skip_all,
             )?,
         };
+        on_installed(&record)?;
         results.push(InstallResult { record });
     }
 

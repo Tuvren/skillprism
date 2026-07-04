@@ -93,19 +93,17 @@ pub fn run_add(
         force,
     };
 
-    let results =
-        install_source(&ctx).map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-
-    print_install_summary(&results, scope);
-
     let mut store =
         StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    for result in results {
-        store.upsert(result.record);
-    }
-    store
-        .save()
-        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+
+    let results = install_source(&ctx, |record| {
+        store.upsert(record.clone());
+        store.save().map_err(InstallError::State)?;
+        Ok(())
+    })
+    .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+
+    print_install_summary(&results, scope);
 
     Ok(())
 }
@@ -163,8 +161,14 @@ fn determine_harnesses(
 
     if let Some(root) = project_root {
         match ProjectLoader::load(root) {
-            Ok(model) => return Ok(model.config.harnesses),
-            Err(ProjectError::ConfigNotFound { .. }) => {}
+            Ok(model) if !model.config.harnesses.is_empty() => {
+                return Ok(model.config.harnesses);
+            }
+            Ok(_) | Err(ProjectError::ConfigNotFound { .. }) => {
+                // Empty project harness list or missing config: fall back to
+                // built-ins so the user can still select targets interactively
+                // or via --force.
+            }
             Err(e) => return Err(miette::Report::new(e)),
         }
     }

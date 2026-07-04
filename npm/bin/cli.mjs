@@ -57,6 +57,7 @@ async function downloadBinary(version) {
   const target = getTarget();
   const url = `https://github.com/${REPO}/releases/download/v${version}/skillprism-${target}.tar.xz`;
   const tmpFile = join(CACHE_DIR, `.download-${version}-${target}.tar.xz`);
+  const extractDir = join(CACHE_DIR, `extract-${version}-${target}`);
 
   mkdirSync(CACHE_DIR, { recursive: true });
 
@@ -64,37 +65,38 @@ async function downloadBinary(version) {
   // Robust supply-chain verification (signed checksum manifest, pinned hashes,
   // or code signing) is not implemented yet. Track progress in the roadmap:
   // https://github.com/Tuvren/skillprism/issues
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`Failed to download binary: ${res.status} ${res.statusText}`);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to download binary: ${res.status} ${res.statusText}`);
+    }
+
+    const fileStream = createWriteStream(tmpFile);
+    await pipeline(res.body, fileStream);
+
+    // Extract binary from the tarball (xz-compressed, no outer dir flattening)
+    // The tarball contains: skillprism-<target>/skillprism
+    mkdirSync(extractDir, { recursive: true });
+
+    await extractTarXz(tmpFile, extractDir);
+
+    // Move binary to final path
+    const extractedBinary = join(extractDir, `skillprism-${target}`, "skillprism");
+    const finalPath = getBinaryPath(version);
+
+    renameSync(extractedBinary, finalPath);
+    chmodSync(finalPath, 0o755);
+
+    return finalPath;
+  } finally {
+    // Best-effort cleanup of temporary artifacts on success or failure.
+    try {
+      if (existsSync(tmpFile)) rmSync(tmpFile);
+    } catch {}
+    try {
+      if (existsSync(extractDir)) rmSync(extractDir, { recursive: true, force: true });
+    } catch {}
   }
-
-  const fileStream = createWriteStream(tmpFile);
-  await pipeline(res.body, fileStream);
-
-  // Extract binary from the tarball (xz-compressed, no outer dir flattening)
-  // The tarball contains: skillprism-<target>/skillprism
-  mkdirSync(join(CACHE_DIR, `extract-${version}-${target}`), { recursive: true });
-
-  await extractTarXz(tmpFile, join(CACHE_DIR, `extract-${version}-${target}`));
-
-  // Move binary to final path
-  const extractedBinary = join(
-    CACHE_DIR,
-    `extract-${version}-${target}`,
-    `skillprism-${target}`,
-    "skillprism",
-  );
-  const finalPath = getBinaryPath(version);
-
-  renameSync(extractedBinary, finalPath);
-  chmodSync(finalPath, 0o755);
-
-  // Cleanup
-  await unlink(tmpFile);
-  await rmRecursive(join(CACHE_DIR, `extract-${version}-${target}`));
-
-  return finalPath;
 }
 
 async function extractTarXz(tarXzPath, destDir) {
@@ -107,11 +109,6 @@ async function extractTarXz(tarXzPath, destDir) {
     });
     tar.on("error", reject);
   });
-}
-
-async function rmRecursive(dir) {
-  const { rmSync } = await import("node:fs");
-  rmSync(dir, { recursive: true, force: true });
 }
 
 async function run() {

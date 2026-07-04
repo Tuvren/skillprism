@@ -36,12 +36,10 @@ const CLONE_TIMEOUT_ENV: &str = "SKILLPRISM_CLONE_TIMEOUT_MS";
 /// Errors that can occur while fetching a remote source.
 #[derive(Debug, Diagnostic, Error)]
 pub enum NetworkError {
-    /// `git` is not installed or not on PATH.
-    #[error("`git` is required but was not found on PATH")]
-    #[diagnostic(help(
-        "Install git (https://git-scm.com/downloads) and ensure it is on your PATH."
-    ))]
-    GitNotFound,
+    /// A required external command is not installed or not on PATH.
+    #[error("`{command}` is required but was not found on PATH")]
+    #[diagnostic(help("Install {command} and ensure it is on your PATH."))]
+    CommandNotFound { command: String },
 
     /// The clone operation timed out.
     #[error("Clone timed out after {seconds}s")]
@@ -324,7 +322,7 @@ fn run_git_with_dir(dir: Option<&Path>, args: &[String]) -> Result<(), NetworkEr
         .stderr(Stdio::piped());
 
     let timeout = clone_timeout();
-    let output = run_command_with_timeout(cmd, timeout)?;
+    let output = run_command_with_timeout("git", cmd, timeout)?;
 
     if output.status.success() {
         Ok(())
@@ -353,7 +351,7 @@ fn run_git_with_ssh(args: &[String], ssh_command: &str) -> Result<(), NetworkErr
         .stderr(Stdio::piped());
 
     let timeout = clone_timeout();
-    let output = run_command_with_timeout(cmd, timeout)?;
+    let output = run_command_with_timeout("git", cmd, timeout)?;
 
     if output.status.success() {
         Ok(())
@@ -381,7 +379,7 @@ fn run_git_output(args: &[String]) -> Result<String, NetworkError> {
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
 
-    let output = run_command_with_timeout(cmd, Duration::from_secs(30))?;
+    let output = run_command_with_timeout("git", cmd, Duration::from_secs(30))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
@@ -395,12 +393,15 @@ fn run_git_output(args: &[String]) -> Result<String, NetworkError> {
 }
 
 fn run_command_with_timeout(
+    command: &str,
     mut cmd: Command,
     timeout: Duration,
 ) -> Result<std::process::Output, NetworkError> {
     let mut child = cmd.spawn().map_err(|e| {
         if e.kind() == std::io::ErrorKind::NotFound {
-            NetworkError::GitNotFound
+            NetworkError::CommandNotFound {
+                command: command.to_string(),
+            }
         } else {
             NetworkError::Io(e)
         }
@@ -517,8 +518,11 @@ fn try_gh_clone(repo: &GitHubRepoInfo, r#ref: Option<&str>) -> Result<PathBuf, N
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let probe =
-        run_command_with_timeout(probe_cmd, Duration::from_millis(GH_AUTH_PROBE_TIMEOUT_MS))?;
+    let probe = run_command_with_timeout(
+        "gh",
+        probe_cmd,
+        Duration::from_millis(GH_AUTH_PROBE_TIMEOUT_MS),
+    )?;
 
     if !probe.status.success() {
         return Err(NetworkError::FetchFailure {
@@ -557,7 +561,7 @@ fn try_gh_clone(repo: &GitHubRepoInfo, r#ref: Option<&str>) -> Result<PathBuf, N
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let status = run_command_with_timeout(clone_cmd, clone_timeout())?;
+    let status = run_command_with_timeout("gh", clone_cmd, clone_timeout())?;
 
     if status.status.success() {
         Ok(temp_dir)

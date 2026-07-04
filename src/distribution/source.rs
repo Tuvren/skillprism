@@ -144,7 +144,7 @@ pub fn parse_source(input: &str) -> Result<ParsedSource, SourceParseError> {
     }
 
     // Full GitHub / GitLab URLs.
-    if let Some(parsed) = parse_url(&input, fragment_ref.clone(), fragment_skill_filter.clone()) {
+    if let Some(parsed) = parse_url(&input, fragment_ref.clone(), fragment_skill_filter.clone())? {
         return Ok(parsed);
     }
 
@@ -280,25 +280,25 @@ fn parse_url(
     input: &str,
     fragment_ref: Option<String>,
     fragment_skill_filter: Option<String>,
-) -> Option<ParsedSource> {
-    let (scheme, rest) = split_scheme(input)?;
+) -> Result<Option<ParsedSource>, SourceParseError> {
+    let Some((scheme, rest)) = split_scheme(input) else {
+        return Ok(None);
+    };
     if scheme != "http" && scheme != "https" {
-        return None;
+        return Ok(None);
     }
 
-    let (hostname, path) = rest.split_once('/')?;
+    let Some((hostname, path)) = rest.split_once('/') else {
+        return Ok(None);
+    };
     let path = path.strip_suffix('/').unwrap_or(path);
 
     if hostname == "github.com" {
         parse_github_path(path, fragment_ref, fragment_skill_filter)
-    } else if hostname == "gitlab.com" {
-        parse_gitlab_path(
-            path,
-            fragment_ref,
-            fragment_skill_filter,
-            "https://gitlab.com",
-        )
-    } else if hostname.contains("gitlab") {
+    } else if hostname == "gitlab.com"
+        || hostname.ends_with(".gitlab.com")
+        || hostname.starts_with("gitlab.")
+    {
         parse_gitlab_path(
             path,
             fragment_ref,
@@ -306,7 +306,7 @@ fn parse_url(
             &format!("{scheme}://{hostname}"),
         )
     } else {
-        None
+        Ok(None)
     }
 }
 
@@ -318,7 +318,7 @@ fn parse_github_path(
     path: &str,
     fragment_ref: Option<String>,
     fragment_skill_filter: Option<String>,
-) -> Option<ParsedSource> {
+) -> Result<Option<ParsedSource>, SourceParseError> {
     // /owner/repo/tree/ref/subpath
     if let Some((repo_part, tree_part)) = path.split_once("/tree/") {
         let parts: Vec<&str> = repo_part.split('/').collect();
@@ -328,18 +328,18 @@ fn parse_github_path(
             let tree_parts: Vec<&str> = tree_part.splitn(2, '/').collect();
             let tree_ref = tree_parts[0].to_string();
             let subpath = if tree_parts.len() > 1 {
-                Some(sanitize_subpath(tree_parts[1]).ok()?)
+                Some(sanitize_subpath(tree_parts[1])?)
             } else {
                 None
             };
-            return Some(ParsedSource::GitHub {
+            return Ok(Some(ParsedSource::GitHub {
                 url: format!("https://github.com/{owner}/{repo}.git"),
                 r#ref: Some(tree_ref),
                 subpath,
                 skill_filter: fragment_skill_filter,
-            });
+            }));
         }
-        return None;
+        return Ok(None);
     }
 
     // /owner/repo
@@ -347,15 +347,15 @@ fn parse_github_path(
     if parts.len() == 2 {
         let (owner, repo) = (parts[0], parts[1]);
         let repo = repo.strip_suffix(".git").unwrap_or(repo);
-        return Some(ParsedSource::GitHub {
+        return Ok(Some(ParsedSource::GitHub {
             url: format!("https://github.com/{owner}/{repo}.git"),
             r#ref: fragment_ref,
             subpath: None,
             skill_filter: fragment_skill_filter,
-        });
+        }));
     }
 
-    None
+    Ok(None)
 }
 
 fn parse_gitlab_path(
@@ -363,37 +363,37 @@ fn parse_gitlab_path(
     fragment_ref: Option<String>,
     fragment_skill_filter: Option<String>,
     base_url: &str,
-) -> Option<ParsedSource> {
+) -> Result<Option<ParsedSource>, SourceParseError> {
     // group/subgroup/repo/-/tree/ref/subpath
     if let Some((repo_part, tree_part)) = path.split_once("/-/tree/") {
         let repo_path = repo_part.strip_suffix(".git").unwrap_or(repo_part);
         let tree_parts: Vec<&str> = tree_part.splitn(2, '/').collect();
         let tree_ref = tree_parts[0].to_string();
         let subpath = if tree_parts.len() > 1 {
-            Some(sanitize_subpath(tree_parts[1]).ok()?)
+            Some(sanitize_subpath(tree_parts[1])?)
         } else {
             None
         };
-        return Some(ParsedSource::GitLab {
+        return Ok(Some(ParsedSource::GitLab {
             url: format!("{base_url}/{repo_path}.git"),
             r#ref: Some(tree_ref),
             subpath,
             skill_filter: fragment_skill_filter,
-        });
+        }));
     }
 
     // group/subgroup/repo
     let path = path.strip_suffix(".git").unwrap_or(path);
     if path.contains('/') {
-        return Some(ParsedSource::GitLab {
+        return Ok(Some(ParsedSource::GitLab {
             url: format!("{base_url}/{path}.git"),
             r#ref: fragment_ref,
             subpath: None,
             skill_filter: fragment_skill_filter,
-        });
+        }));
     }
 
-    None
+    Ok(None)
 }
 
 struct ShorthandParts {
@@ -486,7 +486,10 @@ fn is_well_known_url(input: &str) -> bool {
 
 fn sanitize_subpath(subpath: &str) -> Result<String, SourceParseError> {
     let normalized = subpath.replace('\\', "/");
-    if normalized.split('/').any(|s| s == "..") {
+    if normalized.starts_with('/')
+        || is_windows_drive_path(&normalized)
+        || normalized.split('/').any(|s| s == "..")
+    {
         return Err(SourceParseError::UnsafeSubpath {
             subpath: subpath.to_string(),
         });
@@ -768,6 +771,30 @@ mod tests {
     fn unsafe_subpath_rejected() {
         assert!(matches!(
             parse_source("owner/repo/../escape").unwrap_err(),
+            SourceParseError::UnsafeSubpath { .. }
+        ));
+    }
+
+    #[test]
+    fn absolute_subpath_rejected() {
+        assert!(matches!(
+            parse_source("owner/repo//etc/passwd").unwrap_err(),
+            SourceParseError::UnsafeSubpath { .. }
+        ));
+    }
+
+    #[test]
+    fn tree_url_absolute_subpath_rejected() {
+        assert!(matches!(
+            parse_source("https://github.com/owner/repo/tree/main//etc").unwrap_err(),
+            SourceParseError::UnsafeSubpath { .. }
+        ));
+    }
+
+    #[test]
+    fn tree_url_windows_drive_subpath_rejected() {
+        assert!(matches!(
+            parse_source("https://github.com/owner/repo/tree/main/C:/secret").unwrap_err(),
             SourceParseError::UnsafeSubpath { .. }
         ));
     }
