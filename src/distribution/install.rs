@@ -413,7 +413,13 @@ pub fn detect_format(skill_dir: &Path) -> Result<SkillFormat, InstallError> {
                 path: manifest.to_string_lossy().to_string(),
                 detail: "the `skillprism:` field must not be empty".to_string(),
             }),
-            Some(_) => Ok(SkillFormat::Skillprism),
+            Some("1") => Ok(SkillFormat::Skillprism),
+            Some(other) => Err(InstallError::MalformedManifest {
+                path: manifest.to_string_lossy().to_string(),
+                detail: format!(
+                    "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
+                ),
+            }),
         },
     )
 }
@@ -734,8 +740,30 @@ fn resolve_to_install_error(skill_name: &str) -> impl FnOnce(ResolveError) -> In
 /// self-contained snapshot with no references back to the source tree.
 ///
 /// `src_root` is the top-level directory being copied; any symlink whose target
-/// resolves outside that root is rejected.
+/// resolves outside that root is rejected. Directory cycles via symlinks are
+/// also rejected.
 pub fn copy_dir(src: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
+    let mut visited = std::collections::HashSet::new();
+    copy_dir_inner(src, dst, src_root, &mut visited)
+}
+
+fn copy_dir_inner(
+    src: &Path,
+    dst: &Path,
+    src_root: &Path,
+    visited: &mut std::collections::HashSet<PathBuf>,
+) -> Result<(), InstallError> {
+    let canonical_src = std::fs::canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
+    if !visited.insert(canonical_src.clone()) {
+        return Err(InstallError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "directory cycle detected while copying {}; symlink points to an ancestor",
+                src.display()
+            ),
+        )));
+    }
+
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
@@ -743,17 +771,26 @@ pub fn copy_dir(src: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallEr
         let dst_path = dst.join(entry.file_name());
         let metadata = fs::symlink_metadata(&src_path)?;
         if metadata.is_symlink() {
-            copy_symlink_target(&src_path, &dst_path, src_root)?;
+            copy_symlink_target(&src_path, &dst_path, src_root, visited)?;
         } else if metadata.is_dir() {
-            copy_dir(&src_path, &dst_path, src_root)?;
+            copy_dir_inner(&src_path, &dst_path, src_root, visited)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
     }
+
+    // Remove the directory from the visited set when leaving it so that distinct
+    // subtrees that happen to share a canonical path are still allowed.
+    visited.remove(&canonical_src);
     Ok(())
 }
 
-fn copy_symlink_target(link: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
+fn copy_symlink_target(
+    link: &Path,
+    dst: &Path,
+    src_root: &Path,
+    visited: &mut std::collections::HashSet<PathBuf>,
+) -> Result<(), InstallError> {
     let target = fs::read_link(link)?;
     // Resolve relative symlinks against the link's parent so the target is read
     // from inside the source tree, not from the destination path.
@@ -775,7 +812,7 @@ fn copy_symlink_target(link: &Path, dst: &Path, src_root: &Path) -> Result<(), I
             ),
         ))
     })?;
-    if !canonical_target.starts_with(&canonical_root) {
+    if canonical_target == canonical_root || !canonical_target.starts_with(&canonical_root) {
         return Err(InstallError::Io(std::io::Error::new(
             std::io::ErrorKind::PermissionDenied,
             format!(
@@ -786,9 +823,20 @@ fn copy_symlink_target(link: &Path, dst: &Path, src_root: &Path) -> Result<(), I
         )));
     }
 
+    if visited.contains(&canonical_target) {
+        return Err(InstallError::Io(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!(
+                "symlink {} creates a directory cycle (points to {})",
+                link.display(),
+                canonical_target.display()
+            ),
+        )));
+    }
+
     let metadata = fs::symlink_metadata(&canonical_target)?;
     if metadata.is_dir() {
-        copy_dir(&canonical_target, dst, src_root)?;
+        copy_dir_inner(&canonical_target, dst, src_root, visited)?;
     } else {
         fs::copy(&canonical_target, dst)?;
     }

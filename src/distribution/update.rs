@@ -36,6 +36,24 @@ use super::install::{
 use super::network::{self, NetworkError};
 use super::source::{ParsedSource, SourceParseError, parse_source};
 
+/// RAII guard that removes a temporary git clone directory on drop unless
+/// explicitly kept.
+struct TempCloneDir(Option<PathBuf>);
+
+impl TempCloneDir {
+    fn keep(mut self) {
+        self.0.take();
+    }
+}
+
+impl Drop for TempCloneDir {
+    fn drop(&mut self) {
+        if let Some(dir) = self.0.take() {
+            let _ = network::cleanup_temp_dir(&dir);
+        }
+    }
+}
+
 /// Errors that can occur during update.
 #[derive(Debug, miette::Diagnostic, thiserror::Error)]
 pub enum UpdateError {
@@ -215,8 +233,8 @@ fn update_skill(
     let source_type = old.source_type;
     let skill_path = old.skill_path.as_deref().map(Path::new);
 
-    let (source_path, cleanup_dir, resolved_ref) = match &parsed {
-        ParsedSource::Local { path } => (path.clone(), None, None),
+    let (source_path, cleanup_guard, resolved_ref) = match &parsed {
+        ParsedSource::Local { path } => (path.clone(), TempCloneDir(None), None),
         ParsedSource::GitHub {
             url,
             r#ref: _,
@@ -228,7 +246,7 @@ fn update_skill(
                 .as_ref()
                 .map_or_else(|| dir.clone(), |s| dir.join(s));
             let head = network::git_dir_head(&dir).ok();
-            (base, Some(dir), head)
+            (base, TempCloneDir(Some(dir)), head)
         }
         ParsedSource::GitLab {
             url,
@@ -241,12 +259,12 @@ fn update_skill(
                 .as_ref()
                 .map_or_else(|| dir.clone(), |s| dir.join(s));
             let head = network::git_dir_head(&dir).ok();
-            (base, Some(dir), head)
+            (base, TempCloneDir(Some(dir)), head)
         }
         ParsedSource::Git { url, r#ref: _ } => {
             let dir = network::fetch_git_repo(url, Some(r#ref)).map_err(UpdateError::from)?;
             let head = network::git_dir_head(&dir).ok();
-            (dir.clone(), Some(dir), head)
+            (dir.clone(), TempCloneDir(Some(dir)), head)
         }
         ParsedSource::WellKnown { .. } => {
             return Err(miette::Report::msg(format!(
@@ -325,14 +343,11 @@ fn update_skill(
         store.upsert(new_record);
     }
 
-    if let Some(dir) = cleanup_dir {
-        let _ = network::cleanup_temp_dir(&dir);
-    }
-
+    cleanup_guard.keep();
     Ok(())
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn update_skillprism_skill(
     old: &InstalledSkill,
     skill_dir: &Path,
@@ -354,12 +369,22 @@ fn update_skillprism_skill(
         .iter()
         .map(|f| (f.path.as_str(), f.hash.as_str()))
         .collect();
-    let mut new_files = Vec::new();
     let mut changed = false;
     let mut skip_all = false;
 
     let target = install_scope_to_target(old.scope);
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
+
+    // Retain per-file records for harnesses that are not being updated; they
+    // will be replaced with fresh records for the filtered harnesses below.
+    let updated_prefixes =
+        collect_updated_prefixes(harnesses, &registry, project_root, &old.name, target)?;
+    let mut new_files: Vec<InstalledFile> = old
+        .files
+        .iter()
+        .filter(|f| !updated_prefixes.iter().any(|p| f.path.starts_with(p)))
+        .cloned()
+        .collect();
 
     for harness_id in harnesses {
         let pair = HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry)
@@ -452,7 +477,7 @@ fn update_skillprism_skill(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn update_plain_skill(
     old: &InstalledSkill,
     skill_dir: &Path,
@@ -477,17 +502,25 @@ fn update_plain_skill(
         .iter()
         .map(|f| (f.path.as_str(), f.hash.as_str()))
         .collect();
-    let mut new_files = Vec::new();
     let mut changed = false;
     let mut skip_all = false;
 
     let target = install_scope_to_target(old.scope);
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
 
+    // Retain per-file records for harnesses that are not being updated.
+    let registry = HarnessRegistry::with_builtins();
+    let updated_prefixes =
+        collect_updated_prefixes(harnesses, &registry, project_root, &old.name, target)?;
+    let mut new_files: Vec<InstalledFile> = old
+        .files
+        .iter()
+        .filter(|f| !updated_prefixes.iter().any(|p| f.path.starts_with(p)))
+        .cloned()
+        .collect();
+
     for harness_id in harnesses {
-        let harness = HarnessRegistry::with_builtins()
-            .resolve(harness_id)
-            .map_err(miette::Report::new)?;
+        let harness = registry.resolve(harness_id).map_err(miette::Report::new)?;
 
         let skill_path_buf = resolve_skill_path(project_root, &harness, &old.name, target)
             .map_err(|e| miette::Report::msg(format!("path resolution error: {e}")))?;
@@ -691,6 +724,39 @@ fn write_file_with_overwrite(
     } else {
         Ok(false)
     }
+}
+
+fn skill_dir_prefix(
+    project_root: &Path,
+    harness: &crate::registry::HarnessDefinition,
+    skill_name: &str,
+    target: crate::cli::TargetScope,
+) -> Result<String, miette::Report> {
+    let skill_path = resolve_skill_path(project_root, harness, skill_name, target)
+        .map_err(|e| miette::Report::msg(format!("path resolution error: {e}")))?;
+    Ok(skill_path
+        .parent()
+        .expect("skill path has parent")
+        .to_string_lossy()
+        .to_string())
+}
+
+fn collect_updated_prefixes(
+    harnesses: &[String],
+    registry: &HarnessRegistry,
+    project_root: &Path,
+    skill_name: &str,
+    target: crate::cli::TargetScope,
+) -> Result<Vec<String>, miette::Report> {
+    harnesses
+        .iter()
+        .map(|h| {
+            let harness = registry.resolve(h).map_err(|e| {
+                miette::Report::msg(format!("harness resolution error for {skill_name}: {e}"))
+            })?;
+            skill_dir_prefix(project_root, &harness, skill_name, target)
+        })
+        .collect::<Result<Vec<_>, _>>()
 }
 
 #[allow(clippy::too_many_arguments)]

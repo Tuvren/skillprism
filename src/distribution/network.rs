@@ -63,6 +63,28 @@ pub enum NetworkError {
     Io(#[from] std::io::Error),
 }
 
+/// RAII guard that removes a temporary git clone directory on drop unless it
+/// is explicitly kept.
+struct CloneGuard(Option<PathBuf>);
+
+impl CloneGuard {
+    fn path(&self) -> &Path {
+        self.0.as_ref().expect("guard holds a directory")
+    }
+
+    fn keep(mut self) -> PathBuf {
+        self.0.take().expect("guard holds a directory")
+    }
+}
+
+impl Drop for CloneGuard {
+    fn drop(&mut self) {
+        if let Some(dir) = self.0.take() {
+            let _ = cleanup_temp_dir(&dir);
+        }
+    }
+}
+
 /// Information about a GitHub repository extracted from a URL.
 struct GitHubRepoInfo {
     slug: String,
@@ -95,7 +117,6 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
         let is_github_https = is_github_https_clone_url(url);
 
         if is_timeout {
-            let _ = cleanup_temp_dir(&temp_dir);
             return Err(NetworkError::CloneTimeout {
                 seconds: clone_timeout().as_secs(),
             });
@@ -104,41 +125,49 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
         if is_auth && is_github_https {
             if let Some(ref repo) = repo {
                 // Layer 2: gh repo clone.
-                let _ = cleanup_temp_dir(&temp_dir);
-                if let Ok(gh_dir) = try_gh_clone(repo, clone_ref) {
-                    return maybe_checkout_sha(gh_dir, r#ref);
+                let gh_result = try_gh_clone(repo, clone_ref);
+                let gh_missing = matches!(
+                    gh_result,
+                    Err(NetworkError::CommandNotFound { command: ref c }) if c == "gh"
+                );
+                if let Ok(gh_dir) = gh_result {
+                    return maybe_checkout_sha(CloneGuard(Some(gh_dir)), r#ref);
                 }
 
                 // Layer 3: SSH fallback.
                 let ssh_dir = create_temp_dir()?;
-                let ssh_args = clone_args(&repo.ssh_url, clone_ref, &ssh_dir);
+                let ssh_guard = CloneGuard(Some(ssh_dir));
+                let ssh_args = clone_args(&repo.ssh_url, clone_ref, ssh_guard.path());
                 if run_git_with_ssh(&ssh_args, "ssh -o BatchMode=yes").is_ok() {
-                    return maybe_checkout_sha(ssh_dir, r#ref);
+                    return maybe_checkout_sha(ssh_guard, r#ref);
                 }
-                let _ = cleanup_temp_dir(&ssh_dir);
+
+                if gh_missing {
+                    return Err(NetworkError::CommandNotFound {
+                        command: "gh".to_string(),
+                    });
+                }
             }
 
-            let _ = cleanup_temp_dir(&temp_dir);
             return Err(NetworkError::AuthFailure {
                 url: url.to_string(),
                 advice: build_github_auth_error(url, repo.as_ref(), &error_message),
             });
         }
 
-        let _ = cleanup_temp_dir(&temp_dir);
         return Err(NetworkError::FetchFailure {
             url: url.to_string(),
             detail: error_message,
         });
     }
 
-    maybe_checkout_sha(temp_dir, r#ref)
+    maybe_checkout_sha(CloneGuard(Some(temp_dir)), r#ref)
 }
 
-fn maybe_checkout_sha(dir: PathBuf, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {
+fn maybe_checkout_sha(guard: CloneGuard, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {
     if let Some(sha) = r#ref.filter(|r| is_sha_ref(r)) {
         run_git_in_dir(
-            &dir,
+            guard.path(),
             &[
                 "fetch".to_string(),
                 "--depth".to_string(),
@@ -147,9 +176,9 @@ fn maybe_checkout_sha(dir: PathBuf, r#ref: Option<&str>) -> Result<PathBuf, Netw
                 sha.to_string(),
             ],
         )?;
-        run_git_in_dir(&dir, &["checkout".to_string(), sha.to_string()])?;
+        run_git_in_dir(guard.path(), &["checkout".to_string(), sha.to_string()])?;
     }
-    Ok(dir)
+    Ok(guard.keep())
 }
 
 /// Queries the remote HEAD of a ref without cloning.

@@ -147,11 +147,14 @@ fn determine_harnesses(
     force: bool,
 ) -> Result<Vec<String>, miette::Report> {
     if let Some(list) = harnesses {
-        return Ok(list
+        let items: Vec<String> = list
             .split(',')
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty())
-            .collect());
+            .collect();
+        if !items.is_empty() {
+            return Ok(items);
+        }
     }
 
     if let Some(root) = project_root {
