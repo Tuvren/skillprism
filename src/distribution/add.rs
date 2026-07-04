@@ -20,8 +20,10 @@ use crate::loader::ProjectLoader;
 use crate::state::{InstallScope, StateStore};
 use crate::types::ProjectError;
 use clap::ValueEnum;
+use dialoguer::{MultiSelect, Select};
 
 use super::CommandError;
+use super::detect::detect_installed_agents;
 use super::find_project_root;
 use super::install::{InstallContext, InstallError, install_source};
 use super::source::parse_source;
@@ -47,15 +49,17 @@ impl From<InstallScopeArg> for InstallScope {
     }
 }
 
+const ALL_HARNESSES: &[&str] = &["claude", "codex", "opencode", "factory", "pi"];
+
 /// Runs the `add` command.
 pub fn run_add(
     source: String,
-    target: InstallScopeArg,
+    target: Option<InstallScopeArg>,
     skill_filter: Option<String>,
     harnesses: Option<String>,
     force: bool,
 ) -> Result<(), CommandError> {
-    let scope = InstallScope::from(target);
+    let scope = resolve_scope(target, force)?;
 
     let project_root = match scope {
         InstallScope::Project => Some(
@@ -69,13 +73,13 @@ pub fn run_add(
         InstallScope::User => find_project_root().ok(),
     };
 
-    let selected_harnesses =
-        determine_harnesses(project_root.as_deref(), harnesses).map_err(CommandError::Runtime)?;
+    let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, force)
+        .map_err(CommandError::Runtime)?;
+
     let parsed = parse_source(&source)
         .map_err(InstallError::from)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
-    // Combine explicit --skill flag with any skill filter embedded in the source.
     let parsed = if let Some(filter) = skill_filter {
         embed_skill_filter(parsed, &filter)
     } else {
@@ -106,9 +110,39 @@ pub fn run_add(
     Ok(())
 }
 
+/// Resolve the install scope, prompting interactively when not provided.
+fn resolve_scope(
+    target: Option<InstallScopeArg>,
+    force: bool,
+) -> Result<InstallScope, CommandError> {
+    if let Some(arg) = target {
+        return Ok(InstallScope::from(arg));
+    }
+
+    if force {
+        return Ok(InstallScope::Project);
+    }
+
+    let selection = Select::new()
+        .with_prompt("Install scope")
+        .item("project")
+        .item("user")
+        .default(0)
+        .interact()
+        .map_err(|e| {
+            CommandError::Runtime(miette::miette!("Failed to read scope selection: {e}"))
+        })?;
+
+    Ok(match selection {
+        0 => InstallScope::Project,
+        _ => InstallScope::User,
+    })
+}
+
 fn determine_harnesses(
     project_root: Option<&Path>,
     harnesses: Option<String>,
+    force: bool,
 ) -> Result<Vec<String>, miette::Report> {
     if let Some(list) = harnesses {
         return Ok(list
@@ -126,13 +160,34 @@ fn determine_harnesses(
         }
     }
 
-    Ok(vec![
-        "claude".to_string(),
-        "codex".to_string(),
-        "opencode".to_string(),
-        "factory".to_string(),
-        "pi".to_string(),
-    ])
+    if force {
+        return Ok(ALL_HARNESSES.iter().map(ToString::to_string).collect());
+    }
+
+    let detected = detect_installed_agents();
+    let checked_items: Vec<(&str, bool)> = ALL_HARNESSES
+        .iter()
+        .map(|h| (*h, detected.iter().any(|d| d == h)))
+        .collect();
+
+    let selections = MultiSelect::new()
+        .with_prompt("Select harnesses to install to (space to toggle, enter to confirm)")
+        .items_checked(checked_items)
+        .interact()
+        .map_err(|e| miette::miette!("Failed to prompt for harness selection: {e}"))?;
+
+    let selected: Vec<String> = selections
+        .into_iter()
+        .map(|i| ALL_HARNESSES[i].to_string())
+        .collect();
+
+    if selected.is_empty() {
+        return Err(miette::miette!(
+            "You must select at least one harness to install to."
+        ));
+    }
+
+    Ok(selected)
 }
 
 fn embed_skill_filter(

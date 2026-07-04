@@ -77,9 +77,9 @@ enum Command {
         /// Source to install from
         source: String,
 
-        /// Install scope: project (default) or user
-        #[arg(long = "target", default_value = "project")]
-        target: InstallScopeArg,
+        /// Install scope: project or user (prompts interactively if not provided)
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
 
         /// Install only the named skill from a multi-skill source
         #[arg(long = "skill")]
