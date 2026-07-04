@@ -21,7 +21,7 @@ use crate::registry::BUILTIN_HARNESS_IDS;
 use crate::state::{InstallScope, StateStore};
 use crate::types::ProjectError;
 use clap::ValueEnum;
-use dialoguer::{MultiSelect, Select};
+use dialoguer::{Confirm, MultiSelect, Select};
 
 use super::CommandError;
 use super::detect::detect_installed_agents;
@@ -79,6 +79,10 @@ pub fn run_add(
     } else {
         parsed
     };
+
+    if !force && !confirm_install(&source, scope, &selected_harnesses)? {
+        return Ok(());
+    }
 
     let ctx = InstallContext {
         source_input: source,
@@ -194,6 +198,33 @@ fn determine_harnesses(
     }
 
     Ok(selected)
+}
+
+/// Shows a summary of the install and asks the user to confirm.
+///
+/// Returns `true` if the user confirms (or if prompts are skipped), `false` if
+/// the user declines.
+fn confirm_install(
+    source: &str,
+    scope: InstallScope,
+    harnesses: &[String],
+) -> Result<bool, CommandError> {
+    let scope_label = match scope {
+        InstallScope::Project => "project",
+        InstallScope::User => "user",
+    };
+    let harness_list = harnesses.join(", ");
+
+    println!("Install summary:");
+    println!("  source:    {source}");
+    println!("  scope:     {scope_label}");
+    println!("  harnesses: {harness_list}");
+
+    Confirm::new()
+        .with_prompt("Proceed with installation")
+        .default(true)
+        .interact()
+        .map_err(|e| CommandError::Runtime(miette::miette!("Failed to read confirmation: {e}")))
 }
 
 fn embed_skill_filter(
