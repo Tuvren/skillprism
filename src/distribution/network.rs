@@ -82,8 +82,12 @@ struct GitHubRepoInfo {
 /// The caller is responsible for cleaning up the returned directory via
 /// [`cleanup_temp_dir`].
 pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {
+    let is_sha = r#ref.map_or(false, is_sha_ref);
+    // SHA refs cannot be cloned with `--branch`; fetch the default branch first
+    // and then checkout the specific object.
+    let clone_ref = if is_sha { None } else { r#ref };
     let temp_dir = create_temp_dir()?;
-    let args = clone_args(url, r#ref, &temp_dir);
+    let args = clone_args(url, clone_ref, &temp_dir);
 
     if let Err(e) = run_git(&args) {
         let error_message = e.to_string();
@@ -103,15 +107,15 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
             if let Some(ref repo) = repo {
                 // Layer 2: gh repo clone.
                 let _ = cleanup_temp_dir(&temp_dir);
-                if let Ok(gh_dir) = try_gh_clone(repo, r#ref) {
-                    return Ok(gh_dir);
+                if let Ok(gh_dir) = try_gh_clone(repo, clone_ref) {
+                    return maybe_checkout_sha(gh_dir, r#ref);
                 }
 
                 // Layer 3: SSH fallback.
                 let ssh_dir = create_temp_dir()?;
-                let ssh_args = clone_args(&repo.ssh_url, r#ref, &ssh_dir);
+                let ssh_args = clone_args(&repo.ssh_url, clone_ref, &ssh_dir);
                 if run_git_with_ssh(&ssh_args, "ssh -o BatchMode=yes").is_ok() {
-                    return Ok(ssh_dir);
+                    return maybe_checkout_sha(ssh_dir, r#ref);
                 }
                 let _ = cleanup_temp_dir(&ssh_dir);
             }
@@ -130,7 +134,24 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
         });
     }
 
-    Ok(temp_dir)
+    maybe_checkout_sha(temp_dir, r#ref)
+}
+
+fn maybe_checkout_sha(dir: PathBuf, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {
+    if let Some(sha) = r#ref.filter(|r| is_sha_ref(r)) {
+        run_git_in_dir(
+            &dir,
+            &[
+                "fetch".to_string(),
+                "--depth".to_string(),
+                "1".to_string(),
+                "origin".to_string(),
+                sha.to_string(),
+            ],
+        )?;
+        run_git_in_dir(&dir, &["checkout".to_string(), sha.to_string()])?;
+    }
+    Ok(dir)
 }
 
 /// Queries the remote HEAD of a ref without cloning.
@@ -248,6 +269,11 @@ fn clone_args(url: &str, r#ref: Option<&str>, dest: &Path) -> Vec<String> {
     args
 }
 
+/// Returns true when `r#ref` looks like a full Git SHA-1 object id.
+pub fn is_sha_ref(r#ref: &str) -> bool {
+    r#ref.len() == 40 && r#ref.chars().all(|c| c.is_ascii_hexdigit())
+}
+
 fn clone_timeout() -> Duration {
     std::env::var(CLONE_TIMEOUT_ENV)
         .ok()
@@ -275,8 +301,19 @@ fn git_base_env(cmd: &mut Command) {
 }
 
 fn run_git(args: &[String]) -> Result<(), NetworkError> {
+    run_git_with_dir(None, args)
+}
+
+fn run_git_in_dir(dir: &Path, args: &[String]) -> Result<(), NetworkError> {
+    run_git_with_dir(Some(dir), args)
+}
+
+fn run_git_with_dir(dir: Option<&Path>, args: &[String]) -> Result<(), NetworkError> {
     let mut cmd = Command::new("git");
     git_base_env(&mut cmd);
+    if let Some(d) = dir {
+        cmd.current_dir(d);
+    }
     cmd.args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
@@ -425,7 +462,6 @@ fn is_auth_failure(message: &str) -> bool {
     lower.contains("authentication failed")
         || lower.contains("could not read username")
         || lower.contains("permission denied")
-        || lower.contains("repository not found")
         || lower.contains("requested url returned error: 403")
         || is_github_sso_auth_error(&lower)
 }

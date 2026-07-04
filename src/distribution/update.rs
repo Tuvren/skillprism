@@ -172,6 +172,11 @@ fn update_skill(
         return Ok(());
     };
 
+    if network::is_sha_ref(r#ref) {
+        println!("{} is pinned to commit {ref}, skipping update", old.name);
+        return Ok(());
+    }
+
     if let Some(resolved) = &old.resolved_ref {
         match network::git_remote_head(&old.source_url, r#ref) {
             Ok(Some(upstream_sha)) if upstream_sha == *resolved => {
@@ -356,49 +361,29 @@ fn update_skillprism_skill(
         let skill_path_buf = resolve_skill_path(project_root, &pair.harness, &old.name, target)
             .map_err(|e| miette::Report::msg(format!("path resolution error: {e}")))?;
 
-        let content = output.skill_content;
-        let hash = format!("sha256:{}", sha256_bytes(content.as_bytes()));
-        let path_str = skill_path_buf.to_string_lossy().to_string();
-
-        let old_hash = old_files.get(path_str.as_str()).copied();
-        let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
-
-        if is_changed {
-            changed = true;
-            if diff {
-                print_file_diff(&skill_path_buf, &content, &path_str);
-            } else {
-                write_file_with_overwrite(&skill_path_buf, &content, force, &mut skip_all)?;
-            }
-        }
-
-        new_files.push(InstalledFile {
-            path: path_str,
-            hash,
-        });
+        update_file_record(
+            &skill_path_buf,
+            &output.skill_content,
+            &old_files,
+            &mut new_files,
+            &mut changed,
+            diff,
+            force,
+            &mut skip_all,
+        )?;
 
         for sidecar in &output.sidecars {
             let sidecar_path = skill_path_buf.parent().unwrap().join(&sidecar.filename);
-            let content = &sidecar.content;
-            let hash = format!("sha256:{}", sha256_bytes(content.as_bytes()));
-            let path_str = sidecar_path.to_string_lossy().to_string();
-
-            let old_hash = old_files.get(path_str.as_str()).copied();
-            let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
-
-            if is_changed {
-                changed = true;
-                if diff {
-                    print_file_diff(&sidecar_path, content, &path_str);
-                } else {
-                    write_file_with_overwrite(&sidecar_path, content, force, &mut skip_all)?;
-                }
-            }
-
-            new_files.push(InstalledFile {
-                path: path_str,
-                hash,
-            });
+            update_file_record(
+                &sidecar_path,
+                &sidecar.content,
+                &old_files,
+                &mut new_files,
+                &mut changed,
+                diff,
+                force,
+                &mut skip_all,
+            )?;
         }
 
         for asset_dir in &pair.skill.asset_dirs {
@@ -493,6 +478,7 @@ fn update_plain_skill(
 
         let old_hash = old_files.get(path_str.as_str()).copied();
         let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
+        let mut written = false;
 
         if is_changed {
             changed = true;
@@ -507,13 +493,21 @@ fn update_plain_skill(
             } else if resolve_overwrite(&skill_path_buf, force, &mut skip_all, &mut Vec::new()) {
                 crate::router::atomic_write_bytes(&skill_path_buf, &content)
                     .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
+                written = true;
             }
         }
 
-        new_files.push(InstalledFile {
-            path: path_str,
-            hash,
-        });
+        if written || !is_changed {
+            new_files.push(InstalledFile {
+                path: path_str,
+                hash,
+            });
+        } else if let Some(old_hash) = old_hash {
+            new_files.push(InstalledFile {
+                path: path_str,
+                hash: old_hash.to_string(),
+            });
+        }
 
         let skill_dir_out = skill_path_buf.parent().unwrap().to_path_buf();
         let asset_dirs = discover_asset_dirs(skill_dir).map_err(UpdateError::from)?;
@@ -564,12 +558,57 @@ fn write_file_with_overwrite(
     content: &str,
     force: bool,
     skip_all: &mut bool,
-) -> Result<(), miette::Report> {
+) -> Result<bool, miette::Report> {
     let mut skipped = Vec::new();
     if resolve_overwrite(path, force, skip_all, &mut skipped) {
         crate::router::atomic_write(path, content)
             .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
+        Ok(true)
+    } else {
+        Ok(false)
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_file_record(
+    path: &Path,
+    content: &str,
+    old_files: &HashMap<&str, &str>,
+    new_files: &mut Vec<InstalledFile>,
+    changed: &mut bool,
+    diff: bool,
+    force: bool,
+    skip_all: &mut bool,
+) -> Result<(), miette::Report> {
+    let hash = format!("sha256:{}", sha256_bytes(content.as_bytes()));
+    let path_str = path.to_string_lossy().to_string();
+    let old_hash = old_files.get(path_str.as_str()).copied();
+    let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
+    let mut written = false;
+
+    if is_changed {
+        *changed = true;
+        if diff {
+            print_file_diff(path, content, &path_str);
+        } else {
+            written = write_file_with_overwrite(path, content, force, skip_all)?;
+        }
+    }
+
+    if written || !is_changed {
+        new_files.push(InstalledFile {
+            path: path_str,
+            hash,
+        });
+    } else if let Some(old_hash) = old_hash {
+        // Declined to overwrite: keep the old hash so the next update still
+        // sees this file as changed.
+        new_files.push(InstalledFile {
+            path: path_str,
+            hash: old_hash.to_string(),
+        });
+    }
+
     Ok(())
 }
 

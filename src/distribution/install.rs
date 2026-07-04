@@ -83,6 +83,15 @@ pub enum InstallError {
     /// The template path is ambiguous.
     #[error("{detail}")]
     AmbiguousTemplate { detail: String },
+
+    /// This source type is not yet supported for installation.
+    #[error("{source_input}: {detail}")]
+    #[diagnostic(help("{help}"))]
+    UnsupportedSource {
+        source_input: String,
+        detail: String,
+        help: String,
+    },
 }
 
 /// Context for a single install/update operation.
@@ -289,8 +298,11 @@ fn install_from_well_known(
     // v1 WellKnown support is intentionally minimal: the parser recognizes the
     // form and surfaces a clear error. Full index-driven installs are deferred
     // until a registry backend is available.
-    Err(InstallError::NoSkillsFound {
+    Err(InstallError::UnsupportedSource {
         source_input: ctx.source_input.clone(),
+        detail: "well-known skill indexes are not supported yet".to_string(),
+        help: "Install directly from a git repository or GitHub/GitLab shorthand instead."
+            .to_string(),
     })
 }
 
@@ -325,7 +337,13 @@ fn walk_for_skills(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), InstallErro
     let entries: Vec<_> = fs::read_dir(dir)?.collect::<Result<Vec<_>, _>>()?;
     for entry in entries {
         let path = entry.path();
-        if path.is_dir() {
+        let metadata = fs::symlink_metadata(&path)?;
+        // Avoid following symlinks: a malicious symlink could escape the source
+        // tree or create infinite recursion during discovery.
+        if metadata.is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
             if path.join("SKILL.md").exists() || path.join("SKILL.md.j2").exists() {
                 out.push(path);
             } else {
@@ -497,6 +515,13 @@ fn install_plain_skill(
                 copy_dir(asset_dir, &skill_dir_out.join(&dir_name), asset_dir)?;
                 record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
             }
+        } else if skill_path_buf.exists() {
+            // The user declined to overwrite but the file already exists. Record
+            // its hash so update has a baseline for the next run.
+            files.push(InstalledFile {
+                path: skill_path_buf.to_string_lossy().to_string(),
+                hash: format!("sha256:{}", sha256_file(&skill_path_buf)?),
+            });
         }
     }
 

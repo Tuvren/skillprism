@@ -48,10 +48,15 @@ fn filter_skills(
         .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
         .filter(|s| {
             harnesses.is_none_or(|h| {
-                let wanted: Vec<_> = h.split(',').map(|x| x.trim().to_string()).collect();
-                s.harnesses
-                    .iter()
-                    .any(|installed| wanted.contains(installed))
+                let wanted: Vec<_> = h
+                    .split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect();
+                wanted.is_empty()
+                    || s.harnesses
+                        .iter()
+                        .any(|installed| wanted.contains(installed))
             })
         })
         .cloned()

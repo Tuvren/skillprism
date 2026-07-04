@@ -504,10 +504,11 @@ mod tests {
     }
 
     #[test]
-    fn state_file_mode_600_persists_for_existing_tmp() {
+    fn state_file_mode_600_ignores_stale_tmp() {
         with_temp_store("file_mode_existing_tmp", |mut store| {
-            // Pre-create a temp file with liberal permissions to ensure the
-            // final state file still ends up as 0o600.
+            // Pre-create a stale temp file with liberal permissions. The writer
+            // now uses a unique temp name, so this file is ignored, but the
+            // final state file must still end up as 0o600.
             let tmp = store.path().with_extension("tmp");
             fs::write(&tmp, b"stale").unwrap();
             #[cfg(unix)]
@@ -643,8 +644,15 @@ mod tests {
         with_temp_store("atomic", |mut store| {
             store.upsert(dummy_skill("one"));
             store.save().unwrap();
-            let tmp = store.path().with_extension("tmp");
-            assert!(!tmp.exists(), "temp file should be renamed away");
+            // The writer uses unique `.tmp-<pid>-<nanos>-<name>` files and
+            // renames them into place; no temp file should remain.
+            let dir = store.path().parent().unwrap();
+            let leftover: Vec<_> = fs::read_dir(dir)
+                .unwrap()
+                .filter_map(|e| e.ok())
+                .filter(|e| e.file_name().to_string_lossy().starts_with(".tmp-"))
+                .collect();
+            assert!(leftover.is_empty(), "temp files should be renamed away");
         });
     }
 

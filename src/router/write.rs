@@ -21,13 +21,23 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
     atomic_write_bytes(path, content.as_bytes())
 }
 
-/// Atomically writes bytes to a file by writing to a temp file then renaming.
+/// Atomically writes bytes to a file by writing to a unique temp file then renaming.
 pub fn atomic_write_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    let tmp_path = path.with_extension("tmp");
+    let tmp_name = format!(
+        ".tmp-{}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+        path.file_name()
+            .map_or_else(|| "file".to_string(), |n| n.to_string_lossy().to_string())
+    );
+    let tmp_path = path.with_file_name(tmp_name);
     fs::write(&tmp_path, content)?;
     fs::rename(&tmp_path, path)?;
 

@@ -126,6 +126,7 @@ pub fn parse_source(input: &str) -> Result<ParsedSource, SourceParseError> {
         let rebuilt = format!("https://gitlab.com/{repo_part}");
         let mut parsed = parse_source(&rebuilt)?;
         if let ParsedSource::GitLab {
+            r#ref: ref mut parsed_ref,
             skill_filter: ref mut filter,
             ..
         } = parsed
@@ -134,6 +135,9 @@ pub fn parse_source(input: &str) -> Result<ParsedSource, SourceParseError> {
                 *filter = skill_filter.map(String::from);
             } else {
                 filter.clone_from(&fragment_skill_filter);
+            }
+            if parsed_ref.is_none() {
+                parsed_ref.clone_from(&fragment_ref);
             }
         }
         return Ok(parsed);
