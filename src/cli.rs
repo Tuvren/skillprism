@@ -89,7 +89,7 @@ enum Command {
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
 
-        /// Overwrite existing files without confirmation
+        /// Overwrite existing files and skip interactive prompts
         #[arg(long = "force")]
         force: bool,
     },

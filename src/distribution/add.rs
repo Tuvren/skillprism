@@ -17,6 +17,7 @@
 use std::path::Path;
 
 use crate::loader::ProjectLoader;
+use crate::registry::BUILTIN_HARNESS_IDS;
 use crate::state::{InstallScope, StateStore};
 use crate::types::ProjectError;
 use clap::ValueEnum;
@@ -49,8 +50,6 @@ impl From<InstallScopeArg> for InstallScope {
     }
 }
 
-const ALL_HARNESSES: &[&str] = &["claude", "codex", "opencode", "factory", "pi"];
-
 /// Runs the `add` command.
 pub fn run_add(
     source: String,
@@ -59,19 +58,14 @@ pub fn run_add(
     harnesses: Option<String>,
     force: bool,
 ) -> Result<(), CommandError> {
-    let scope = resolve_scope(target, force)?;
+    let project_root = find_project_root().ok();
+    let scope = resolve_scope(target, force, project_root.is_some())?;
 
-    let project_root = match scope {
-        InstallScope::Project => Some(
-            find_project_root()
-                .map_err(|_| {
-                    CommandError::Usage(miette::miette!(
-                        "No skillprism.yaml found. Run `skillprism init project <name>` to create one, or cd into a skillprism project."
-                    ))
-                })?,
-        ),
-        InstallScope::User => find_project_root().ok(),
-    };
+    if scope == InstallScope::Project && project_root.is_none() {
+        return Err(CommandError::Usage(miette::miette!(
+            "No skillprism.yaml found. Run `skillprism init project <name>` to create one, use `--target user`, or cd into a skillprism project."
+        )));
+    }
 
     let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, force)
         .map_err(CommandError::Runtime)?;
@@ -114,27 +108,36 @@ pub fn run_add(
 fn resolve_scope(
     target: Option<InstallScopeArg>,
     force: bool,
+    has_project: bool,
 ) -> Result<InstallScope, CommandError> {
     if let Some(arg) = target {
         return Ok(InstallScope::from(arg));
     }
 
     if force {
-        return Ok(InstallScope::Project);
+        return Ok(if has_project {
+            InstallScope::Project
+        } else {
+            InstallScope::User
+        });
     }
 
+    let items: Vec<&str> = if has_project {
+        vec!["project", "user"]
+    } else {
+        vec!["user"]
+    };
     let selection = Select::new()
         .with_prompt("Install scope")
-        .item("project")
-        .item("user")
+        .items(&items)
         .default(0)
         .interact()
         .map_err(|e| {
             CommandError::Runtime(miette::miette!("Failed to read scope selection: {e}"))
         })?;
 
-    Ok(match selection {
-        0 => InstallScope::Project,
+    Ok(match items[selection] {
+        "project" => InstallScope::Project,
         _ => InstallScope::User,
     })
 }
@@ -161,11 +164,14 @@ fn determine_harnesses(
     }
 
     if force {
-        return Ok(ALL_HARNESSES.iter().map(ToString::to_string).collect());
+        return Ok(BUILTIN_HARNESS_IDS
+            .iter()
+            .map(ToString::to_string)
+            .collect());
     }
 
     let detected = detect_installed_agents();
-    let checked_items: Vec<(&str, bool)> = ALL_HARNESSES
+    let checked_items: Vec<(&str, bool)> = BUILTIN_HARNESS_IDS
         .iter()
         .map(|h| (*h, detected.iter().any(|d| d == h)))
         .collect();
@@ -178,7 +184,7 @@ fn determine_harnesses(
 
     let selected: Vec<String> = selections
         .into_iter()
-        .map(|i| ALL_HARNESSES[i].to_string())
+        .map(|i| BUILTIN_HARNESS_IDS[i].to_string())
         .collect();
 
     if selected.is_empty() {
@@ -218,5 +224,50 @@ fn embed_skill_filter(
             skill_filter: Some(filter.to_string()),
         },
         other => other,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn explicit_target_bypasses_prompt() {
+        assert!(matches!(
+            resolve_scope(Some(InstallScopeArg::User), false, true).unwrap(),
+            InstallScope::User
+        ));
+        assert!(matches!(
+            resolve_scope(Some(InstallScopeArg::Project), false, false).unwrap(),
+            InstallScope::Project
+        ));
+    }
+
+    #[test]
+    fn force_defaults_to_project_when_available() {
+        assert!(matches!(
+            resolve_scope(None, true, true).unwrap(),
+            InstallScope::Project
+        ));
+    }
+
+    #[test]
+    fn force_defaults_to_user_when_no_project() {
+        assert!(matches!(
+            resolve_scope(None, true, false).unwrap(),
+            InstallScope::User
+        ));
+    }
+
+    #[test]
+    fn explicit_harnesses_bypass_prompt() {
+        let got = determine_harnesses(None, Some("claude,opencode".to_string()), false).unwrap();
+        assert_eq!(got, vec!["claude", "opencode"]);
+    }
+
+    #[test]
+    fn force_uses_all_builtin_harnesses_when_no_config() {
+        let got = determine_harnesses(None, None, true).unwrap();
+        assert_eq!(got, BUILTIN_HARNESS_IDS.to_vec());
     }
 }
