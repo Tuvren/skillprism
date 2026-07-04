@@ -142,8 +142,8 @@ fn resolve_scope(
             CommandError::Runtime(miette::miette!("Failed to read scope selection: {e}"))
         })?;
 
-    Ok(match items[selection] {
-        "project" => InstallScope::Project,
+    Ok(match items.get(selection) {
+        Some(&"project") => InstallScope::Project,
         _ => InstallScope::User,
     })
 }

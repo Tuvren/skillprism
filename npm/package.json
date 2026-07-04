@@ -6,6 +6,10 @@
   "bin": {
     "skillprism": "./bin/cli.mjs"
   },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tuvren/skillprism.git"

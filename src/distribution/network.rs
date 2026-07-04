@@ -365,23 +365,29 @@ fn run_command_with_timeout(
         }
     })?;
 
+    // Drain stdout/stderr on background threads so long-running commands
+    // (e.g. large git clones) cannot deadlock when filling the OS pipe buffers.
+    let stdout_handle = child.stdout.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut pipe, &mut buf);
+            buf
+        })
+    });
+    let stderr_handle = child.stderr.take().map(|mut pipe| {
+        std::thread::spawn(move || {
+            let mut buf = Vec::new();
+            let _ = std::io::Read::read_to_end(&mut pipe, &mut buf);
+            buf
+        })
+    });
+
     let start = std::time::Instant::now();
     let poll_interval = Duration::from_millis(50);
 
-    loop {
+    let status = loop {
         if let Some(status) = child.try_wait().map_err(NetworkError::Io)? {
-            let mut output = std::process::Output {
-                status,
-                stdout: Vec::new(),
-                stderr: Vec::new(),
-            };
-            if let Some(mut stdout) = child.stdout.take() {
-                let _ = std::io::Read::read_to_end(&mut stdout, &mut output.stdout);
-            }
-            if let Some(mut stderr) = child.stderr.take() {
-                let _ = std::io::Read::read_to_end(&mut stderr, &mut output.stderr);
-            }
-            return Ok(output);
+            break status;
         }
 
         if start.elapsed() >= timeout {
@@ -393,7 +399,20 @@ fn run_command_with_timeout(
         }
 
         std::thread::sleep(poll_interval);
-    }
+    };
+
+    let stdout = stdout_handle
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+    let stderr = stderr_handle
+        .and_then(|h| h.join().ok())
+        .unwrap_or_default();
+
+    Ok(std::process::Output {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 fn is_timeout_message(message: &str) -> bool {

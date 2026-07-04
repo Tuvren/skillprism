@@ -132,9 +132,6 @@ pub fn run_update(
         }
     }
 
-    if diff {
-        // In diff mode no state changes were made, but save for consistency
-    }
     Ok(())
 }
 

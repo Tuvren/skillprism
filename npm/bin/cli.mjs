@@ -60,6 +60,10 @@ async function downloadBinary(version) {
 
   mkdirSync(CACHE_DIR, { recursive: true });
 
+  // NOTE: This downloads a release artifact from GitHub over HTTPS and runs it.
+  // Robust supply-chain verification (signed checksum manifest, pinned hashes,
+  // or code signing) is not implemented yet. Track progress in the roadmap:
+  // https://github.com/Tuvren/skillprism/issues
   const res = await fetch(url);
   if (!res.ok) {
     throw new Error(`Failed to download binary: ${res.status} ${res.statusText}`);

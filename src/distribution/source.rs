@@ -190,7 +190,7 @@ fn is_local_path(input: &str) -> bool {
         || is_windows_drive_path(input)
 }
 
-fn is_windows_drive_path(input: &str) -> bool {
+const fn is_windows_drive_path(input: &str) -> bool {
     let bytes = input.as_bytes();
     bytes.len() >= 3
         && bytes[0].is_ascii_alphabetic()
@@ -491,24 +491,24 @@ fn sanitize_subpath(subpath: &str) -> Result<String, SourceParseError> {
 }
 
 fn url_decode(value: &str) -> String {
-    // Percent-decode the fragment value. For the simple values used here
-    // (refs and skill names), a manual decoder is sufficient and avoids
-    // adding a dependency.
-    let mut out = String::with_capacity(value.len());
+    // Percent-decode the fragment value, interpreting the result as UTF-8.
+    // For the simple values used here (refs and skill names), a manual decoder
+    // is sufficient and avoids adding a dependency.
+    let mut out = Vec::with_capacity(value.len());
     let bytes = value.as_bytes();
     let mut i = 0;
     while i < bytes.len() {
         if bytes[i] == b'%' && i + 2 < bytes.len() {
             if let (Some(h1), Some(h2)) = (hex_digit(bytes[i + 1]), hex_digit(bytes[i + 2])) {
-                out.push(char::from(h1 * 16 + h2));
+                out.push(h1 * 16 + h2);
                 i += 3;
                 continue;
             }
         }
-        out.push(char::from(bytes[i]));
+        out.push(bytes[i]);
         i += 1;
     }
-    out
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 const fn hex_digit(byte: u8) -> Option<u8> {

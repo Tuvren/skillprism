@@ -297,7 +297,17 @@ impl StateStore {
             detail: e.to_string(),
         })?;
 
-        let tmp_path = path.with_extension("tmp");
+        let tmp_name = format!(
+            ".tmp-{}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos(),
+            path.file_name()
+                .map_or_else(|| "state".to_string(), |n| n.to_string_lossy().to_string())
+        );
+        let tmp_path = path.with_file_name(tmp_name);
         {
             #[cfg(unix)]
             {

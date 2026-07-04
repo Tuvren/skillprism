@@ -178,9 +178,16 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
         .as_deref()
         .and_then(|dir| network::git_dir_head(dir).ok());
 
-    // When the user did not specify a ref, resolve the remote's default branch
-    // so that later `skillprism update` has a named ref to check.
-    let effective_ref = r#ref.or_else(|| network::git_default_branch(&source_url).ok().flatten());
+    // When the user did not specify a ref for a remote git source, resolve the
+    // remote's default branch so that later `skillprism update` has a named ref
+    // to check. Local paths are left without a ref.
+    let effective_ref = r#ref.or_else(|| {
+        if cleanup_dir.is_some() {
+            network::git_default_branch(&source_url).ok().flatten()
+        } else {
+            None
+        }
+    });
 
     let result = install_discovered_skills(
         ctx,
@@ -402,6 +409,13 @@ fn install_skillprism_skill(
             files.push(InstalledFile {
                 path: sidecar.to_string_lossy().to_string(),
                 hash: format!("sha256:{}", sha256_file(sidecar)?),
+            });
+        }
+
+        for asset in &result.written.asset_paths {
+            files.push(InstalledFile {
+                path: asset.to_string_lossy().to_string(),
+                hash: format!("sha256:{}", sha256_file(asset)?),
             });
         }
     }

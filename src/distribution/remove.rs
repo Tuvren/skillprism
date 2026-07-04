@@ -53,7 +53,9 @@ pub fn run_remove(
     let removals = select_removals(store.skills(), &scopes, skills, all, &harness_filter);
 
     if removals.is_empty() {
-        let requested = if skills.len() == 1 {
+        let requested = if skills.is_empty() {
+            "No skills selected for removal. Provide skill names or use --all.".to_string()
+        } else if skills.len() == 1 {
             format!("Skill '{}' is not installed", skills[0])
         } else {
             format!("Skills [{}] are not installed", skills.join(", "))
