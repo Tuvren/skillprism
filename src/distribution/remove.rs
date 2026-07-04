@@ -45,6 +45,12 @@ pub fn run_remove(
         )));
     }
 
+    if all_scopes && !all && skills.is_empty() {
+        return Err(CommandError::Usage(miette::miette!(
+            "--all-scopes requires --all or named skills"
+        )));
+    }
+
     let scopes = determine_scopes(target, all_scopes);
     let harness_filter = parse_harness_filter(harnesses);
 

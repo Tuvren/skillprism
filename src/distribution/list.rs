@@ -77,12 +77,23 @@ fn print_skill(skill: &InstalledSkill) {
     println!(
         "{name}\t{source}\t{ref}\t{format}\t{scope}\t{harnesses}",
         name = skill.name,
-        source = skill.source,
+        source = mask_credentials(&skill.source),
         ref = r#ref,
         format = format,
         scope = scope,
         harnesses = harnesses
     );
+}
+
+fn mask_credentials(source: &str) -> String {
+    // Redact embedded credentials (e.g. https://token@github.com/...) from
+    // tabular output so `list` does not leak secrets into shell history or logs.
+    if let Some((scheme, rest)) = source.split_once("://") {
+        if let Some((_, path)) = rest.split_once('@') {
+            return format!("{scheme}://***@{path}");
+        }
+    }
+    source.to_string()
 }
 
 #[cfg(test)]

@@ -777,11 +777,13 @@ fn update_file_record(
     let mut written = false;
 
     if is_changed {
-        *changed = true;
         if diff {
             print_file_diff(path, content, &path_str);
         } else {
             written = write_file_with_overwrite(path, content, force, skip_all)?;
+        }
+        if written {
+            *changed = true;
         }
     }
 
