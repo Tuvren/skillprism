@@ -520,6 +520,8 @@ fn install_plain_skill(
                 })?;
 
         let skill_dir_out = skill_path_buf.parent().unwrap().to_path_buf();
+        let asset_dirs =
+            crate::loader::discover_asset_dirs(skill_dir).map_err(InstallError::Project)?;
         let mut skipped = Vec::new();
 
         if crate::router::resolve_overwrite(&skill_path_buf, ctx.force, skip_all, &mut skipped) {
@@ -530,8 +532,6 @@ fn install_plain_skill(
                 hash: format!("sha256:{}", sha256_bytes(&template_bytes)),
             });
 
-            let asset_dirs =
-                crate::loader::discover_asset_dirs(skill_dir).map_err(InstallError::Project)?;
             for asset_dir in &asset_dirs {
                 let dir_name = asset_dir
                     .file_name()
@@ -551,6 +551,11 @@ fn install_plain_skill(
                 path: skill_path_buf.to_string_lossy().to_string(),
                 hash: format!("sha256:{}", sha256_file(&skill_path_buf)?),
             });
+
+            // Also record existing asset hashes so update has a stable baseline.
+            for asset_dir in &asset_dirs {
+                record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
+            }
         }
     }
 

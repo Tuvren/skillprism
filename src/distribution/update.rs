@@ -21,7 +21,7 @@ use std::{fs, io};
 use crate::loader::{discover_asset_dirs, find_template_path};
 use crate::registry::HarnessRegistry;
 use crate::resolver::HarnessResolver;
-use crate::router::{resolve_overwrite, resolve_skill_path};
+use crate::router::{resolve_overwrite, resolve_sidecar_path, resolve_skill_path};
 use crate::state::{
     InstallScope, InstalledFile, InstalledSkill, SkillFormat, SourceType, StateStore, now_rfc3339,
 };
@@ -382,7 +382,18 @@ fn update_skillprism_skill(
         )?;
 
         for sidecar in &output.sidecars {
-            let sidecar_path = skill_path_buf.parent().unwrap().join(&sidecar.filename);
+            let sidecar_path = resolve_sidecar_path(
+                skill_path_buf.parent().unwrap(),
+                sidecar.output_dir.as_deref(),
+                &sidecar.filename,
+                &old.name,
+                harness_id,
+            )
+            .map_err(|e| {
+                miette::Report::msg(format!(
+                    "sidecar path resolution error for {harness_id}: {e}"
+                ))
+            })?;
             update_file_record(
                 &sidecar_path,
                 &sidecar.content,
@@ -620,6 +631,7 @@ fn update_asset_dir(
 
     *changed = true;
 
+    let mut copied = false;
     if diff {
         for (_, dst_file, hash) in &expected {
             let path_str = dst_file.to_string_lossy().to_string();
@@ -635,16 +647,31 @@ fn update_asset_dir(
         }
     } else {
         let mut skipped = Vec::new();
-        if resolve_overwrite(&dst_dir, force, skip_all, &mut skipped) {
+        copied = resolve_overwrite(&dst_dir, force, skip_all, &mut skipped);
+        if copied {
             copy_dir(src_dir, &dst_dir, src_dir)?;
         }
     }
 
-    for (_, dst_file, hash) in expected {
-        new_files.push(InstalledFile {
-            path: dst_file.to_string_lossy().to_string(),
-            hash,
-        });
+    if copied {
+        for (_, dst_file, hash) in expected {
+            new_files.push(InstalledFile {
+                path: dst_file.to_string_lossy().to_string(),
+                hash,
+            });
+        }
+    } else {
+        // Declined to overwrite (or diff mode): keep the old hashes so the next
+        // update still detects any asset drift.
+        for (_, dst_file, _) in expected {
+            let path_str = dst_file.to_string_lossy().to_string();
+            if let Some(old_hash) = old_files.get(path_str.as_str()).copied() {
+                new_files.push(InstalledFile {
+                    path: path_str,
+                    hash: old_hash.to_string(),
+                });
+            }
+        }
     }
 
     Ok(())

@@ -148,12 +148,13 @@ pub fn parse_source(input: &str) -> Result<ParsedSource, SourceParseError> {
         return Ok(parsed);
     }
 
-    // GitHub shorthand with @skill filter: owner/repo@skill-name.
+    // GitHub shorthand with @skill filter: owner/repo[/subpath]@skill-name.
     if let Some(caps) = parse_owner_repo_at_skill(&input) {
+        let subpath = caps.subpath.as_deref().map(sanitize_subpath).transpose()?;
         return Ok(ParsedSource::GitHub {
             url: format!("https://github.com/{}/{}.git", caps.owner, caps.repo),
             r#ref: fragment_ref,
-            subpath: None,
+            subpath,
             skill_filter: fragment_skill_filter.or(Some(caps.skill_filter)),
         });
     }
@@ -427,6 +428,7 @@ fn parse_shorthand(input: &str) -> Option<ShorthandParts> {
 struct OwnerRepoAtSkill {
     owner: String,
     repo: String,
+    subpath: Option<String>,
     skill_filter: String,
 }
 
@@ -454,13 +456,23 @@ fn parse_owner_repo_at_skill(input: &str) -> Option<OwnerRepoAtSkill> {
     let skill_filter = input[at_pos + 1..].to_string();
 
     let prefix_parts: Vec<&str> = prefix.split('/').collect();
-    if prefix_parts.len() != 2 || prefix_parts[0].is_empty() || prefix_parts[1].is_empty() {
+    if prefix_parts.len() < 2 || prefix_parts[0].is_empty() || prefix_parts[1].is_empty() {
         return None;
     }
 
+    let owner = prefix_parts[0].to_string();
+    let repo = prefix_parts[1].to_string();
+    let repo = repo.strip_suffix(".git").unwrap_or(&repo).to_string();
+    let subpath = if prefix_parts.len() > 2 {
+        Some(prefix_parts[2..].join("/"))
+    } else {
+        None
+    };
+
     Some(OwnerRepoAtSkill {
-        owner: prefix_parts[0].to_string(),
-        repo: prefix_parts[1].to_string(),
+        owner,
+        repo,
+        subpath,
         skill_filter,
     })
 }
