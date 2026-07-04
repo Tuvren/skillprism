@@ -114,6 +114,8 @@ pub struct InstallContext {
     pub project_root: Option<PathBuf>,
     /// Whether to overwrite existing files without prompting.
     pub force: bool,
+    /// Optional skill name filter for multi-skill sources.
+    pub skill_filter: Option<String>,
 }
 
 /// Result of installing a single skill.
@@ -201,13 +203,22 @@ pub fn install_source(
 
     // When the user did not specify a ref for a remote git source, resolve the
     // remote's default branch so that later `skillprism update` has a named ref
-    // to check. Local paths are left without a ref.
+    // to check. If the remote does not advertise a default branch, fall back to
+    // the cloned HEAD SHA so the record is still updateable.
     let effective_ref = r#ref.or_else(|| {
-        if cleanup_dir.is_some() {
-            network::git_default_branch(&source_url).ok().flatten()
-        } else {
-            None
-        }
+        cleanup_dir.is_some().then(|| match network::git_default_branch(&source_url) {
+            Ok(Some(branch)) => branch,
+            Ok(None) => {
+                eprintln!(
+                    "Warning: no default branch advertised by {source_url}; using resolved HEAD as ref"
+                );
+                resolved_ref.clone().unwrap_or_default()
+            }
+            Err(e) => {
+                eprintln!("Warning: could not resolve default branch for {source_url}: {e}; using resolved HEAD as ref");
+                resolved_ref.clone().unwrap_or_default()
+            }
+        })
     });
 
     let result = install_discovered_skills(
@@ -247,7 +258,11 @@ fn install_discovered_skills(
         });
     }
 
-    let filtered = if let Some(filter) = skill_filter_from_parsed(&ctx.parsed) {
+    let filter = ctx
+        .skill_filter
+        .clone()
+        .or_else(|| skill_filter_from_parsed(&ctx.parsed));
+    let filtered = if let Some(filter) = filter {
         let matched: Vec<_> = skill_dirs
             .into_iter()
             .filter(|d| skill_dir_name(d) == filter)

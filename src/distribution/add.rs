@@ -74,12 +74,6 @@ pub fn run_add(
         .map_err(InstallError::from)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
 
-    let parsed = if let Some(filter) = skill_filter {
-        embed_skill_filter(parsed, &filter)
-    } else {
-        parsed
-    };
-
     if !force && !confirm_install(&source, scope, &selected_harnesses)? {
         return Ok(());
     }
@@ -91,6 +85,7 @@ pub fn run_add(
         harnesses: selected_harnesses,
         project_root,
         force,
+        skill_filter,
     };
 
     let mut store =
@@ -252,37 +247,6 @@ fn print_install_summary(results: &[super::install::InstallResult], scope: Insta
     for result in results {
         let harness_list = result.record.harnesses.join(", ");
         println!("  - {} -> {harness_list}", result.record.name);
-    }
-}
-
-fn embed_skill_filter(
-    parsed: super::source::ParsedSource,
-    filter: &str,
-) -> super::source::ParsedSource {
-    match parsed {
-        super::source::ParsedSource::GitHub {
-            url,
-            r#ref,
-            subpath,
-            ..
-        } => super::source::ParsedSource::GitHub {
-            url,
-            r#ref,
-            subpath,
-            skill_filter: Some(filter.to_string()),
-        },
-        super::source::ParsedSource::GitLab {
-            url,
-            r#ref,
-            subpath,
-            ..
-        } => super::source::ParsedSource::GitLab {
-            url,
-            r#ref,
-            subpath,
-            skill_filter: Some(filter.to_string()),
-        },
-        other => other,
     }
 }
 

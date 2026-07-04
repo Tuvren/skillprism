@@ -30,8 +30,8 @@ use crate::types::ProjectError;
 use super::add::InstallScopeArg;
 use super::install::{
     InstallError, build_registry_for_harnesses, copy_dir, detect_format, discover_skill_dirs,
-    install_scope_to_target, load_skill_into_temp_project, record_asset_hashes, sha256_bytes,
-    skill_dir_name,
+    install_scope_to_target, load_skill_into_temp_project, sha256_bytes, sha256_file,
+    skill_dir_name, walk_files,
 };
 use super::network::{self, NetworkError};
 use super::source::{ParsedSource, SourceParseError, parse_source};
@@ -396,18 +396,17 @@ fn update_skillprism_skill(
         }
 
         for asset_dir in &pair.skill.asset_dirs {
-            if asset_dir.exists() && !diff {
-                copy_dir(
+            if asset_dir.exists() {
+                update_asset_dir(
                     asset_dir,
-                    &skill_path_buf
-                        .parent()
-                        .unwrap()
-                        .join(asset_dir.file_name().unwrap()),
-                    asset_dir,
-                )
-                .map_err(UpdateError::from)?;
-                record_asset_hashes(asset_dir, skill_path_buf.parent().unwrap(), &mut new_files)
-                    .map_err(UpdateError::from)?;
+                    skill_path_buf.parent().unwrap(),
+                    &old_files,
+                    &mut new_files,
+                    &mut changed,
+                    diff,
+                    force,
+                    &mut skip_all,
+                )?;
             }
         }
     }
@@ -519,17 +518,20 @@ fn update_plain_skill(
             });
         }
 
-        let skill_dir_out = skill_path_buf.parent().unwrap().to_path_buf();
+        let skill_dir_out = skill_path_buf.parent().unwrap();
         let asset_dirs = discover_asset_dirs(skill_dir).map_err(UpdateError::from)?;
         for asset_dir in &asset_dirs {
             if asset_dir.exists() {
-                let dir_name = asset_dir.file_name().unwrap().to_string_lossy().to_string();
-                if !diff {
-                    copy_dir(asset_dir, &skill_dir_out.join(&dir_name), asset_dir)
-                        .map_err(UpdateError::from)?;
-                    record_asset_hashes(asset_dir, &skill_dir_out, &mut new_files)
-                        .map_err(UpdateError::from)?;
-                }
+                update_asset_dir(
+                    asset_dir,
+                    skill_dir_out,
+                    &old_files,
+                    &mut new_files,
+                    &mut changed,
+                    diff,
+                    force,
+                    &mut skip_all,
+                )?;
             }
         }
     }
@@ -562,6 +564,90 @@ fn update_plain_skill(
         },
         files: new_files,
     })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_asset_dir(
+    src_dir: &Path,
+    dst_base: &Path,
+    old_files: &HashMap<&str, &str>,
+    new_files: &mut Vec<InstalledFile>,
+    changed: &mut bool,
+    diff: bool,
+    force: bool,
+    skip_all: &mut bool,
+) -> Result<(), UpdateError> {
+    let dir_name = src_dir.file_name().ok_or_else(|| {
+        UpdateError::Install(InstallError::Project(ProjectError::ConfigRead {
+            path: src_dir.to_string_lossy().to_string(),
+            source: io::Error::other("asset directory has no name"),
+        }))
+    })?;
+    let dst_dir = dst_base.join(dir_name);
+
+    let mut expected = Vec::new();
+    for src_file in walk_files(src_dir)? {
+        let rel = src_file
+            .strip_prefix(src_dir)
+            .map_err(|e| UpdateError::Io(io::Error::other(e.to_string())))?;
+        let dst_file = dst_dir.join(rel);
+        let hash = format!("sha256:{}", sha256_file(&src_file)?);
+        expected.push((src_file, dst_file, hash));
+    }
+
+    let mut any_changed = false;
+    for (_, dst_file, hash) in &expected {
+        let path_str = dst_file.to_string_lossy().to_string();
+        let old_hash = old_files.get(path_str.as_str()).copied();
+        if old_hash.is_none_or(|h| h != hash.as_str()) {
+            any_changed = true;
+            break;
+        }
+    }
+
+    if !any_changed {
+        for (_, dst_file, _) in expected {
+            let path_str = dst_file.to_string_lossy().to_string();
+            if let Some(old_hash) = old_files.get(path_str.as_str()).copied() {
+                new_files.push(InstalledFile {
+                    path: path_str,
+                    hash: old_hash.to_string(),
+                });
+            }
+        }
+        return Ok(());
+    }
+
+    *changed = true;
+
+    if diff {
+        for (_, dst_file, hash) in &expected {
+            let path_str = dst_file.to_string_lossy().to_string();
+            let old_hash = old_files.get(path_str.as_str()).copied();
+            if old_hash.is_none_or(|h| h != hash.as_str()) {
+                let marker = if old_hash.is_some() {
+                    "changed"
+                } else {
+                    "added"
+                };
+                println!("  ({marker} asset) {path_str}");
+            }
+        }
+    } else {
+        let mut skipped = Vec::new();
+        if resolve_overwrite(&dst_dir, force, skip_all, &mut skipped) {
+            copy_dir(src_dir, &dst_dir, src_dir)?;
+        }
+    }
+
+    for (_, dst_file, hash) in expected {
+        new_files.push(InstalledFile {
+            path: dst_file.to_string_lossy().to_string(),
+            hash,
+        });
+    }
+
+    Ok(())
 }
 
 fn write_file_with_overwrite(
