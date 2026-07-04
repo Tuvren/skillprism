@@ -1,11 +1,8 @@
 # Changelog
 
-## Unreleased — Distribution CLI
+## Unreleased
 
 - **Distribution commands** — New `add`, `list` (`ls`), `remove` (`rm`), and `update` (`up`) subcommands for installing skills from remote Git repositories and local paths, managing their lifecycle, and keeping them up to date. Each installed skill is auto-detected as skillprism-format (rendered through MiniJinja per harness) or plain-format (copied as-is). Update performs lightweight `git ls-remote` up-to-date checks and per-file SHA-256 content comparison. State is tracked in `~/.config/skillprism/installed.yaml`.
-
-## Unreleased — QoL for skill authors
-
 - **Spec-compliant scaffolds** — `init skill` and `init project` now emit `SKILL.md` with the YAML frontmatter (`name` + `description`) the [Agent Skills spec](https://agentskills.io/specification) requires. Previously the scaffold produced frontmatter-less skills that no client could discover.
 - **Spec validation** — `validate` now enforces Agent Skills spec constraints: skill name format (`^[a-z0-9]+(-[a-z0-9]+)*$`), name matches directory, non-empty description, per-harness length caps, and compatibility 1–500 chars. Values over the spec's portable cap but within a harness's own cap (e.g. 1025–1536 chars for Claude) are warnings, not errors. Previously `name_max_length` and `description_max_length` were parsed but never enforced.
 - **Removed unused `frontmatter_mode` capability** — The harness capability `frontmatter_mode` ("strict"/"lenient"/"extended") was parsed but never used. skillprism now always emits spec-compliant `name` + `description` frontmatter, so the field has been removed from built-in harnesses, custom harness scaffolds, and docs.

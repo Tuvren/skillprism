@@ -1,19 +1,9 @@
 # Tasks Changelog
 
-## v0.13.0 — Epic I Reopened: Phase 2 (Distribution Polish)
-
-- **Epic I reopened** on existing branch `feat/epic-i-distribution` — 3 new tickets (5 SP) added for Phase 2:
-  - **DIST-I008** — Interactive `add` prompts: harness selection, scope choice, summary confirmation via `dialoguer`
-  - **DIST-I009** — npm launcher: thin JS gateway that downloads + execs the Release binary (Biome pattern)
-  - **DIST-I010** — Agent auto-detection: probe `~/.claude`, `~/.config/opencode/`, etc. when no config exists
-- **`find` deferral wording revised:** Can query Vercel's `skills.sh` API directly — no registry needed. Deferred on priority, not infrastructure.
-- Post-mortem driven: gaps identified by comparing Epic I output against Vercel's `skills` CLI v1.5.14.
-- 120 SP delivered + 5 SP active = 125 SP total
-
-## v0.12.0 — Epic I Complete: Distribution CLI
+## v0.12.0 — Epic I Complete: Distribution CLI (including Phase 2)
 
 - **Epic I (Distribution CLI)** fully implemented and archived via `git mv`
-- 7 tickets completed: DIST-I001 through DIST-I007 (32 story points)
+- 10 tickets completed: DIST-I001 through DIST-I010 (37 story points: 32 original + 5 Phase 2)
 - **DIST-I001:** State tracking layer (`~/.config/skillprism/installed.yaml`, schema-versioned, atomic writes, SHA-256 per-file hashes)
 - **DIST-I002:** `add` command — fetch from remote (`git clone --depth 1`), auto-detect format (skillprism vs plain), render/copy per harness, record state
 - **DIST-I003:** `list` command — display installed skills with metadata, filter by scope/harness
@@ -21,8 +11,12 @@
 - **DIST-I005:** `update` command — `git ls-remote` lightweight up-to-date check, re-render with per-file SHA-256 comparison, `--diff` preview, per-skill transactional state save
 - **DIST-I006:** Integration tests — `TestEnv` with XDG_CONFIG_HOME isolation, lifecycle test (add→list→remove), error cases
 - **DIST-I007:** Docs and website — README distribution workflow, Hugo docs (distribution.md, comparison.md), CLI reference, homepage repositioning, CHANGELOG
-- All 226 tests pass, clippy deny-level clean, Hugo builds 21 pages
-- Total delivery trajectory: 120 SP across 9 completed epics
+- **DIST-I008:** Interactive `add` prompts — harness selection, scope choice via `dialoguer`, detected agents pre-selected, `--force` skips prompts
+- **DIST-I009:** npm launcher — thin JS gateway in `npm/` that downloads + execs the GitHub Release binary (Biome pattern)
+- **DIST-I010:** Agent auto-detection — probe `~/.claude`, `~/.config/opencode/`, etc. when no config exists
+- 230 tests pass, clippy deny-level clean, Hugo builds 21 pages
+- Total delivery trajectory: 125 SP across 9 completed epics
+- Post-mortem driven Phase 2: gaps identified by comparing Epic I output against Vercel's `skills` CLI v1.5.14; `find` deferred (can query Vercel's `skills.sh` API directly)
 
 ## v0.11.0 — Epic I Activated and Specified: Distribution CLI
 

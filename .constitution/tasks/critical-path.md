@@ -1,10 +1,10 @@
-# Critical Path — Stage 4 v0.13.0
+# Critical Path — Stage 4 v0.12.0
 
 ## Active Backlog Summary
 
-- **Total Active Story Points:** 5
-- **Active Epic:** Epic I (Distribution CLI) — Phase 2: 5 new SP (37 total including original 32)
-- **Completed:** Epic A (Foundation) — 9 points, Epic B (Pipeline) — 16 points, Epic C (DX) — 10 points, Epic D (SAFE) — 16 points, Epic E (SCAFF) — 7 points, Epic F (TEST) — 8 points, Epic G (CLEAN) — 9 points, Epic H (RELS) — 13 points, **Epic I (Distribution CLI Phase 1) — 32 points** = 120 total delivered
+- **Total Active Story Points:** 0
+- **Active Epics:** None
+- **Completed:** Epic A (Foundation) — 9 points, Epic B (Pipeline) — 16 points, Epic C (DX) — 10 points, Epic D (SAFE) — 16 points, Epic E (SCAFF) — 7 points, Epic F (TEST) — 8 points, Epic G (CLEAN) — 9 points, Epic H (RELS) — 13 points, **Epic I (Distribution CLI) — 37 points** = 125 total delivered
 
 ## Critical Path
 
@@ -15,9 +15,9 @@
 5. **DIST-I005** — `update` Command (5 SP) — ✅ complete
 6. **DIST-I006** — Integration Tests (5 SP) — ✅ complete
 7. **DIST-I007** — Docs and Website Updates (3 SP) — ✅ complete
-8. **DIST-I010** — Agent Auto-Detection (2 SP) — no dependencies
-9. **DIST-I008** — Interactive `add` Prompts (2 SP) — depends on I010
-10. **DIST-I009** — npm Launcher (1 SP) — no dependencies
+8. **DIST-I010** — Agent Auto-Detection (2 SP) — ✅ complete
+9. **DIST-I008** — Interactive `add` Prompts (2 SP) — ✅ complete
+10. **DIST-I009** — npm Launcher (1 SP) — ✅ complete
 
 ## Build Order Diagram
 
@@ -62,14 +62,13 @@ flowchart LR
 | Phase 6 | Testing & CI | ✅ Epic F — Completed |
 | Phase 7 | Code Quality | ✅ Epic G — Completed |
 | Phase 8 | Release Readiness | ✅ Epic H — Completed |
-| Phase 9 | Distribution CLI — Phase 1 | ✅ Epic I — Phase 1 Complete (32 SP) |
-| Phase 9b | Distribution CLI — Phase 2 | 🔵 Epic I — Phase 2 Active (5 SP) |
+| Phase 9 | Distribution CLI | ✅ Epic I — Complete (37 SP) |
 
-**9 epics + Phase 2 active (125 SP total). 5 SP active.**
+**9 epics completed (125 SP total). 0 SP active.**
 
 ## Notes
 
-- **Epic I reopened (2026-07-03):** Phase 2 addresses gaps identified during post-mortem comparison against Vercel's `skills` CLI v1.5.14. Three tickets added: agent auto-detection, interactive `add` prompts, and npm launcher binary distribution. Original 7 tickets (32 SP) remain complete.
+- **Epic I completed (2026-07-04):** All 10 tickets delivered, including Phase 2 (agent auto-detection, interactive `add` prompts, npm launcher). Archived via `git mv`.
 - **Architecture boundary preserved:** The distribution commands (`add`, `list`, `remove`, `update`) are the only network surface in skillprism. The npm launcher downloads binaries but the Rust binary itself makes no network calls beyond `git`.
-- **`find` deferred:** Can be implemented by querying Vercel's `skills.sh` API when prioritized — no registry backend needed. Wording updated in the epic file.
+- **`find` deferred:** Can be implemented by querying Vercel's `skills.sh` API when prioritized — no registry backend needed.
 - **`use` command:** Explicitly ruled out. Not in scope.

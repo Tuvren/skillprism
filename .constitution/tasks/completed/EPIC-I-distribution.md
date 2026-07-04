@@ -1,6 +1,8 @@
 # Epic I — Distribution CLI
 
-Acronym: **DIST** | Story Points: **37** (32 original + 5 phase 2)
+Acronym: **DIST** | Story Points: **37** (32 original + 5 Phase 2)
+
+**Status:** ✅ Completed and archived (2026-07-04)
 
 **Dependencies:** Epic H (RELS) — release artifacts must exist before the v1.0.0 tag is cut; PRD non-goal `plugin-marketplace.md` reopened by operator directive (see `.constitution/prd/out-of-scope/plugin-marketplace.md` for the `[REOPENED 2026-07-02]` annotation; full PRD revision is a downstream follow-up tracked in `prd/changelog.md`).
 
