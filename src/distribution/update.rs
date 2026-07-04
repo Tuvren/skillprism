@@ -15,7 +15,7 @@
 //! `skillprism update` command implementation.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{fs, io};
 
 use crate::loader::{discover_asset_dirs, find_template_path};
@@ -145,10 +145,15 @@ fn filter_candidates(
         .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
         .filter(|s| {
             harnesses.is_none_or(|h| {
-                let wanted: Vec<_> = h.split(',').map(|x| x.trim().to_string()).collect();
-                s.harnesses
-                    .iter()
-                    .any(|installed| wanted.contains(installed))
+                let wanted: Vec<_> = h
+                    .split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect();
+                wanted.is_empty()
+                    || s.harnesses
+                        .iter()
+                        .any(|installed| wanted.contains(installed))
             })
         })
         .collect()
@@ -278,8 +283,12 @@ fn update_skill(
         println!("No matching harnesses to update for {}", old.name);
         return Ok(());
     }
-    let project_root = match old.scope {
-        InstallScope::Project => super::find_project_root().ok(),
+    let project_root: Option<PathBuf> = match old.scope {
+        InstallScope::Project => old
+            .project_root
+            .clone()
+            .map(PathBuf::from)
+            .or_else(|| super::find_project_root().ok()),
         InstallScope::User => None,
     };
 
@@ -419,6 +428,7 @@ fn update_skillprism_skill(
         r#ref: Some(r#ref.to_string()),
         resolved_ref,
         skill_path: skill_path.map(|p| p.to_string_lossy().to_string()),
+        project_root: old.project_root.clone(),
         scope: old.scope,
         harnesses: old.harnesses.clone(),
         format: SkillFormat::Skillprism,
@@ -540,6 +550,7 @@ fn update_plain_skill(
         r#ref: Some(r#ref.to_string()),
         resolved_ref,
         skill_path: skill_path.map(|p| p.to_string_lossy().to_string()),
+        project_root: old.project_root.clone(),
         scope: old.scope,
         harnesses: old.harnesses.clone(),
         format: SkillFormat::Plain,

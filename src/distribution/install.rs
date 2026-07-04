@@ -369,12 +369,10 @@ pub fn detect_format(skill_dir: &Path) -> Result<SkillFormat, InstallError> {
         })?;
 
     raw.get("skillprism").map_or_else(
-        || {
-            Err(InstallError::MalformedManifest {
-                path: manifest.to_string_lossy().to_string(),
-                detail: "missing the `skillprism:` field".to_string(),
-            })
-        },
+        // A skill.yaml without `skillprism:` is treated as plain format; this
+        // matches the documented convention that plain skills may carry extra
+        // metadata in skill.yaml.
+        || Ok(SkillFormat::Plain),
         |value| match value.as_str() {
             None => Err(InstallError::MalformedManifest {
                 path: manifest.to_string_lossy().to_string(),
@@ -620,6 +618,14 @@ fn build_record(
     files: Vec<InstalledFile>,
 ) -> InstalledSkill {
     let now = now_rfc3339();
+    let project_root = if ctx.target_scope == InstallScope::Project {
+        ctx.project_root
+            .as_deref()
+            .and_then(|p| std::path::absolute(p).ok())
+            .map(|p| p.to_string_lossy().to_string())
+    } else {
+        None
+    };
     InstalledSkill {
         name: skill_name.to_string(),
         source: ctx.source_input.clone(),
@@ -628,6 +634,7 @@ fn build_record(
         r#ref: r#ref.cloned(),
         resolved_ref,
         skill_path: skill_path.cloned(),
+        project_root,
         scope: ctx.target_scope,
         harnesses: ctx.harnesses.clone(),
         format,

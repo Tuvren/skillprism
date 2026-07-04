@@ -269,9 +269,13 @@ fn clone_args(url: &str, r#ref: Option<&str>, dest: &Path) -> Vec<String> {
     args
 }
 
-/// Returns true when `r#ref` looks like a full Git SHA-1 object id.
+/// Returns true when `r#ref` looks like a Git SHA object id.
+///
+/// Accepts full 40-character SHAs as well as short SHAs (7-39 characters) that
+/// are composed entirely of hexadecimal digits. Branch or tag names that happen
+/// to match this pattern will be treated as SHAs.
 pub fn is_sha_ref(r#ref: &str) -> bool {
-    r#ref.len() == 40 && r#ref.chars().all(|c| c.is_ascii_hexdigit())
+    (7..=40).contains(&r#ref.len()) && r#ref.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 fn clone_timeout() -> Duration {

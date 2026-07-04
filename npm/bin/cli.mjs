@@ -127,8 +127,12 @@ async function run() {
     stdio: "inherit",
   });
 
-  child.on("exit", (code) => {
-    process.exit(code);
+  child.on("exit", (code, signal) => {
+    if (signal) {
+      // Re-raise the signal so the parent sees the same termination cause.
+      process.kill(process.pid, signal);
+    }
+    process.exit(code ?? 1);
   });
 }
 

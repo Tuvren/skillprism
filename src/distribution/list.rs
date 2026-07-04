@@ -99,6 +99,7 @@ mod tests {
             r#ref: Some("main".to_string()),
             resolved_ref: None,
             skill_path: None,
+            project_root: None,
             scope,
             harnesses: harnesses.iter().map(|h| (*h).to_string()).collect(),
             format: SkillFormat::Skillprism,

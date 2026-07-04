@@ -14,6 +14,7 @@
 
 //! `skillprism remove` command implementation.
 
+use std::borrow::Cow;
 use std::io::{self, Write};
 use std::path::Path;
 
@@ -46,7 +47,6 @@ pub fn run_remove(
 
     let scopes = determine_scopes(target, all_scopes);
     let harness_filter = parse_harness_filter(harnesses);
-    let project_root = find_project_root().ok();
 
     let mut store =
         StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
@@ -74,11 +74,11 @@ pub fn run_remove(
 
     for (skill, harnesses_to_remove) in &removals {
         for harness_id in harnesses_to_remove {
-            remove_skill_files(skill, harness_id, project_root.as_deref())?;
+            remove_skill_files(skill, harness_id)?;
         }
     }
 
-    apply_removals_to_state(&mut store, removals, project_root.as_deref())?;
+    apply_removals_to_state(&mut store, removals)?;
     store
         .save()
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
@@ -178,26 +178,15 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn remove_skill_files(
-    skill: &InstalledSkill,
-    harness_id: &str,
-    project_root: Option<&Path>,
-) -> Result<(), CommandError> {
+fn remove_skill_files(skill: &InstalledSkill, harness_id: &str) -> Result<(), CommandError> {
     let registry = HarnessRegistry::with_builtins();
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(skill.scope);
-    let root = match skill.scope {
-        InstallScope::Project => project_root.ok_or_else(|| {
-            CommandError::Usage(miette::miette!(
-                "--target project requires being inside a skillprism project"
-            ))
-        })?,
-        InstallScope::User => Path::new("."),
-    };
+    let root = resolve_removal_root(skill)?;
 
-    let skill_path = router::resolve_skill_path(root, &harness, &skill.name, target)
+    let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &skill.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let skill_dir = skill_path
         .parent()
@@ -213,6 +202,22 @@ fn remove_skill_files(
     Ok(())
 }
 
+fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, CommandError> {
+    match skill.scope {
+        InstallScope::Project => skill.project_root.as_deref().map_or_else(
+            || {
+                find_project_root().map(Cow::Owned).map_err(|_| {
+                    CommandError::Usage(miette::miette!(
+                        "--target project requires being inside a skillprism project"
+                    ))
+                })
+            },
+            |root| Ok(Cow::Borrowed(Path::new(root))),
+        ),
+        InstallScope::User => Ok(Cow::Borrowed(Path::new("."))),
+    }
+}
+
 const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
     match scope {
         InstallScope::Project => TargetScope::Project,
@@ -223,7 +228,6 @@ const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
 fn apply_removals_to_state(
     store: &mut StateStore,
     removals: Vec<RemovalAction>,
-    project_root: Option<&Path>,
 ) -> Result<(), CommandError> {
     for (skill, harnesses_to_remove) in removals {
         if harnesses_to_remove.len() >= skill.harnesses.len() {
@@ -233,7 +237,7 @@ fn apply_removals_to_state(
 
         let mut record = skill;
         for harness_id in &harnesses_to_remove {
-            remove_harness_files_from_record(&mut record, harness_id, project_root)?;
+            remove_harness_files_from_record(&mut record, harness_id)?;
         }
         record
             .harnesses
@@ -246,23 +250,15 @@ fn apply_removals_to_state(
 fn remove_harness_files_from_record(
     record: &mut InstalledSkill,
     harness_id: &str,
-    project_root: Option<&Path>,
 ) -> Result<(), CommandError> {
     let registry = HarnessRegistry::with_builtins();
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(record.scope);
-    let root: &Path = match record.scope {
-        InstallScope::Project => project_root.ok_or_else(|| {
-            CommandError::Usage(miette::miette!(
-                "--target project requires being inside a skillprism project"
-            ))
-        })?,
-        InstallScope::User => Path::new("."),
-    };
+    let root = resolve_removal_root(record)?;
 
-    let skill_path = router::resolve_skill_path(root, &harness, &record.name, target)
+    let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &record.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let skill_dir = skill_path
         .parent()
@@ -289,6 +285,7 @@ mod tests {
             r#ref: Some("main".to_string()),
             resolved_ref: None,
             skill_path: None,
+            project_root: None,
             scope,
             harnesses: harnesses.iter().map(|h| (*h).to_string()).collect(),
             format: SkillFormat::Skillprism,
@@ -365,6 +362,7 @@ mod tests {
             r#ref: Some("main".to_string()),
             resolved_ref: None,
             skill_path: None,
+            project_root: Some(root.to_string_lossy().to_string()),
             scope: InstallScope::Project,
             harnesses: vec!["claude".to_string(), "opencode".to_string()],
             format: SkillFormat::Skillprism,
@@ -384,7 +382,7 @@ mod tests {
         store.save().unwrap();
 
         let action = (store.skills()[0].clone(), vec!["claude".to_string()]);
-        apply_removals_to_state(&mut store, vec![action], Some(root)).unwrap();
+        apply_removals_to_state(&mut store, vec![action]).unwrap();
 
         assert_eq!(store.skills().len(), 1);
         let updated = &store.skills()[0];

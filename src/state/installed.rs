@@ -136,6 +136,10 @@ pub struct InstalledSkill {
     pub resolved_ref: Option<String>,
     /// Subpath within the source that contained the skill; `None` if root.
     pub skill_path: Option<String>,
+    /// Absolute project root where the skill was installed; `None` for user scope
+    /// or when the root could not be determined.
+    #[serde(skip_serializing_if = "Option::is_none", default)]
+    pub project_root: Option<String>,
     /// Install scope: project or user.
     pub scope: InstallScope,
     /// Harnesses the skill was rendered/copied to.
@@ -569,6 +573,7 @@ mod tests {
                 r#ref: Some("abc123".to_string()),
                 resolved_ref: Some("abc123".to_string()),
                 skill_path: Some("skills/pdf".to_string()),
+                project_root: Some("/home/user/project".to_string()),
                 scope: InstallScope::Project,
                 harnesses: vec!["claude".to_string(), "opencode".to_string()],
                 format: SkillFormat::Skillprism,
@@ -685,6 +690,7 @@ mod tests {
             r#ref: Some("main".to_string()),
             resolved_ref: None,
             skill_path: None,
+            project_root: None,
             scope: InstallScope::Project,
             harnesses: vec!["claude".to_string()],
             format: SkillFormat::Skillprism,
