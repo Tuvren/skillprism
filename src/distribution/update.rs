@@ -36,20 +36,33 @@ use super::install::{
 use super::network::{self, NetworkError};
 use super::source::{ParsedSource, SourceParseError, parse_source};
 
-/// RAII guard that removes a temporary git clone directory on drop unless
-/// explicitly kept.
-struct TempCloneDir(Option<PathBuf>);
+/// Caches fetched git repositories for the lifetime of an `update` command so
+/// multiple installed skills that share the same source are cloned only once.
+struct CloneCache {
+    dirs: std::collections::HashMap<String, PathBuf>,
+}
 
-impl TempCloneDir {
-    fn keep(mut self) {
-        self.0.take();
+impl CloneCache {
+    fn new() -> Self {
+        Self {
+            dirs: std::collections::HashMap::new(),
+        }
+    }
+
+    fn fetch(&mut self, url: &str, r#ref: &str) -> Result<&Path, NetworkError> {
+        let key = format!("{url}#{ref}");
+        if !self.dirs.contains_key(&key) {
+            let dir = network::fetch_git_repo(url, Some(r#ref))?;
+            self.dirs.insert(key.clone(), dir);
+        }
+        Ok(self.dirs.get(&key).unwrap())
     }
 }
 
-impl Drop for TempCloneDir {
+impl Drop for CloneCache {
     fn drop(&mut self) {
-        if let Some(dir) = self.0.take() {
-            let _ = network::cleanup_temp_dir(&dir);
+        for dir in self.dirs.values() {
+            let _ = network::cleanup_temp_dir(dir);
         }
     }
 }
@@ -101,6 +114,7 @@ pub fn run_update(
     harnesses: Option<&String>,
     diff: bool,
     force: bool,
+    verbose: bool,
 ) -> Result<(), miette::Report> {
     let mut store = StateStore::open().map_err(|e| miette::Report::new(UpdateError::from(e)))?;
 
@@ -123,6 +137,13 @@ pub fn run_update(
 
     let candidates = filter_candidates(candidates, target, harnesses);
 
+    if verbose {
+        eprintln!(
+            "[update] {count} skill(s) selected for update",
+            count = candidates.len()
+        );
+    }
+
     if candidates.is_empty() {
         println!("No installed skills to update.");
         return Ok(());
@@ -141,8 +162,16 @@ pub fn run_update(
         }
     });
 
+    let mut clone_cache = CloneCache::new();
     for skill in &candidates {
-        update_skill(skill, &mut store, harness_filter.as_deref(), diff, force)?;
+        update_skill(
+            skill,
+            &mut store,
+            harness_filter.as_deref(),
+            diff,
+            force,
+            &mut clone_cache,
+        )?;
         if !diff {
             store
                 .save()
@@ -184,6 +213,7 @@ fn update_skill(
     harness_filter: Option<&[String]>,
     diff: bool,
     force: bool,
+    clone_cache: &mut CloneCache,
 ) -> Result<(), miette::Report> {
     if old.source_type == SourceType::Local {
         println!("{} is a local skill, no remote to update", old.name);
@@ -233,20 +263,20 @@ fn update_skill(
     let source_type = old.source_type;
     let skill_path = old.skill_path.as_deref().map(Path::new);
 
-    let (source_path, cleanup_guard, resolved_ref) = match &parsed {
-        ParsedSource::Local { path } => (path.clone(), TempCloneDir(None), None),
+    let (source_path, resolved_ref) = match &parsed {
+        ParsedSource::Local { path } => (path.clone(), None),
         ParsedSource::GitHub {
             url,
             r#ref: _,
             subpath,
             ..
         } => {
-            let dir = network::fetch_git_repo(url, Some(r#ref)).map_err(UpdateError::from)?;
+            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
             let base = subpath
                 .as_ref()
-                .map_or_else(|| dir.clone(), |s| dir.join(s));
-            let head = network::git_dir_head(&dir).ok();
-            (base, TempCloneDir(Some(dir)), head)
+                .map_or_else(|| dir.to_path_buf(), |s| dir.join(s));
+            let head = network::git_dir_head(dir).ok();
+            (base, head)
         }
         ParsedSource::GitLab {
             url,
@@ -254,17 +284,17 @@ fn update_skill(
             subpath,
             ..
         } => {
-            let dir = network::fetch_git_repo(url, Some(r#ref)).map_err(UpdateError::from)?;
+            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
             let base = subpath
                 .as_ref()
-                .map_or_else(|| dir.clone(), |s| dir.join(s));
-            let head = network::git_dir_head(&dir).ok();
-            (base, TempCloneDir(Some(dir)), head)
+                .map_or_else(|| dir.to_path_buf(), |s| dir.join(s));
+            let head = network::git_dir_head(dir).ok();
+            (base, head)
         }
         ParsedSource::Git { url, r#ref: _ } => {
-            let dir = network::fetch_git_repo(url, Some(r#ref)).map_err(UpdateError::from)?;
-            let head = network::git_dir_head(&dir).ok();
-            (dir.clone(), TempCloneDir(Some(dir)), head)
+            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
+            let head = network::git_dir_head(dir).ok();
+            (dir.to_path_buf(), head)
         }
         ParsedSource::WellKnown { .. } => {
             return Err(miette::Report::msg(format!(
@@ -343,7 +373,6 @@ fn update_skill(
         store.upsert(new_record);
     }
 
-    cleanup_guard.keep();
     Ok(())
 }
 
@@ -612,7 +641,7 @@ fn update_plain_skill(
     })
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn update_asset_dir(
     src_dir: &Path,
     dst_base: &Path,
@@ -641,7 +670,20 @@ fn update_asset_dir(
         expected.push((src_file, dst_file, hash));
     }
 
-    let mut any_changed = false;
+    let expected_paths: std::collections::HashSet<String> = expected
+        .iter()
+        .map(|(_, p, _)| p.to_string_lossy().to_string())
+        .collect();
+
+    let mut removed: Vec<String> = Vec::new();
+    for path_str in old_files.keys() {
+        let p = Path::new(path_str);
+        if p.starts_with(&dst_dir) && !expected_paths.contains(*path_str) {
+            removed.push((*path_str).to_string());
+        }
+    }
+
+    let mut any_changed = !removed.is_empty();
     for (_, dst_file, hash) in &expected {
         let path_str = dst_file.to_string_lossy().to_string();
         let old_hash = old_files.get(path_str.as_str()).copied();
@@ -678,11 +720,17 @@ fn update_asset_dir(
                 println!("  ({marker} asset) {path_str}");
             }
         }
+        for path_str in &removed {
+            println!("  (removed asset) {path_str}");
+        }
     } else {
         let mut skipped = Vec::new();
         copied = resolve_overwrite(&dst_dir, force, skip_all, &mut skipped);
         if copied {
             copy_dir(src_dir, &dst_dir, src_dir)?;
+            for path_str in &removed {
+                let _ = fs::remove_file(path_str);
+            }
         }
     }
 
@@ -702,6 +750,16 @@ fn update_asset_dir(
             if let Some(old_hash) = old_files.get(path_str.as_str()).copied() {
                 new_files.push(InstalledFile {
                     path: path_str,
+                    hash: old_hash.to_string(),
+                });
+            }
+        }
+        // Also preserve records for assets that no longer exist in the source
+        // so the state continues to match the on-disk files.
+        for path_str in &removed {
+            if let Some(old_hash) = old_files.get(path_str.as_str()).copied() {
+                new_files.push(InstalledFile {
+                    path: path_str.clone(),
                     hash: old_hash.to_string(),
                 });
             }
@@ -826,6 +884,164 @@ fn print_diff_output(output: &crate::router::diff::DiffOutput) {
             "  (+{additions}, -{deletions} lines)",
             additions = stats.additions,
             deletions = stats.deletions
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashMap;
+
+    use super::*;
+    use tempfile::TempDir;
+
+    fn leak_str(s: String) -> &'static str {
+        Box::leak(s.into_boxed_str())
+    }
+
+    #[test]
+    fn update_file_record_writes_and_hashes_content() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("SKILL.md");
+        fs::write(&path, "Version: A").unwrap();
+
+        let mut new_files = Vec::new();
+        let mut changed = false;
+        let mut skip_all = false;
+
+        update_file_record(
+            &path,
+            "Version: B",
+            &HashMap::new(),
+            &mut new_files,
+            &mut changed,
+            false,
+            true,
+            &mut skip_all,
+        )
+        .unwrap();
+
+        assert!(changed, "changed should be true when content differs");
+        assert_eq!(fs::read_to_string(&path).unwrap(), "Version: B");
+        assert_eq!(new_files.len(), 1);
+        assert_eq!(new_files[0].path, path.to_string_lossy());
+        assert!(new_files[0].hash.starts_with("sha256:"));
+    }
+
+    #[test]
+    fn update_file_record_keeps_old_hash_when_declined() {
+        let tmp = TempDir::new().unwrap();
+        let path = tmp.path().join("SKILL.md");
+        fs::write(&path, "Version: A").unwrap();
+
+        let path_str = leak_str(path.to_string_lossy().to_string());
+        let old_hash = leak_str(format!("sha256:{}", sha256_bytes(b"Version: A")));
+        let old_files: HashMap<&str, &str> = [(path_str, old_hash)].into_iter().collect();
+
+        let mut new_files = Vec::new();
+        let mut changed = false;
+        let mut skip_all = true; // simulate decline without prompting
+
+        update_file_record(
+            &path,
+            "Version: B",
+            &old_files,
+            &mut new_files,
+            &mut changed,
+            false,
+            false, // force false so resolve_overwrite checks skip_all
+            &mut skip_all,
+        )
+        .unwrap();
+
+        assert!(
+            !changed,
+            "changed should stay false when overwrite is declined"
+        );
+        assert_eq!(fs::read_to_string(&path).unwrap(), "Version: A");
+        assert_eq!(new_files[0].hash, old_hash);
+    }
+
+    #[test]
+    fn update_asset_dir_copies_new_assets_and_records_hashes() {
+        let tmp = TempDir::new().unwrap();
+        let src_dir = tmp.path().join("assets");
+        let dst_base = tmp.path().join("out");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::write(src_dir.join("icon.svg"), "<svg>A</svg>").unwrap();
+
+        let mut new_files = Vec::new();
+        let mut changed = false;
+        let mut skip_all = false;
+
+        update_asset_dir(
+            &src_dir,
+            &dst_base,
+            &HashMap::new(),
+            &mut new_files,
+            &mut changed,
+            false,
+            true,
+            &mut skip_all,
+        )
+        .unwrap();
+
+        assert!(changed);
+        let dst = dst_base.join("assets/icon.svg");
+        assert!(dst.exists());
+        assert_eq!(fs::read_to_string(&dst).unwrap(), "<svg>A</svg>");
+        assert_eq!(new_files.len(), 1);
+        assert!(new_files[0].hash.starts_with("sha256:"));
+    }
+
+    #[test]
+    fn update_asset_dir_prunes_removed_assets() {
+        let tmp = TempDir::new().unwrap();
+        let src_dir = tmp.path().join("assets");
+        let dst_base = tmp.path().join("out");
+        fs::create_dir_all(&src_dir).unwrap();
+        fs::create_dir_all(dst_base.join("assets")).unwrap();
+
+        // Source no longer has old-icon.svg.
+        fs::write(src_dir.join("icon.svg"), "<svg>A</svg>").unwrap();
+
+        // But the destination still has it from a previous install.
+        let old_path = dst_base.join("assets/old-icon.svg");
+        fs::write(&old_path, "old").unwrap();
+
+        let old_path_str = leak_str(old_path.to_string_lossy().to_string());
+        let icon_path = dst_base.join("assets/icon.svg");
+        let icon_path_str = leak_str(icon_path.to_string_lossy().to_string());
+        let old_hash = leak_str(format!("sha256:{}", sha256_bytes(b"old")));
+        let old_files: HashMap<&str, &str> = [(old_path_str, old_hash), (icon_path_str, old_hash)]
+            .into_iter()
+            .collect();
+
+        let mut new_files = Vec::new();
+        let mut changed = false;
+        let mut skip_all = false;
+
+        update_asset_dir(
+            &src_dir,
+            &dst_base,
+            &old_files,
+            &mut new_files,
+            &mut changed,
+            false,
+            true,
+            &mut skip_all,
+        )
+        .unwrap();
+
+        assert!(changed);
+        assert!(
+            !old_path.exists(),
+            "removed asset should be deleted from disk"
+        );
+        assert!(icon_path.exists());
+        assert!(
+            new_files.iter().all(|f| f.path != old_path_str),
+            "removed asset record should not appear in new state"
         );
     }
 }

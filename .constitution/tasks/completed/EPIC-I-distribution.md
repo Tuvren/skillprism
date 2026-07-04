@@ -371,9 +371,14 @@ And .opencode/skills/my-skill/ remains
 And the state record is updated to reflect only opencode
 
 Given 3 installed skills in project scope and 2 in user scope
-When the user runs `skillprism remove --all --force`
+When the user runs `skillprism remove --all --force --all-scopes`
 Then all 5 installed skills are removed from both project and user scopes
 And the state file is empty
+
+Given 3 installed skills in project scope and 2 in user scope
+When the user runs `skillprism remove --all --force`
+Then only the 3 project-scope skills are removed
+And the 2 user-scope skills remain
 
 Given the user invokes `skillprism remove` with --target dist
 When the command runs
@@ -457,7 +462,7 @@ When the integration test runs `skillprism list`
 Then stdout contains both skill names with correct metadata
 
 Given both skills are installed
-When the integration test runs `skillprism remove --all --force`
+When the integration test runs `skillprism remove --all --force --all-scopes`
 Then both skills are removed from all harness paths
 And the state tracking layer is empty
 And `skillprism list` outputs "No skills installed"

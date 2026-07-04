@@ -31,6 +31,7 @@ use super::find_project_root;
 
 /// Runs the `remove` command.
 #[allow(clippy::too_many_lines)]
+#[allow(clippy::fn_params_excessive_bools)]
 pub fn run_remove(
     skills: &[String],
     target: Option<InstallScopeArg>,
@@ -38,6 +39,7 @@ pub fn run_remove(
     all: bool,
     all_scopes: bool,
     force: bool,
+    verbose: bool,
 ) -> Result<(), CommandError> {
     if all && !skills.is_empty() {
         return Err(CommandError::Usage(miette::miette!(
@@ -52,6 +54,9 @@ pub fn run_remove(
     }
 
     let scopes = determine_scopes(target, all_scopes);
+    if verbose {
+        eprintln!("[remove] scopes: {scopes:?}");
+    }
     let harness_filter = parse_harness_filter(harnesses);
 
     let mut store =

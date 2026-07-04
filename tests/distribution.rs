@@ -225,6 +225,118 @@ fn distribution_remove_nonexistent_skill_fails() {
     );
 }
 
+fn init_git_repo(path: &Path) {
+    run_git(path, &["init"])
+        .args(["--initial-branch", "main"])
+        .status()
+        .unwrap();
+    run_git(path, &["config", "user.email", "test@example.com"])
+        .status()
+        .unwrap();
+    run_git(path, &["config", "user.name", "Test User"])
+        .status()
+        .unwrap();
+}
+
+fn commit_all(repo: &Path, message: &str) {
+    run_git(repo, &["add", "."]).status().unwrap();
+    run_git(repo, &["commit", "-m", message]).status().unwrap();
+}
+
+fn run_git(repo: &Path, args: &[&str]) -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
+    cmd.current_dir(repo).args(args);
+    cmd
+}
+
+#[test]
+fn distribution_update_applies_source_changes() {
+    let project = tempfile::TempDir::with_prefix("skillprism_update_project_").unwrap();
+    fs::write(
+        project.path().join("skillprism.yaml"),
+        "name: update-test\nharnesses:\n  - claude\n  - opencode\nskills_dir: skills\n",
+    )
+    .unwrap();
+    let source = copy_fixture("dist-update");
+    let state = tempfile::TempDir::with_prefix("skillprism_update_state_").unwrap();
+
+    init_git_repo(source.path());
+    commit_all(source.path(), "Version A");
+
+    let source_url = format!("file://{}", source.path().display());
+
+    // Install version A from the local git repo.
+    let mut add_cmd = Command::cargo_bin("skillprism").unwrap();
+    add_cmd
+        .current_dir(project.path())
+        .env("XDG_CONFIG_HOME", state.path())
+        .arg("add")
+        .arg(&source_url)
+        .arg("--force");
+    add_cmd.assert().success();
+
+    let read_plain = || {
+        fs::read_to_string(
+            project
+                .path()
+                .join(format!(".claude/skills/{PLAIN_SKILL}/SKILL.md")),
+        )
+        .unwrap()
+    };
+    let read_skillprism = || {
+        fs::read_to_string(
+            project
+                .path()
+                .join(format!(".claude/skills/{SKILLPRISM_SKILL}/SKILL.md")),
+        )
+        .unwrap()
+    };
+
+    assert!(read_plain().contains("Version: A"));
+    assert!(read_skillprism().contains("Version: A"));
+
+    // Mutate the source from version A to version B and commit.
+    for path in [
+        source.path().join(format!("skills/{PLAIN_SKILL}/SKILL.md")),
+        source
+            .path()
+            .join(format!("skills/{SKILLPRISM_SKILL}/skill.yaml")),
+    ] {
+        let content = fs::read_to_string(&path).unwrap();
+        fs::write(
+            &path,
+            content
+                .replace("Version: A", "Version: B")
+                .replace("version: A", "version: B"),
+        )
+        .unwrap();
+    }
+    commit_all(source.path(), "Version B");
+
+    // Run update --force and assert files reflect version B.
+    let mut update_cmd = Command::cargo_bin("skillprism").unwrap();
+    update_cmd
+        .current_dir(project.path())
+        .env("XDG_CONFIG_HOME", state.path())
+        .arg("update")
+        .arg("--force");
+    let output = update_cmd.assert().success();
+    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    assert!(
+        stdout.contains("Updated") || stdout.contains("is up to date"),
+        "update should report progress, got: {stdout}"
+    );
+
+    assert!(
+        read_plain().contains("Version: B"),
+        "plain skill should be updated to version B"
+    );
+    assert!(
+        read_skillprism().contains("Version: B"),
+        "skillprism skill should be updated to version B"
+    );
+}
+
 #[test]
 fn distribution_update_no_skills_in_state() {
     let env = TestEnv::new("dist-simple");

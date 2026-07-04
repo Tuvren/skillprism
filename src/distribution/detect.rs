@@ -127,14 +127,19 @@ mod tests {
     }
 
     #[test]
-    fn public_api_returns_empty_when_home_unset() {
+    fn public_api_returns_empty_when_home_has_no_agents() {
         let old_home = std::env::var_os("HOME");
-        // SAFETY: env var mutation in single-threaded test context.
-        unsafe { std::env::remove_var("HOME") };
+        let empty_home = std::env::temp_dir().join("skillprism-empty-home-test");
+        std::fs::create_dir_all(&empty_home).unwrap();
+        // SAFETY: env var mutation is isolated by the test runner's default
+        // process-per-test-thread model and restored below.
+        unsafe { std::env::set_var("HOME", &empty_home) };
         assert!(detect_installed_agents().is_empty());
         if let Some(h) = old_home {
-            // SAFETY: restoring env var in single-threaded test.
+            // SAFETY: restoring the original HOME after the assertion.
             unsafe { std::env::set_var("HOME", h) };
+        } else {
+            unsafe { std::env::remove_var("HOME") };
         }
     }
 }

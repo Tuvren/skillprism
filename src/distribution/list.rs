@@ -23,8 +23,12 @@ use super::source::mask_credentials;
 pub fn run_list(
     target: Option<InstallScopeArg>,
     harnesses: Option<&String>,
+    verbose: bool,
 ) -> Result<(), miette::Report> {
     let store = StateStore::open().map_err(miette::Report::new)?;
+    if verbose {
+        eprintln!("[list] loaded {} state record(s)", store.skills().len());
+    }
     let skills = filter_skills(store.skills(), target, harnesses);
 
     if skills.is_empty() {

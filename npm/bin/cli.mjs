@@ -6,12 +6,22 @@
 // Pattern: Biome (@biomejs/biome), esbuild, Playwright.
 // The Rust binary is the real artifact — this package is just a gateway.
 
-import { createWriteStream, existsSync, mkdirSync, renameSync, chmodSync, rmSync } from "node:fs";
+import {
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  renameSync,
+  chmodSync,
+  rmSync,
+  readFileSync,
+} from "node:fs";
 import { unlink } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { spawn } from "node:child_process";
 import { pipeline } from "node:stream/promises";
+import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 
 const REPO = "tuvren/skillprism";
 const CACHE_DIR = join(homedir(), ".cache", "skillprism");
@@ -32,6 +42,46 @@ function getTarget() {
     process.exit(1);
   }
   return target;
+}
+
+function checksumManifestPath() {
+  const __filename = fileURLToPath(import.meta.url);
+  return join(dirname(__filename), "..", "checksums.json");
+}
+
+function expectedChecksum(version, target) {
+  const manifest = JSON.parse(readFileSync(checksumManifestPath(), "utf8"));
+  const entry = manifest[version]?.[target];
+  if (!entry) {
+    return null;
+  }
+  return entry.replace(/^sha256:/, "");
+}
+
+function sha256File(path) {
+  return createHash("sha256").update(readFileSync(path)).digest("hex");
+}
+
+function verifyChecksum(tmpFile, version, target) {
+  if (process.env.SKILLPRISM_SKIP_CHECKSUM === "1") {
+    console.warn(
+      `Skipping checksum verification for ${target} v${version}. This is insecure and should only be used for development.`
+    );
+    return;
+  }
+  const expected = expectedChecksum(version, target);
+  if (!expected) {
+    throw new Error(
+      `No published checksum for ${target} v${version}. ` +
+        `Set SKILLPRISM_SKIP_CHECKSUM=1 to bypass, or wait for an official release.`
+    );
+  }
+  const actual = sha256File(tmpFile);
+  if (actual !== expected) {
+    throw new Error(
+      `Checksum mismatch for ${target} v${version}: expected ${expected}, got ${actual}`
+    );
+  }
 }
 
 function getBinaryPath(version) {
@@ -62,8 +112,9 @@ async function downloadBinary(version) {
   mkdirSync(CACHE_DIR, { recursive: true });
 
   // NOTE: This downloads a release artifact from GitHub over HTTPS and runs it.
-  // Robust supply-chain verification (signed checksum manifest, pinned hashes,
-  // or code signing) is not implemented yet. Track progress in the roadmap:
+  // The tarball is verified against the pinned checksum manifest in
+  // checksums.json before extraction. Full signed-manifest / code-signing
+  // verification is a future improvement tracked in the roadmap:
   // https://github.com/Tuvren/skillprism/issues
   try {
     const res = await fetch(url);
@@ -73,6 +124,10 @@ async function downloadBinary(version) {
 
     const fileStream = createWriteStream(tmpFile);
     await pipeline(res.body, fileStream);
+
+    // Verify the downloaded tarball against the pinned checksum manifest before
+    // extracting or executing it.
+    verifyChecksum(tmpFile, version, target);
 
     // Extract binary from the tarball (xz-compressed, no outer dir flattening)
     // The tarball contains: skillprism-<target>/skillprism

@@ -424,7 +424,10 @@ fn parse_shorthand(input: &str) -> Option<ShorthandParts> {
         return None;
     }
     let owner = parts[0].to_string();
-    let repo = parts[1].to_string();
+    let repo = parts[1]
+        .strip_suffix(".git")
+        .unwrap_or(parts[1])
+        .to_string();
     let subpath = if parts.len() > 2 {
         Some(parts[2..].join("/"))
     } else {
@@ -719,6 +722,14 @@ mod tests {
         };
         assert_eq!(url, "https://github.com/owner/repo.git");
         assert_eq!(subpath.as_deref(), Some("skills/pdf"));
+    }
+
+    #[test]
+    fn shorthand_strips_trailing_git() {
+        let ParsedSource::GitHub { url, .. } = parse_source("owner/repo.git").unwrap() else {
+            panic!("expected GitHub");
+        };
+        assert_eq!(url, "https://github.com/owner/repo.git");
     }
 
     #[test]

@@ -231,7 +231,14 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             skill,
             harnesses,
             force,
-        } => match crate::distribution::add::run_add(source, target, skill, harnesses, force) {
+        } => match crate::distribution::add::run_add(
+            source,
+            target,
+            skill,
+            harnesses,
+            force,
+            cli.verbose,
+        ) {
             Ok(()) => Ok(()),
             Err(e) => {
                 eprintln!("{e:?}");
@@ -239,7 +246,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             }
         },
         Command::List { target, harnesses } => {
-            crate::distribution::list::run_list(target, harnesses.as_ref())
+            crate::distribution::list::run_list(target, harnesses.as_ref(), cli.verbose)
         }
         Command::Remove {
             skills,
@@ -249,7 +256,13 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             all_scopes,
             force,
         } => match crate::distribution::remove::run_remove(
-            &skills, target, harnesses, all, all_scopes, force,
+            &skills,
+            target,
+            harnesses,
+            all,
+            all_scopes,
+            force,
+            cli.verbose,
         ) {
             Ok(()) => Ok(()),
             Err(e) => {
@@ -269,6 +282,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             harnesses.as_ref(),
             diff,
             force,
+            cli.verbose,
         ),
     }
 }
@@ -283,7 +297,7 @@ fn run_build(
 ) -> Result<(), miette::Report> {
     install_signal_handlers();
 
-    let project_root = find_project_root()?;
+    let project_root = crate::distribution::find_project_root().into_diagnostic()?;
     if verbose {
         eprintln!("[build] project root: {}", project_root.display());
     }
@@ -628,13 +642,13 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             Ok(())
         }
         InitKind::Skill { name } => {
-            let root = find_project_root()?;
+            let root = crate::distribution::find_project_root().into_diagnostic()?;
             crate::scaffold::skill::scaffold_skill(&root, &name).into_diagnostic()?;
             println!("Created skill `{name}`");
             Ok(())
         }
         InitKind::Harness { name } => {
-            let root = find_project_root()?;
+            let root = crate::distribution::find_project_root().into_diagnostic()?;
             crate::scaffold::harness::scaffold_harness(&root, &name).into_diagnostic()?;
             println!("Created harness `{name}`");
             Ok(())
@@ -720,23 +734,6 @@ fn fmt_duration(d: std::time::Duration) -> String {
         format!("{:.0}ms", secs * 1000.0)
     } else {
         format!("{secs:.1}s")
-    }
-}
-
-fn find_project_root() -> Result<PathBuf, miette::Report> {
-    let cwd = std::env::current_dir().into_diagnostic()?;
-    let mut dir = cwd.as_path();
-    loop {
-        if dir.join("skillprism.yaml").exists() {
-            return Ok(dir.to_path_buf());
-        }
-        if let Some(parent) = dir.parent() {
-            dir = parent;
-        } else {
-            return Err(miette::miette!(
-                "No skillprism.yaml found. Run `skillprism init project <name>` to create one, or cd into a skillprism project."
-            ));
-        }
     }
 }
 

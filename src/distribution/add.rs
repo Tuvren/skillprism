@@ -57,8 +57,16 @@ pub fn run_add(
     skill_filter: Option<String>,
     harnesses: Option<String>,
     force: bool,
+    verbose: bool,
 ) -> Result<(), CommandError> {
     let project_root = find_project_root().ok();
+    if verbose {
+        if let Some(root) = &project_root {
+            eprintln!("[add] project root: {}", root.display());
+        } else {
+            eprintln!("[add] no project root found");
+        }
+    }
     let scope = resolve_scope(target, force, project_root.is_some())?;
 
     if scope == InstallScope::Project && project_root.is_none() {
