@@ -178,12 +178,16 @@ pub fn install_source(ctx: &InstallContext) -> Result<Vec<InstallResult>, Instal
         .as_deref()
         .and_then(|dir| network::git_dir_head(dir).ok());
 
+    // When the user did not specify a ref, resolve the remote's default branch
+    // so that later `skillprism update` has a named ref to check.
+    let effective_ref = r#ref.or_else(|| network::git_default_branch(&source_url).ok().flatten());
+
     let result = install_discovered_skills(
         ctx,
         &source_path,
         &source_url,
         source_type,
-        r#ref.as_ref(),
+        effective_ref.as_ref(),
         resolved_ref,
         skill_path.as_ref(),
     );

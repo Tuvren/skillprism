@@ -161,6 +161,27 @@ pub fn git_dir_head(dir: &Path) -> Result<String, NetworkError> {
     Ok(output.trim().to_string())
 }
 
+/// Resolves the default branch name of a remote git repository.
+///
+/// Returns `Ok(Some(branch))` when the remote advertises a `HEAD` ref,
+/// `Ok(None)` when it does not, and `Err` on network/git failure.
+pub fn git_default_branch(url: &str) -> Result<Option<String>, NetworkError> {
+    let output = run_git_output(&[
+        "ls-remote".to_string(),
+        "--symref".to_string(),
+        url.to_string(),
+        "HEAD".to_string(),
+    ])?;
+
+    for line in output.lines() {
+        if let Some(rest) = line.strip_prefix("ref: refs/heads/") {
+            let branch = rest.split('\t').next().unwrap_or(rest);
+            return Ok(Some(branch.to_string()));
+        }
+    }
+    Ok(None)
+}
+
 /// Removes a temporary directory, validating that it lives under the system
 /// temp directory first.
 pub fn cleanup_temp_dir(dir: &Path) -> Result<(), NetworkError> {
@@ -518,4 +539,93 @@ fn build_github_auth_error(url: &str, repo: Option<&GitHubRepoInfo>, message: &s
          - For SSH: Check your keys with 'ssh -T git@github.com'\n\
          - For HTTPS: Run 'gh auth login' or configure git credentials"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::process::Command;
+
+    fn run_git(args: &[&str], cwd: &Path) {
+        let status = Command::new("git")
+            .args(args)
+            .current_dir(cwd)
+            .status()
+            .expect("git should be installed");
+        assert!(status.success(), "git {args:?} failed");
+    }
+
+    fn temp_dir() -> PathBuf {
+        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let dir = std::env::temp_dir().join(format!(
+            "skillprism-network-test-{}-{n}",
+            std::process::id()
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn git_default_branch_resolves_main() {
+        let base = temp_dir();
+        let origin = base.join("origin.git");
+        let work = base.join("work");
+        fs::create_dir_all(&origin).unwrap();
+        fs::create_dir_all(&work).unwrap();
+
+        run_git(&["init", "--bare"], &origin);
+        run_git(&["init"], &work);
+        run_git(
+            &["remote", "add", "origin", origin.to_str().unwrap()],
+            &work,
+        );
+
+        fs::write(work.join("README.md"), "hello").unwrap();
+        run_git(&["add", "README.md"], &work);
+        run_git(
+            &[
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "user.name=Test",
+                "commit",
+                "-m",
+                "init",
+            ],
+            &work,
+        );
+        run_git(&["push", "origin", "HEAD:main"], &work);
+        run_git(&["symbolic-ref", "HEAD", "refs/heads/main"], &origin);
+
+        let url = format!("file://{}", origin.canonicalize().unwrap().display());
+        let branch = git_default_branch(&url).unwrap();
+        assert_eq!(branch, Some("main".to_string()));
+    }
+
+    #[test]
+    fn git_dir_head_returns_sha() {
+        let base = temp_dir();
+        run_git(&["init"], &base);
+        fs::write(base.join("file.txt"), "content").unwrap();
+        run_git(&["add", "file.txt"], &base);
+        run_git(
+            &[
+                "-c",
+                "user.email=test@example.com",
+                "-c",
+                "user.name=Test",
+                "commit",
+                "-m",
+                "init",
+            ],
+            &base,
+        );
+
+        let head = git_dir_head(&base).unwrap();
+        assert_eq!(head.len(), 40);
+        assert!(head.chars().all(|c| c.is_ascii_hexdigit()));
+    }
 }
