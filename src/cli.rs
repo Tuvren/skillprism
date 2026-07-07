@@ -241,6 +241,10 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
                 }
             }
         }
+        // `list`/`update` return `miette::Report` (always exit 1 via `run`)
+        // rather than `CommandError`: unlike `add`/`remove`, they have no
+        // usage-level (exit 2) error of their own — a bad `--target` is rejected
+        // by clap's `InstallScopeArg` parse (exit 2) before the command runs.
         Command::List { target, harnesses } => {
             crate::distribution::run_list(target, harnesses.as_ref(), cli.verbose)
         }

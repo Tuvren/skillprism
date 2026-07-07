@@ -131,3 +131,4 @@ skillprism/
 - `--verbose` flag enables per-stage timing and per-skill progress via `eprintln!`
 - No logging framework in v1 — structured `eprintln!` with consistent prefix format `[stage] message`
 - Stdout is reserved for `--diff` output and scaffold confirmation messages; all other diagnostics go to stderr
+- Distribution commands (`add`/`list`/`remove`/`update`): stdout carries only machine-readable data — the `list` table and `update --diff` patch. All prompts, install/removal summaries, confirmations, and per-skill status ("Updated X", "is up to date", "No installed skills", etc.) go to stderr so piped stdout stays clean

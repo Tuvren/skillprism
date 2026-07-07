@@ -110,8 +110,10 @@ pub fn run_remove(
 
     let affected = describe_affected(&removals);
     if force {
+        // Diagnostics/confirmations go to stderr; stdout is reserved for the
+        // `list` table and `--diff` output.
         for line in &affected {
-            println!("{line}");
+            eprintln!("{line}");
         }
     } else {
         prompt_confirm(&affected)?;
@@ -192,12 +194,13 @@ fn describe_affected(removals: &[RemovalAction]) -> Vec<String> {
 }
 
 fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
-    println!("The following skills will be removed:");
+    // Interactive prompt UI goes to stderr, keeping stdout clean for piped data.
+    eprintln!("The following skills will be removed:");
     for line in affected {
-        println!("  {line}");
+        eprintln!("  {line}");
     }
-    print!("Are you sure? [y/N] ");
-    io::stdout()
+    eprint!("Are you sure? [y/N] ");
+    io::stderr()
         .flush()
         .into_diagnostic()
         .map_err(CommandError::Runtime)?;

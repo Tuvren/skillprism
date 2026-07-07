@@ -111,8 +111,11 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
     // SHA refs cannot be cloned with `--branch`; fetch the default branch first
     // and then checkout the specific object.
     let clone_ref = if is_sha { None } else { r#ref };
-    let temp_dir = create_temp_dir()?;
-    let args = clone_args(url, clone_ref, &temp_dir);
+    // Guard the temp dir immediately so it is removed on every error path
+    // (ADR-008: "cleaned up on error or after use"). On success,
+    // `maybe_checkout_sha` calls `keep()` to hand the directory to the caller.
+    let guard = CloneGuard(Some(create_temp_dir()?));
+    let args = clone_args(url, clone_ref, guard.path());
 
     if let Err(e) = run_git(&args) {
         let error_message = e.to_string();
@@ -167,7 +170,7 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
         });
     }
 
-    maybe_checkout_sha(CloneGuard(Some(temp_dir)), r#ref)
+    maybe_checkout_sha(guard, r#ref)
 }
 
 fn maybe_checkout_sha(guard: CloneGuard, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {

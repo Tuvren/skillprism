@@ -238,10 +238,12 @@ fn confirm_install(
     let scope_label = scope.as_str();
     let harness_list = harnesses.join(", ");
 
-    println!("Install summary:");
-    println!("  source:    {}", mask_credentials(source));
-    println!("  scope:     {scope_label}");
-    println!("  harnesses: {harness_list}");
+    // Interactive summary/prompt goes to stderr; stdout is reserved for the
+    // `list` table and `--diff` output.
+    eprintln!("Install summary:");
+    eprintln!("  source:    {}", mask_credentials(source));
+    eprintln!("  scope:     {scope_label}");
+    eprintln!("  harnesses: {harness_list}");
 
     Confirm::new()
         .with_prompt("Proceed with installation")
@@ -258,16 +260,17 @@ fn print_install_summary(results: &[super::install::InstallResult], scope: Insta
     let scope_label = scope.as_str();
     let count = results.len();
     if count == 0 {
-        println!("No skills installed.");
+        eprintln!("No skills installed.");
         return;
     }
-    println!(
+    // Post-install summary is a diagnostic, not machine-readable data → stderr.
+    eprintln!(
         "Installed {count} skill{scope_suffix} to {scope_label} scope:",
         scope_suffix = if count == 1 { "" } else { "s" },
     );
     for result in results {
         let harness_list = result.record.harnesses.join(", ");
-        println!("  - {} -> {harness_list}", result.record.name);
+        eprintln!("  - {} -> {harness_list}", result.record.name);
     }
 }
 

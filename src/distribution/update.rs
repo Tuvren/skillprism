@@ -238,6 +238,19 @@ fn filter_candidates(
         .collect()
 }
 
+/// Reports the outcome of an update to stderr (suppressed in `--diff` mode,
+/// where the patch is the output). Shared by the skillprism and plain paths.
+fn report_update_result(diff: bool, changed: bool, name: &str) {
+    if diff {
+        return;
+    }
+    if changed {
+        eprintln!("Updated {name}");
+    } else {
+        eprintln!("{name} is up to date");
+    }
+}
+
 // reason: linear per-skill update pipeline (ref check → fetch → per-harness
 // render/compare) kept as one readable unit.
 #[allow(clippy::too_many_lines)]
@@ -529,13 +542,7 @@ fn update_skillprism_skill(
         }
     }
 
-    if !diff {
-        if changed {
-            eprintln!("Updated {}", old.name);
-        } else {
-            eprintln!("{} is up to date", old.name);
-        }
-    }
+    report_update_result(diff, changed, &old.name);
 
     Ok(InstalledSkill {
         name: old.name.clone(),
@@ -684,13 +691,7 @@ fn update_plain_skill(
         }
     }
 
-    if !diff {
-        if changed {
-            eprintln!("Updated {}", old.name);
-        } else {
-            eprintln!("{} is up to date", old.name);
-        }
-    }
+    report_update_result(diff, changed, &old.name);
 
     Ok(InstalledSkill {
         name: old.name.clone(),

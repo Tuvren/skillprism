@@ -23,7 +23,7 @@ import { pipeline } from "node:stream/promises";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 
-const REPO = "tuvren/skillprism";
+const REPO = "Tuvren/skillprism";
 const CACHE_DIR = join(homedir(), ".cache", "skillprism");
 const PLATFORM_MAP = {
   "linux-x64": "x86_64-unknown-linux-gnu",
