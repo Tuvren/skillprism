@@ -16,14 +16,33 @@
 
 use std::fmt;
 
-pub mod add;
-pub mod detect;
-pub mod install;
-pub mod list;
-pub mod network;
-pub mod remove;
-pub mod source;
-pub mod update;
+mod add;
+mod detect;
+mod install;
+mod list;
+mod network;
+mod remove;
+mod source;
+mod update;
+
+// Curated crate-facing API: expose only the command entrypoints and the clap
+// arg type. Submodules stay private per the Module Exports guideline; siblings
+// reach shared helpers via `super::`.
+pub use add::{InstallScopeArg, run_add};
+pub use list::run_list;
+pub use remove::run_remove;
+pub use update::run_update;
+
+/// Parses a comma-separated harness list (e.g. `--harnesses claude,opencode`)
+/// into trimmed, non-empty ids. Shared by add/list/remove/update so the parsing
+/// rule stays in one place.
+pub fn parse_harness_list(raw: &str) -> Vec<String> {
+    raw.split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(ToString::to_string)
+        .collect()
+}
 
 use std::path::PathBuf;
 
@@ -53,7 +72,6 @@ pub fn find_project_root() -> Result<PathBuf, ProjectError> {
 
 /// Error type for distribution CLI commands that carries an explicit process
 /// exit code separate from the wrapped diagnostic report.
-#[derive(Debug)]
 pub enum CommandError {
     /// A usage error (e.g. invalid flags, missing project). Exits with code 2.
     Usage(miette::Report),
@@ -67,6 +85,17 @@ impl CommandError {
         match self {
             Self::Usage(_) => 2,
             Self::Runtime(_) => 1,
+        }
+    }
+}
+
+// Forward `Debug` to the inner report so `eprintln!("{e:?}")` renders miette's
+// graphical diagnostic directly, without a `Usage(...)`/`Runtime(...)` wrapper
+// leaking into user-facing stderr. The exit code is derived separately.
+impl fmt::Debug for CommandError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Usage(r) | Self::Runtime(r) => fmt::Debug::fmt(r, f),
         }
     }
 }

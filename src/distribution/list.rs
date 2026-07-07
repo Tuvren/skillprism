@@ -53,11 +53,7 @@ fn filter_skills(
         .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
         .filter(|s| {
             harnesses.is_none_or(|h| {
-                let wanted: Vec<_> = h
-                    .split(',')
-                    .map(|x| x.trim().to_string())
-                    .filter(|x| !x.is_empty())
-                    .collect();
+                let wanted = super::parse_harness_list(h);
                 wanted.is_empty()
                     || s.harnesses
                         .iter()
@@ -75,10 +71,7 @@ fn print_skill(skill: &InstalledSkill) {
         SkillFormat::Skillprism => "skillprism",
         SkillFormat::Plain => "plain",
     };
-    let scope = match skill.scope {
-        InstallScope::Project => "project",
-        InstallScope::User => "user",
-    };
+    let scope = skill.scope.as_str();
     println!(
         "{name}\t{source}\t{ref}\t{format}\t{scope}\t{harnesses}",
         name = skill.name,

@@ -199,11 +199,7 @@ pub fn run_update(
     }
 
     let harness_filter = harnesses.and_then(|h| {
-        let parsed: Vec<_> = h
-            .split(',')
-            .map(|x| x.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+        let parsed = super::parse_harness_list(h);
         if parsed.is_empty() {
             None
         } else {
@@ -241,11 +237,7 @@ fn filter_candidates(
         .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
         .filter(|s| {
             harnesses.is_none_or(|h| {
-                let wanted: Vec<_> = h
-                    .split(',')
-                    .map(|x| x.trim().to_string())
-                    .filter(|x| !x.is_empty())
-                    .collect();
+                let wanted = super::parse_harness_list(h);
                 wanted.is_empty()
                     || s.harnesses
                         .iter()
@@ -459,7 +451,13 @@ fn update_skillprism_skill(
     let mut new_files: Vec<InstalledFile> = old
         .files
         .iter()
-        .filter(|f| !updated_prefixes.iter().any(|p| f.path.starts_with(p)))
+        // Component-aware prefix match (consistent with remove.rs) so a skill
+        // dir like `.../skills/foo` doesn't spuriously match `.../skills/foo-bar`.
+        .filter(|f| {
+            !updated_prefixes
+                .iter()
+                .any(|p| Path::new(&f.path).starts_with(p))
+        })
         .cloned()
         .collect();
 
@@ -603,7 +601,13 @@ fn update_plain_skill(
     let mut new_files: Vec<InstalledFile> = old
         .files
         .iter()
-        .filter(|f| !updated_prefixes.iter().any(|p| f.path.starts_with(p)))
+        // Component-aware prefix match (consistent with remove.rs) so a skill
+        // dir like `.../skills/foo` doesn't spuriously match `.../skills/foo-bar`.
+        .filter(|f| {
+            !updated_prefixes
+                .iter()
+                .any(|p| Path::new(&f.path).starts_with(p))
+        })
         .cloned()
         .collect();
 

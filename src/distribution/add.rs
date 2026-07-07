@@ -59,6 +59,11 @@ pub fn run_add(
     force: bool,
     verbose: bool,
 ) -> Result<(), CommandError> {
+    // Validate the source before any interactive prompt so a malformed source
+    // string (empty/whitespace, unsafe subpath) fails fast as a usage error
+    // (DIST-I002 mandates exit code 2) instead of prompting the user first.
+    let parsed = parse_source(&source).map_err(|e| CommandError::Usage(miette::Report::new(e)))?;
+
     let project_root = find_project_root().ok();
     if verbose {
         if let Some(root) = &project_root {
@@ -77,10 +82,6 @@ pub fn run_add(
 
     let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, force)
         .map_err(CommandError::Runtime)?;
-
-    // A malformed source string (empty/whitespace, unsafe subpath) is a usage
-    // error: DIST-I002 mandates exit code 2, not the runtime exit code 1.
-    let parsed = parse_source(&source).map_err(|e| CommandError::Usage(miette::Report::new(e)))?;
 
     if !force && !confirm_install(&source, scope, &selected_harnesses)? {
         return Ok(());
@@ -140,7 +141,9 @@ fn resolve_scope(
         .default(0)
         .interact()
         .map_err(|e| {
-            CommandError::Runtime(miette::miette!("Failed to read scope selection: {e}"))
+            CommandError::Usage(miette::miette!(
+                "Could not prompt for install scope ({e}). Pass `--target project` or `--target user` to run non-interactively (e.g. in CI)."
+            ))
         })?;
 
     Ok(match items.get(selection) {
@@ -155,11 +158,7 @@ fn determine_harnesses(
     force: bool,
 ) -> Result<Vec<String>, miette::Report> {
     if let Some(list) = harnesses {
-        let items: Vec<String> = list
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-            .collect();
+        let items = super::parse_harness_list(&list);
         if !items.is_empty() {
             return Ok(items);
         }
@@ -198,7 +197,11 @@ fn determine_harnesses(
         .with_prompt("Select harnesses to install to (space to toggle, enter to confirm)")
         .items_checked(checked_items)
         .interact()
-        .map_err(|e| miette::miette!("Failed to prompt for harness selection: {e}"))?;
+        .map_err(|e| {
+            miette::miette!(
+                "Could not prompt for harness selection ({e}). Pass `--harnesses <ids>` (comma-separated, e.g. `--harnesses claude,opencode`) to run non-interactively."
+            )
+        })?;
 
     let selected: Vec<String> = selections
         .into_iter()
@@ -223,10 +226,7 @@ fn confirm_install(
     scope: InstallScope,
     harnesses: &[String],
 ) -> Result<bool, CommandError> {
-    let scope_label = match scope {
-        InstallScope::Project => "project",
-        InstallScope::User => "user",
-    };
+    let scope_label = scope.as_str();
     let harness_list = harnesses.join(", ");
 
     println!("Install summary:");
@@ -238,14 +238,15 @@ fn confirm_install(
         .with_prompt("Proceed with installation")
         .default(true)
         .interact()
-        .map_err(|e| CommandError::Runtime(miette::miette!("Failed to read confirmation: {e}")))
+        .map_err(|e| {
+            CommandError::Usage(miette::miette!(
+                "Could not prompt for confirmation ({e}). Pass `--force` to skip the confirmation prompt in non-interactive environments."
+            ))
+        })
 }
 
 fn print_install_summary(results: &[super::install::InstallResult], scope: InstallScope) {
-    let scope_label = match scope {
-        InstallScope::Project => "project",
-        InstallScope::User => "user",
-    };
+    let scope_label = scope.as_str();
     let count = results.len();
     if count == 0 {
         println!("No skills installed.");

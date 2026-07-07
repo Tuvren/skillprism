@@ -363,8 +363,17 @@ pub fn skill_dir_name(dir: &Path) -> String {
         .unwrap_or_default()
 }
 
-/// Discovers directories inside `root` that directly contain a skill template.
+/// Discovers skill directories at or under `root`.
+///
+/// If `root` itself directly contains a `SKILL.md`/`SKILL.md.j2`, the source
+/// resolved straight to a single skill (a local path or a tree-URL subpath
+/// pointing at the skill dir), so `root` is returned as the only skill and no
+/// recursion happens. Otherwise `root` is treated as a container and its
+/// descendants are walked.
 pub fn discover_skill_dirs(root: &Path) -> Result<Vec<PathBuf>, InstallError> {
+    if root.join("SKILL.md").exists() || root.join("SKILL.md.j2").exists() {
+        return Ok(vec![root.to_path_buf()]);
+    }
     let mut dirs = Vec::new();
     walk_for_skills(root, &mut dirs)?;
     dirs.sort();
@@ -907,6 +916,26 @@ mod tests {
                 .unwrap()
                 .is_symlink()
         );
+    }
+
+    #[test]
+    fn discover_skill_dirs_treats_root_as_skill() {
+        // A source that resolves directly to a skill directory (SKILL.md at the
+        // root) is a single-skill source; discovery must return the root itself.
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("SKILL.md"), b"# skill").unwrap();
+        let found = discover_skill_dirs(tmp.path()).unwrap();
+        assert_eq!(found, vec![tmp.path().to_path_buf()]);
+    }
+
+    #[test]
+    fn discover_skill_dirs_walks_container_children() {
+        let tmp = tempfile::tempdir().unwrap();
+        let child = tmp.path().join("pdf");
+        fs::create_dir(&child).unwrap();
+        fs::write(child.join("SKILL.md.j2"), b"# skill").unwrap();
+        let found = discover_skill_dirs(tmp.path()).unwrap();
+        assert_eq!(found, vec![child]);
     }
 
     #[test]

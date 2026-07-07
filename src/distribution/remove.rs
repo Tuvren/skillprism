@@ -20,7 +20,6 @@ use std::path::Path;
 
 use miette::IntoDiagnostic;
 
-use crate::cli::TargetScope;
 use crate::registry::HarnessRegistry;
 use crate::router;
 use crate::state::{InstallScope, InstalledSkill, StateStore};
@@ -28,6 +27,7 @@ use crate::state::{InstallScope, InstalledSkill, StateStore};
 use super::CommandError;
 use super::add::InstallScopeArg;
 use super::find_project_root;
+use super::install::install_scope_to_target;
 
 /// Runs the `remove` command.
 #[allow(clippy::too_many_lines)]
@@ -89,18 +89,12 @@ pub fn run_remove(
             } else {
                 let hint = other_scopes
                     .iter()
-                    .map(|s| match s {
-                        InstallScope::Project => "--target project",
-                        InstallScope::User => "--target user",
-                    })
+                    .map(|s| format!("--target {}", s.as_str()))
                     .collect::<Vec<_>>()
                     .join(" or ");
                 let where_scopes = other_scopes
                     .iter()
-                    .map(|s| match s {
-                        InstallScope::Project => "project",
-                        InstallScope::User => "user",
-                    })
+                    .map(|s| s.as_str())
                     .collect::<Vec<_>>()
                     .join(", ");
                 format!(
@@ -146,12 +140,7 @@ fn determine_scopes(target: Option<InstallScopeArg>, all_scopes: bool) -> Vec<In
 
 fn parse_harness_filter(harnesses: Option<String>) -> Vec<String> {
     harnesses
-        .map(|h| {
-            h.split(',')
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
-        })
+        .map(|h| super::parse_harness_list(&h))
         .unwrap_or_default()
 }
 
@@ -192,10 +181,7 @@ fn describe_affected(removals: &[RemovalAction]) -> Vec<String> {
             format!(
                 "{name} ({scope}): {harnesses}",
                 name = skill.name,
-                scope = match skill.scope {
-                    InstallScope::Project => "project",
-                    InstallScope::User => "user",
-                },
+                scope = skill.scope.as_str(),
                 harnesses = harnesses.join(", ")
             )
         })
@@ -263,13 +249,6 @@ fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, Command
             |root| Ok(Cow::Borrowed(Path::new(root))),
         ),
         InstallScope::User => Ok(Cow::Borrowed(Path::new("."))),
-    }
-}
-
-const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
-    match scope {
-        InstallScope::Project => TargetScope::Project,
-        InstallScope::User => TargetScope::User,
     }
 }
 

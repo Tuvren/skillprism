@@ -21,7 +21,7 @@ use clap_mangen::Man;
 
 use miette::IntoDiagnostic;
 
-use crate::distribution::add::InstallScopeArg;
+use crate::distribution::InstallScopeArg;
 use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
@@ -231,22 +231,18 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             skill,
             harnesses,
             force,
-        } => match crate::distribution::add::run_add(
-            source,
-            target,
-            skill,
-            harnesses,
-            force,
-            cli.verbose,
-        ) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                eprintln!("{e:?}");
-                std::process::exit(e.exit_code());
+        } => {
+            match crate::distribution::run_add(source, target, skill, harnesses, force, cli.verbose)
+            {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    eprintln!("{e:?}");
+                    std::process::exit(e.exit_code());
+                }
             }
-        },
+        }
         Command::List { target, harnesses } => {
-            crate::distribution::list::run_list(target, harnesses.as_ref(), cli.verbose)
+            crate::distribution::run_list(target, harnesses.as_ref(), cli.verbose)
         }
         Command::Remove {
             skills,
@@ -255,7 +251,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             all,
             all_scopes,
             force,
-        } => match crate::distribution::remove::run_remove(
+        } => match crate::distribution::run_remove(
             &skills,
             target,
             harnesses,
@@ -276,7 +272,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             harnesses,
             diff,
             force,
-        } => crate::distribution::update::run_update(
+        } => crate::distribution::run_update(
             &skills,
             target,
             harnesses.as_ref(),

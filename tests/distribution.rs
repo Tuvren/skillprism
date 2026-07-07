@@ -199,19 +199,10 @@ fn distribution_add_rejects_dist_target() {
 #[test]
 fn distribution_add_empty_source_is_usage_error() {
     // DIST-I002: a whitespace-only source is a usage error → exit code 2.
-    // `--target user --force` avoids the interactive scope/harness prompts so
-    // the flow reaches source parsing on a non-TTY test runner.
+    // Source validation runs before any interactive scope/harness prompt, so
+    // this fails fast with no flags even on a non-TTY test runner.
     let env = TestEnv::new("dist-simple");
-    let result = env
-        .bin()
-        .arg("add")
-        .arg("   ")
-        .arg("--target")
-        .arg("user")
-        .arg("--force")
-        .assert()
-        .failure()
-        .code(2);
+    let result = env.bin().arg("add").arg("   ").assert().failure().code(2);
     let stderr = String::from_utf8_lossy(&result.get_output().stderr);
     assert!(
         stderr.contains("source cannot be empty or whitespace"),

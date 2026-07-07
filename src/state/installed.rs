@@ -81,6 +81,16 @@ pub enum InstallScope {
     User,
 }
 
+impl InstallScope {
+    /// Returns the lowercase label for this scope (matches the serde encoding).
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Project => "project",
+            Self::User => "user",
+        }
+    }
+}
+
 /// The source type used to fetch a skill.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
