@@ -78,9 +78,9 @@ pub fn run_add(
     let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, force)
         .map_err(CommandError::Runtime)?;
 
-    let parsed = parse_source(&source)
-        .map_err(InstallError::from)
-        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    // A malformed source string (empty/whitespace, unsafe subpath) is a usage
+    // error: DIST-I002 mandates exit code 2, not the runtime exit code 1.
+    let parsed = parse_source(&source).map_err(|e| CommandError::Usage(miette::Report::new(e)))?;
 
     if !force && !confirm_install(&source, scope, &selected_harnesses)? {
         return Ok(());

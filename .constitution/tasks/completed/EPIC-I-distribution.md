@@ -63,7 +63,9 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
       sourceUrl: https://github.com/anthropics/skills.git
       sourceType: github                              # github | gitlab | git | local | wellknown
       ref: main                                       # branch/tag/SHA at install time (null for local)
+      resolvedRef: 9f2c...                            # (impl extension) concrete commit SHA HEAD resolved to; powers the `update` ls-remote no-op check (DIST-I005)
       skillPath: skills/pdf                           # subpath within the source (null if root)
+      projectRoot: /path/to/project                   # (impl extension) project root captured at install; needed for update/remove path resolution (null for user scope)
       scope: project                                  # project | user
       harnesses: [claude, opencode]
       format: skillprism                              # skillprism | plain
@@ -272,6 +274,8 @@ When the user runs `skillprism add owner/repo` (default --target project)
 Then the command fails with a clear error explaining that --target project requires being inside a project directory
 And the error suggests using --target user
 And the exit code is 2 (usage error)
+<!-- SUPERSEDED by DIST-I008 (Phase 2): the no-flags path no longer silently defaults to `--target project`. With no `--target`, `add` now prompts interactively for scope (offering `user` when outside a project), or errors with actionable guidance on a non-TTY. The exit-2 usage error still applies to the explicit `--target project` outside-a-project path (add.rs `resolve_scope`) and to malformed sources (empty/whitespace). -->
+
 
 Given a skill directory containing both SKILL.md and SKILL.md.j2 (ambiguous template)
 When the user runs `skillprism add owner/repo --skill that-skill`

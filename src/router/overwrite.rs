@@ -87,7 +87,8 @@ pub fn resolve_overwrite(
             false
         }
         Some(OverwriteChoice::Abort) => {
-            eprintln!("Aborting build.");
+            // Shared by build/add/update — keep the message operation-neutral.
+            eprintln!("Aborting.");
             std::process::exit(1);
         }
     }

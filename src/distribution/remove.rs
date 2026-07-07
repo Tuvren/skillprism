@@ -279,7 +279,7 @@ fn apply_removals_to_state(
 ) -> Result<(), CommandError> {
     for (skill, harnesses_to_remove) in removals {
         if harnesses_to_remove.len() >= skill.harnesses.len() {
-            store.remove(&skill.name);
+            store.remove(&skill.name, skill.scope);
             continue;
         }
 

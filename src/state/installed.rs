@@ -178,21 +178,33 @@ impl InstalledState {
         self.skills.iter().find(|s| s.name == name)
     }
 
-    /// Removes the record for the named skill, returning whether it existed.
-    pub fn remove(&mut self, name: &str) -> bool {
+    /// Removes the record for the named skill in the given scope, returning
+    /// whether it existed.
+    ///
+    /// Records are keyed by `(name, scope)`: the same skill name can be
+    /// installed independently to project and user scope, so removal must be
+    /// scope-qualified to avoid dropping the wrong record.
+    pub fn remove(&mut self, name: &str, scope: InstallScope) -> bool {
         let len = self.skills.len();
-        self.skills.retain(|s| s.name != name);
+        self.skills
+            .retain(|s| !(s.name == name && s.scope == scope));
         self.skills.len() != len
     }
 
-    /// Inserts a new record or replaces an existing one, then re-sorts by name.
+    /// Inserts a new record or replaces an existing one with the same
+    /// `(name, scope)`, then re-sorts by `(name, scope)`.
     pub fn upsert(&mut self, skill: InstalledSkill) {
-        if let Some(pos) = self.skills.iter().position(|s| s.name == skill.name) {
+        if let Some(pos) = self
+            .skills
+            .iter()
+            .position(|s| s.name == skill.name && s.scope == skill.scope)
+        {
             self.skills[pos] = skill;
         } else {
             self.skills.push(skill);
         }
-        self.skills.sort_by(|a, b| a.name.cmp(&b.name));
+        self.skills
+            .sort_by(|a, b| a.name.cmp(&b.name).then(a.scope.cmp(&b.scope)));
     }
 }
 
@@ -262,9 +274,10 @@ impl StateStore {
         self.state.upsert(skill);
     }
 
-    /// Removes a skill record in memory, returning whether it existed.
-    pub fn remove(&mut self, name: &str) -> bool {
-        self.state.remove(name)
+    /// Removes a skill record in memory (keyed by `(name, scope)`), returning
+    /// whether it existed.
+    pub fn remove(&mut self, name: &str, scope: InstallScope) -> bool {
+        self.state.remove(name, scope)
     }
 
     /// Persists the current in-memory state atomically.
@@ -554,10 +567,30 @@ mod tests {
             store.upsert(dummy_skill("drop"));
             store.save().unwrap();
 
-            assert!(store.remove("drop"));
-            assert!(!store.remove("missing"));
+            assert!(store.remove("drop", InstallScope::Project));
+            assert!(!store.remove("missing", InstallScope::Project));
             assert!(store.get("keep").is_some());
             assert!(store.get("drop").is_none());
+        });
+    }
+
+    #[test]
+    fn same_name_distinct_scopes_are_independent_records() {
+        with_temp_store("dual_scope", |mut store| {
+            let mut project = dummy_skill("shared");
+            project.scope = InstallScope::Project;
+            let mut user = dummy_skill("shared");
+            user.scope = InstallScope::User;
+
+            store.upsert(project);
+            store.upsert(user);
+            // Both records coexist; the second upsert must not overwrite the first.
+            assert_eq!(store.skills().len(), 2);
+
+            // Removing one scope leaves the other intact.
+            assert!(store.remove("shared", InstallScope::Project));
+            assert_eq!(store.skills().len(), 1);
+            assert_eq!(store.skills()[0].scope, InstallScope::User);
         });
     }
 

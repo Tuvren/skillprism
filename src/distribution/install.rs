@@ -56,10 +56,16 @@ pub enum InstallError {
 
     /// A runtime I/O error occurred.
     #[error("I/O error: {0}")]
+    #[diagnostic(help(
+        "Check filesystem permissions and available disk space for the target path."
+    ))]
     Io(#[from] std::io::Error),
 
     /// Rendering a skill template failed.
     #[error("{0}")]
+    #[diagnostic(help(
+        "Inspect the skill template for invalid MiniJinja syntax or unknown variables."
+    ))]
     Render(miette::Report),
 
     /// State persistence failed.
@@ -83,6 +89,9 @@ pub enum InstallError {
 
     /// A requested skill filter did not match any discovered skill.
     #[error("skill `{skill}` not found in source `{source_input}`")]
+    #[diagnostic(help(
+        "Run `skillprism list` on the source, or omit `--skill` to install all discovered skills."
+    ))]
     SkillNotFound { source_input: String, skill: String },
 
     /// This source type is not yet supported for installation.

@@ -24,6 +24,8 @@ use std::time::Duration;
 use miette::Diagnostic;
 use thiserror::Error;
 
+use super::source::mask_credentials;
+
 /// Default clone timeout: 5 minutes.
 const DEFAULT_CLONE_TIMEOUT_MS: u64 = 300_000;
 
@@ -149,14 +151,15 @@ pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, Network
                 }
             }
 
+            let masked_url = mask_credentials(url);
             return Err(NetworkError::AuthFailure {
-                url: url.to_string(),
-                advice: build_github_auth_error(url, repo.as_ref(), &error_message),
+                advice: build_github_auth_error(&masked_url, repo.as_ref(), &error_message),
+                url: masked_url,
             });
         }
 
         return Err(NetworkError::FetchFailure {
-            url: url.to_string(),
+            url: mask_credentials(url),
             detail: error_message,
         });
     }
@@ -363,7 +366,7 @@ fn run_git_with_dir(dir: Option<&Path>, args: &[String]) -> Result<(), NetworkEr
             })
         } else {
             Err(NetworkError::FetchFailure {
-                url: args.join(" "),
+                url: mask_credentials(&args.join(" ")),
                 detail,
             })
         }
@@ -392,7 +395,7 @@ fn run_git_with_ssh(args: &[String], ssh_command: &str) -> Result<(), NetworkErr
             })
         } else {
             Err(NetworkError::FetchFailure {
-                url: args.join(" "),
+                url: mask_credentials(&args.join(" ")),
                 detail,
             })
         }
@@ -415,7 +418,7 @@ fn run_git_output(args: &[String]) -> Result<String, NetworkError> {
     } else {
         let detail = String::from_utf8_lossy(&output.stderr).to_string();
         Err(NetworkError::FetchFailure {
-            url: args.join(" "),
+            url: mask_credentials(&args.join(" ")),
             detail,
         })
     }

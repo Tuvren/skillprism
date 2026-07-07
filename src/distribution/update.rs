@@ -72,6 +72,9 @@ impl Drop for CloneCache {
 pub enum UpdateError {
     /// Source string could not be re-parsed.
     #[error("failed to re-parse source for `{skill}`: {source}")]
+    #[diagnostic(help(
+        "The stored source string is invalid; re-add the skill with a valid source."
+    ))]
     SourceParse {
         skill: String,
         #[source]
@@ -80,31 +83,77 @@ pub enum UpdateError {
 
     /// Network error during fetch.
     #[error(transparent)]
+    #[diagnostic(transparent)]
     Network(#[from] NetworkError),
 
     /// Install error.
     #[error(transparent)]
+    #[diagnostic(transparent)]
     Install(#[from] InstallError),
 
     /// Project error.
     #[error(transparent)]
+    #[diagnostic(transparent)]
     Project(#[from] ProjectError),
 
     /// I/O error.
-    #[error(transparent)]
+    #[error("I/O error: {0}")]
+    #[diagnostic(help(
+        "Check filesystem permissions and available disk space for the target path."
+    ))]
     Io(#[from] io::Error),
 
     /// State store error.
     #[error(transparent)]
+    #[diagnostic(transparent)]
     State(#[from] crate::state::StateError),
 
     /// Rendering error.
     #[error("{0}")]
+    #[diagnostic(help(
+        "Inspect the skill template for invalid MiniJinja syntax or unknown variables."
+    ))]
     Render(miette::Report),
 
     /// No matching skill found in fetched source.
     #[error("skill `{skill}` not found in the fetched source")]
+    #[diagnostic(help(
+        "The skill may have been renamed or removed upstream; run `skillprism remove` if it no longer exists."
+    ))]
     SkillNotFound { skill: String },
+
+    /// Failed to resolve an output path for a skill file.
+    #[error("failed to resolve output path: {detail}")]
+    #[diagnostic(help(
+        "Check the target scope and project layout; ensure the destination is writable."
+    ))]
+    PathResolution { detail: String },
+
+    /// Failed to write a rendered skill file.
+    #[error("failed to write skill file: {detail}")]
+    #[diagnostic(help("Ensure the destination directory exists and is writable."))]
+    Write { detail: String },
+
+    /// Failed to resolve a harness for the skill.
+    #[error("failed to resolve harness for `{skill}`: {detail}")]
+    #[diagnostic(help(
+        "Run `skillprism completions`/docs to see valid harness ids, or check `--harnesses`."
+    ))]
+    HarnessResolution { skill: String, detail: String },
+
+    /// The fetched skill directory has no SKILL.md or SKILL.md.j2.
+    #[error("no SKILL.md or SKILL.md.j2 found in `{skill}`")]
+    #[diagnostic(help(
+        "The upstream skill is missing its entry file; it may be malformed or moved."
+    ))]
+    NoSkillFile { skill: String },
+
+    /// The stored source is a well-known index, which cannot be updated.
+    #[error("cannot update well-known source `{source_input}`")]
+    #[diagnostic(help(
+        "Well-known index installs are not yet supported; remove and re-add from a git source."
+    ))]
+    WellKnownUnsupported { source_input: String },
 }
 
 /// Runs the `update` command.
@@ -297,10 +346,9 @@ fn update_skill(
             (dir.to_path_buf(), head)
         }
         ParsedSource::WellKnown { .. } => {
-            return Err(miette::Report::msg(format!(
-                "Cannot update well-known source `{}`",
-                old.source
-            )));
+            return Err(miette::Report::new(UpdateError::WellKnownUnsupported {
+                source_input: old.source.clone(),
+            }));
         }
     };
 
@@ -416,13 +464,22 @@ fn update_skillprism_skill(
         .collect();
 
     for harness_id in harnesses {
-        let pair = HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry)
-            .map_err(|e| miette::Report::msg(format!("resolve error for {}: {e}", old.name)))?;
+        let pair =
+            HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry).map_err(|e| {
+                miette::Report::new(UpdateError::HarnessResolution {
+                    skill: old.name.clone(),
+                    detail: e.to_string(),
+                })
+            })?;
         let output = crate::engine::Engine::render(&pair)
             .map_err(|e| miette::Report::new(UpdateError::Render(miette::Report::new(e))))?;
 
         let skill_path_buf = resolve_skill_path(project_root, &pair.harness, &old.name, target)
-            .map_err(|e| miette::Report::msg(format!("path resolution error: {e}")))?;
+            .map_err(|e| {
+                miette::Report::new(UpdateError::PathResolution {
+                    detail: e.to_string(),
+                })
+            })?;
 
         update_file_record(
             &skill_path_buf,
@@ -444,9 +501,9 @@ fn update_skillprism_skill(
                 harness_id,
             )
             .map_err(|e| {
-                miette::Report::msg(format!(
-                    "sidecar path resolution error for {harness_id}: {e}"
-                ))
+                miette::Report::new(UpdateError::PathResolution {
+                    detail: format!("sidecar for {harness_id}: {e}"),
+                })
             })?;
             update_file_record(
                 &sidecar_path,
@@ -523,7 +580,9 @@ fn update_plain_skill(
     let template = find_template_path(skill_dir)
         .map_err(UpdateError::from)?
         .ok_or_else(|| {
-            miette::Report::msg(format!("No SKILL.md or SKILL.md.j2 found in {}", old.name))
+            miette::Report::new(UpdateError::NoSkillFile {
+                skill: old.name.clone(),
+            })
         })?;
 
     let old_files: HashMap<&str, &str> = old
@@ -552,7 +611,11 @@ fn update_plain_skill(
         let harness = registry.resolve(harness_id).map_err(miette::Report::new)?;
 
         let skill_path_buf = resolve_skill_path(project_root, &harness, &old.name, target)
-            .map_err(|e| miette::Report::msg(format!("path resolution error: {e}")))?;
+            .map_err(|e| {
+                miette::Report::new(UpdateError::PathResolution {
+                    detail: e.to_string(),
+                })
+            })?;
 
         let content = fs::read(&template).map_err(UpdateError::from)?;
         let hash = format!("sha256:{}", sha256_bytes(&content));
@@ -572,8 +635,11 @@ fn update_plain_skill(
                 );
                 print_diff_output(&diff_output);
             } else if resolve_overwrite(&skill_path_buf, force, &mut skip_all, &mut Vec::new()) {
-                crate::router::atomic_write_bytes(&skill_path_buf, &content)
-                    .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
+                crate::router::atomic_write_bytes(&skill_path_buf, &content).map_err(|e| {
+                    miette::Report::new(UpdateError::Write {
+                        detail: e.to_string(),
+                    })
+                })?;
                 written = true;
             }
             if written {
@@ -777,8 +843,11 @@ fn write_file_with_overwrite(
 ) -> Result<bool, miette::Report> {
     let mut skipped = Vec::new();
     if resolve_overwrite(path, force, skip_all, &mut skipped) {
-        crate::router::atomic_write(path, content)
-            .map_err(|e| miette::Report::msg(format!("write error: {e}")))?;
+        crate::router::atomic_write(path, content).map_err(|e| {
+            miette::Report::new(UpdateError::Write {
+                detail: e.to_string(),
+            })
+        })?;
         Ok(true)
     } else {
         Ok(false)
@@ -791,8 +860,12 @@ fn skill_dir_prefix(
     skill_name: &str,
     target: crate::cli::TargetScope,
 ) -> Result<String, miette::Report> {
-    let skill_path = resolve_skill_path(project_root, harness, skill_name, target)
-        .map_err(|e| miette::Report::msg(format!("path resolution error: {e}")))?;
+    let skill_path =
+        resolve_skill_path(project_root, harness, skill_name, target).map_err(|e| {
+            miette::Report::new(UpdateError::PathResolution {
+                detail: e.to_string(),
+            })
+        })?;
     Ok(skill_path
         .parent()
         .expect("skill path has parent")
@@ -811,7 +884,10 @@ fn collect_updated_prefixes(
         .iter()
         .map(|h| {
             let harness = registry.resolve(h).map_err(|e| {
-                miette::Report::msg(format!("harness resolution error for {skill_name}: {e}"))
+                miette::Report::new(UpdateError::HarnessResolution {
+                    skill: skill_name.to_string(),
+                    detail: e.to_string(),
+                })
             })?;
             skill_dir_prefix(project_root, &harness, skill_name, target)
         })
