@@ -27,7 +27,7 @@ use super::CommandError;
 use super::detect::detect_installed_agents;
 use super::find_project_root;
 use super::install::{InstallContext, InstallError, install_source};
-use super::source::{mask_credentials, parse_source};
+use super::source::{ParsedSource, mask_credentials, parse_source};
 
 /// Target scope for distribution install commands (`project` or `user`).
 ///
@@ -63,6 +63,15 @@ pub fn run_add(
     // string (empty/whitespace, unsafe subpath) fails fast as a usage error
     // (DIST-I002 mandates exit code 2) instead of prompting the user first.
     let parsed = parse_source(&source).map_err(|e| CommandError::Usage(miette::Report::new(e)))?;
+
+    // Well-known index installs are recognized by the parser but not yet
+    // implemented; reject them here so the user isn't walked through the scope
+    // and harness prompts only to hit "not supported" at install time.
+    if matches!(parsed, ParsedSource::WellKnown { .. }) {
+        return Err(CommandError::Runtime(miette::miette!(
+            "well-known skill indexes are not supported yet. Install directly from a git repository or GitHub/GitLab shorthand instead."
+        )));
+    }
 
     let project_root = find_project_root().ok();
     if verbose {

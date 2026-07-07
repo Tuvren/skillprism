@@ -36,12 +36,22 @@ use thiserror::Error;
 pub enum SourceParseError {
     /// The source string is empty or contains only whitespace.
     #[error("source cannot be empty or whitespace")]
+    #[diagnostic(help(
+        "Pass a git URL, `owner/repo` shorthand, or a local path (e.g. `skillprism add owner/repo`)."
+    ))]
     EmptySource,
 
     /// The source contains an unsafe subpath with path-traversal segments.
     #[error("unsafe subpath in source: {subpath}")]
     #[diagnostic(help("Subpaths must not contain '..' segments."))]
     UnsafeSubpath { subpath: String },
+
+    /// The source is not a recognized v1 source form.
+    #[error("unsupported source form: {input}")]
+    #[diagnostic(help(
+        "Supported forms: local path (./dir, /abs), github:owner/repo, gitlab:owner/repo, https://github.com/..., https://gitlab.com/..., owner/repo, owner/repo@skill, owner/repo#ref, or a git URL (https://…, ssh://…, git@host:path)."
+    ))]
+    UnsupportedSource { input: String },
 }
 
 /// Redacts embedded credentials (e.g. `https://token@github.com/owner/repo.git`)
@@ -183,11 +193,17 @@ pub fn parse_source(input: &str) -> Result<ParsedSource, SourceParseError> {
         });
     }
 
-    // Fallback: treat as a direct git URL.
-    Ok(ParsedSource::Git {
-        url: input,
-        r#ref: fragment_ref,
-    })
+    // Fallback: a direct git URL must actually look like one — an explicit
+    // scheme (`scheme://…`) or scp-like SSH syntax (`[user@]host:path`). A bare
+    // token with neither (e.g. `foobar`) is not a recognized v1 source form and
+    // is a usage error, not a source we blindly try to clone.
+    if input.contains("://") || input.contains(':') {
+        return Ok(ParsedSource::Git {
+            url: input,
+            r#ref: fragment_ref,
+        });
+    }
+    Err(SourceParseError::UnsupportedSource { input })
 }
 
 fn is_local_path(input: &str) -> bool {
@@ -760,6 +776,16 @@ mod tests {
             panic!("expected Git");
         };
         assert_eq!(url, "https://git.example.com/team/project.git");
+    }
+
+    #[test]
+    fn bare_token_is_unsupported_source() {
+        // A bare word is neither a v1 shorthand, a URL, an SSH form, nor a
+        // local path — it must be a usage error, not a blind git clone attempt.
+        assert!(matches!(
+            parse_source("foobar"),
+            Err(SourceParseError::UnsupportedSource { .. })
+        ));
     }
 
     #[test]

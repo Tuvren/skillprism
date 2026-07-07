@@ -62,6 +62,9 @@ pub enum NetworkError {
 
     /// An I/O error occurred while managing the temporary directory.
     #[error("I/O error: {0}")]
+    #[diagnostic(help(
+        "Check permissions and available space in the system temp directory used for clones."
+    ))]
     Io(#[from] std::io::Error),
 }
 

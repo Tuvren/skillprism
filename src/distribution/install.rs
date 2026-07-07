@@ -476,6 +476,9 @@ fn install_skillprism_skill(
             Engine::render(&pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
 
         let target = install_scope_to_target(ctx.target_scope);
+        // User-scope installs have no project root; `resolve_skill_path`/`Router`
+        // ignore this argument for `TargetScope::User`, so `"."` is an unused
+        // placeholder rather than a meaningful path.
         let project_root = ctx
             .project_root
             .as_deref()
@@ -542,6 +545,9 @@ fn install_plain_skill(
             .resolve(harness_id)
             .map_err(InstallError::Project)?;
         let target = install_scope_to_target(ctx.target_scope);
+        // User-scope installs have no project root; `resolve_skill_path`/`Router`
+        // ignore this argument for `TargetScope::User`, so `"."` is an unused
+        // placeholder rather than a meaningful path.
         let project_root = ctx
             .project_root
             .as_deref()

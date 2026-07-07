@@ -58,6 +58,9 @@ pub enum StateError {
 
     /// An I/O error occurred while accessing the state file or directory.
     #[error("State file I/O error: {0}")]
+    #[diagnostic(help(
+        "Check permissions on the skillprism state directory (~/.config/skillprism) and available disk space."
+    ))]
     Io(#[from] io::Error),
 
     /// The state file could not be parsed as YAML.
@@ -309,7 +312,11 @@ impl StateStore {
             });
         }
 
-        state.skills.sort_by(|a, b| a.name.cmp(&b.name));
+        // Sort by (name, scope) to match `upsert`, so a load-only cycle yields
+        // the same order as an in-process mutation (stable deterministic diffs).
+        state
+            .skills
+            .sort_by(|a, b| a.name.cmp(&b.name).then(a.scope.cmp(&b.scope)));
         Ok(state)
     }
 

@@ -65,7 +65,18 @@ fn filter_skills(
 }
 
 fn print_skill(skill: &InstalledSkill) {
-    let r#ref = skill.r#ref.clone().unwrap_or_else(|| "-".to_string());
+    // DIST-I003 column contract: show a short SHA for commit-pinned refs, but
+    // branch/tag names verbatim.
+    let r#ref = skill.r#ref.as_deref().map_or_else(
+        || "-".to_string(),
+        |r| {
+            if super::network::is_sha_ref(r) && r.len() > 7 {
+                r[..7].to_string()
+            } else {
+                r.to_string()
+            }
+        },
+    );
     let harnesses = skill.harnesses.join(", ");
     let format = match skill.format {
         SkillFormat::Skillprism => "skillprism",

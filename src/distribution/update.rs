@@ -194,7 +194,7 @@ pub fn run_update(
     }
 
     if candidates.is_empty() {
-        println!("No installed skills to update.");
+        eprintln!("No installed skills to update.");
         return Ok(());
     }
 
@@ -257,24 +257,24 @@ fn update_skill(
     clone_cache: &mut CloneCache,
 ) -> Result<(), miette::Report> {
     if old.source_type == SourceType::Local {
-        println!("{} is a local skill, no remote to update", old.name);
+        eprintln!("{} is a local skill, no remote to update", old.name);
         return Ok(());
     }
 
     let Some(r#ref) = &old.r#ref else {
-        println!("{} has no git ref, cannot check for updates", old.name);
+        eprintln!("{} has no git ref, cannot check for updates", old.name);
         return Ok(());
     };
 
     if network::is_sha_ref(r#ref) {
-        println!("{} is pinned to commit {ref}, skipping update", old.name);
+        eprintln!("{} is pinned to commit {ref}, skipping update", old.name);
         return Ok(());
     }
 
     if let Some(resolved) = &old.resolved_ref {
         match network::git_remote_head(&old.source_url, r#ref) {
             Ok(Some(upstream_sha)) if upstream_sha == *resolved => {
-                println!("{} is up to date", old.name);
+                eprintln!("{} is up to date", old.name);
                 return Ok(());
             }
             Ok(Some(_)) => {} // different SHA → proceed with update
@@ -368,7 +368,7 @@ fn update_skill(
         },
     );
     if harnesses.is_empty() {
-        println!("No matching harnesses to update for {}", old.name);
+        eprintln!("No matching harnesses to update for {}", old.name);
         return Ok(());
     }
     let project_root: Option<PathBuf> = match old.scope {
@@ -442,6 +442,9 @@ fn update_skillprism_skill(
     let mut skip_all = false;
 
     let target = install_scope_to_target(old.scope);
+    // For user-scope skills there is no project root; `resolve_skill_path`
+    // ignores this argument for `TargetScope::User`, so `"."` is an unused
+    // placeholder rather than a meaningful path.
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
 
     // Retain per-file records for harnesses that are not being updated; they
@@ -533,9 +536,9 @@ fn update_skillprism_skill(
 
     if !diff {
         if changed {
-            println!("Updated {}", old.name);
+            eprintln!("Updated {}", old.name);
         } else {
-            println!("{} is up to date", old.name);
+            eprintln!("{} is up to date", old.name);
         }
     }
 
@@ -592,6 +595,9 @@ fn update_plain_skill(
     let mut skip_all = false;
 
     let target = install_scope_to_target(old.scope);
+    // For user-scope skills there is no project root; `resolve_skill_path`
+    // ignores this argument for `TargetScope::User`, so `"."` is an unused
+    // placeholder rather than a meaningful path.
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
 
     // Retain per-file records for harnesses that are not being updated.
@@ -683,9 +689,9 @@ fn update_plain_skill(
 
     if !diff {
         if changed {
-            println!("Updated {}", old.name);
+            eprintln!("Updated {}", old.name);
         } else {
-            println!("{} is up to date", old.name);
+            eprintln!("{} is up to date", old.name);
         }
     }
 

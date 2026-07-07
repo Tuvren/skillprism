@@ -248,6 +248,10 @@ fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, Command
             },
             |root| Ok(Cow::Borrowed(Path::new(root))),
         ),
+        // User scope resolves to `$HOME`-based paths inside
+        // `router::resolve_skill_path`, which ignores the `root` argument for
+        // `TargetScope::User`. The `"."` here is an unused placeholder, not a
+        // real project root.
         InstallScope::User => Ok(Cow::Borrowed(Path::new("."))),
     }
 }

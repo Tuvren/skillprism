@@ -335,10 +335,11 @@ fn distribution_update_applies_source_changes() {
         .arg("update")
         .arg("--force");
     let output = update_cmd.assert().success();
-    let stdout = String::from_utf8_lossy(&output.get_output().stdout);
+    // Status/progress goes to stderr; stdout is reserved for `--diff` output.
+    let stderr = String::from_utf8_lossy(&output.get_output().stderr);
     assert!(
-        stdout.contains("Updated") || stdout.contains("is up to date"),
-        "update should report progress, got: {stdout}"
+        stderr.contains("Updated") || stderr.contains("is up to date"),
+        "update should report progress on stderr, got: {stderr}"
     );
 
     assert!(
@@ -371,9 +372,9 @@ fn distribution_update_no_skills_in_state() {
 
     // Now update with empty state
     let result = env.bin().arg("update").assert().success();
-    let stdout = String::from_utf8_lossy(&result.get_output().stdout);
+    let stderr = String::from_utf8_lossy(&result.get_output().stderr);
     assert!(
-        stdout.contains("No installed skills"),
-        "update with empty state should print 'No installed skills', got: {stdout}"
+        stderr.contains("No installed skills"),
+        "update with empty state should report 'No installed skills' on stderr, got: {stderr}"
     );
 }
