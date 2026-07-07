@@ -211,6 +211,41 @@ fn distribution_add_empty_source_is_usage_error() {
 }
 
 #[test]
+fn distribution_add_undefined_variable_fails_without_writing() {
+    // DIST-I002: a skillprism-format skill whose template references an
+    // undefined variable must fail validation *before* anything is written.
+    // Regression guard: `add` (and `update`) route skillprism renders through
+    // the Validator, so a lenient-undefined render can never silently emit a
+    // file with a blank in place of the missing value.
+    let env = TestEnv::new("dist-undefined");
+
+    let result = env
+        .bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-undefined"))
+        .arg("--force")
+        .assert()
+        .failure();
+    let stderr = String::from_utf8_lossy(&result.get_output().stderr);
+    assert!(
+        stderr.contains("this_var_is_not_defined") || stderr.contains("validation failed"),
+        "expected an undefined-variable validation error, got: {stderr}"
+    );
+
+    // No partial output may be written to any harness on validation failure.
+    for harness in &["claude", "opencode"] {
+        let output_path = env
+            .project_dir()
+            .join(format!(".{harness}/skills/bad-skill/SKILL.md"));
+        assert!(
+            !output_path.exists(),
+            "no file should be written on validation failure, found {}",
+            output_path.display()
+        );
+    }
+}
+
+#[test]
 fn distribution_remove_nonexistent_skill_fails() {
     let env = TestEnv::new("dist-simple");
 
@@ -307,7 +342,7 @@ fn distribution_update_applies_source_changes() {
     };
 
     assert!(read_plain().contains("Version: A"));
-    assert!(read_skillprism().contains("Version: A"));
+    assert!(read_skillprism().contains("Flavor: A"));
 
     // Mutate the source from version A to version B and commit.
     for path in [
@@ -321,7 +356,7 @@ fn distribution_update_applies_source_changes() {
             &path,
             content
                 .replace("Version: A", "Version: B")
-                .replace("version: A", "version: B"),
+                .replace("flavor: A", "flavor: B"),
         )
         .unwrap();
     }
@@ -347,7 +382,7 @@ fn distribution_update_applies_source_changes() {
         "plain skill should be updated to version B"
     );
     assert!(
-        read_skillprism().contains("Version: B"),
+        read_skillprism().contains("Flavor: B"),
         "skillprism skill should be updated to version B"
     );
 }

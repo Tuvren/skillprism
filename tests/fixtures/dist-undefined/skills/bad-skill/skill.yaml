@@ -1,0 +1,5 @@
+name: bad-skill
+description: A skillprism-format skill whose template references an undefined variable
+skillprism: '1'
+variables:
+  flavor: A

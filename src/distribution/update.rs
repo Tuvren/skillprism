@@ -31,7 +31,7 @@ use super::add::InstallScopeArg;
 use super::install::{
     InstallError, build_registry_for_harnesses, copy_dir, detect_format, discover_skill_dirs,
     install_scope_to_target, load_skill_into_temp_project, sha256_bytes, sha256_file,
-    skill_dir_name, walk_files,
+    skill_dir_name, validate_pairs, walk_files,
 };
 use super::network::{self, NetworkError};
 use super::source::{ParsedSource, SourceParseError, parse_source};
@@ -472,15 +472,25 @@ fn update_skillprism_skill(
         .cloned()
         .collect();
 
+    // Resolve every harness pair and validate before writing anything, so an
+    // undefined variable or reserved-name collision fails the update with no
+    // output written (DIST-I002) — matching install and the `build` command.
+    let mut pairs = Vec::new();
     for harness_id in harnesses {
-        let pair =
+        pairs.push(
             HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry).map_err(|e| {
                 miette::Report::new(UpdateError::HarnessResolution {
                     skill: old.name.clone(),
                     detail: e.to_string(),
                 })
-            })?;
-        let output = crate::engine::Engine::render(&pair)
+            })?,
+        );
+    }
+    let pairs = validate_pairs(&old.name, pairs).map_err(miette::Report::new)?;
+
+    for pair in &pairs {
+        let harness_id = &pair.harness.id;
+        let output = crate::engine::Engine::render(pair)
             .map_err(|e| miette::Report::new(UpdateError::Render(miette::Report::new(e))))?;
 
         let skill_path_buf = resolve_skill_path(project_root, &pair.harness, &old.name, target)

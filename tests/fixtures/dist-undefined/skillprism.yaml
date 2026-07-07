@@ -1,0 +1,5 @@
+name: dist-undefined-test
+harnesses:
+  - claude
+  - opencode
+skills_dir: skills

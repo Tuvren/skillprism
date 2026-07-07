@@ -365,7 +365,9 @@ fn run_git_with_dir(dir: Option<&Path>, args: &[String]) -> Result<(), NetworkEr
     if output.status.success() {
         Ok(())
     } else {
-        let detail = String::from_utf8_lossy(&output.stderr).to_string();
+        // Mask credentials: git's stderr can echo the remote URL, and a PAT in
+        // the userinfo position (`https://TOKEN@host`) would otherwise leak.
+        let detail = mask_credentials(&String::from_utf8_lossy(&output.stderr));
         if is_timeout_message(&detail) {
             Err(NetworkError::CloneTimeout {
                 seconds: timeout.as_secs(),
@@ -394,7 +396,9 @@ fn run_git_with_ssh(args: &[String], ssh_command: &str) -> Result<(), NetworkErr
     if output.status.success() {
         Ok(())
     } else {
-        let detail = String::from_utf8_lossy(&output.stderr).to_string();
+        // Mask credentials: git's stderr can echo the remote URL, and a PAT in
+        // the userinfo position (`https://TOKEN@host`) would otherwise leak.
+        let detail = mask_credentials(&String::from_utf8_lossy(&output.stderr));
         if is_timeout_message(&detail) {
             Err(NetworkError::CloneTimeout {
                 seconds: timeout.as_secs(),
@@ -422,7 +426,9 @@ fn run_git_output(args: &[String]) -> Result<String, NetworkError> {
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
-        let detail = String::from_utf8_lossy(&output.stderr).to_string();
+        // Mask credentials: git's stderr can echo the remote URL, and a PAT in
+        // the userinfo position (`https://TOKEN@host`) would otherwise leak.
+        let detail = mask_credentials(&String::from_utf8_lossy(&output.stderr));
         Err(NetworkError::FetchFailure {
             url: mask_credentials(&args.join(" ")),
             detail,
@@ -497,7 +503,13 @@ fn run_command_with_timeout(
 
 fn is_timeout_message(message: &str) -> bool {
     let lower = message.to_lowercase();
-    lower.contains("block timeout") || lower.contains("timed out") || lower.contains("timeout")
+    // Match git/curl's actual timeout phrasings ("Connection timed out",
+    // "Operation timed out", curl's "Timeout was reached") rather than a bare
+    // "timeout" substring, which would false-positive on repo names, branches,
+    // or URLs surfaced in the error text (e.g. a repo literally named
+    // "timeout"). The wall-clock timeout itself is enforced structurally in
+    // `run_command_with_timeout`; this only classifies git's own error output.
+    lower.contains("timed out") || lower.contains("timeout was reached")
 }
 
 fn is_auth_failure(message: &str) -> bool {
@@ -607,7 +619,7 @@ fn try_gh_clone(repo: &GitHubRepoInfo, r#ref: Option<&str>) -> Result<PathBuf, N
         let _ = cleanup_temp_dir(&temp_dir);
         Err(NetworkError::FetchFailure {
             url: repo.slug.clone(),
-            detail: String::from_utf8_lossy(&status.stderr).to_string(),
+            detail: mask_credentials(&String::from_utf8_lossy(&status.stderr)),
         })
     }
 }

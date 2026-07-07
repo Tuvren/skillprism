@@ -26,12 +26,13 @@ use crate::cli::TargetScope;
 use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
-use crate::resolver::{HarnessResolver, ResolveError};
+use crate::resolver::{HarnessResolver, ResolveError, ResolvedPair};
 use crate::router::Router;
 use crate::state::{
     InstallScope, InstalledFile, InstalledSkill, SkillFormat, SourceType, now_rfc3339,
 };
 use crate::types::{ProjectError, SkillModel};
+use crate::validator::Validator;
 
 use super::network::{self, NetworkError};
 use super::source::{ParsedSource, SourceParseError, mask_credentials};
@@ -67,6 +68,13 @@ pub enum InstallError {
         "Inspect the skill template for invalid MiniJinja syntax or unknown variables."
     ))]
     Render(miette::Report),
+
+    /// Skill template validation failed before any output was written.
+    #[error("validation failed for `{skill}`:\n{detail}")]
+    #[diagnostic(help(
+        "Define every referenced variable in the skill's `skill.yaml` `variables:` block and avoid reserved field names."
+    ))]
+    Validation { skill: String, detail: String },
 
     /// State persistence failed.
     #[error(transparent)]
@@ -473,13 +481,23 @@ fn install_skillprism_skill(
 ) -> Result<InstalledSkill, InstallError> {
     let (skill, _temp_project) = load_skill_into_temp_project(skill_dir, &ctx.harnesses)?;
     let registry = build_registry_for_harnesses(&ctx.harnesses);
-    let mut files = Vec::new();
 
+    // Resolve every harness pair and validate before writing anything, so an
+    // undefined variable or reserved-name collision fails the install with no
+    // output written (DIST-I002) — matching the `build` command's safety.
+    let mut pairs = Vec::new();
     for harness_id in &ctx.harnesses {
-        let pair = HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry)
-            .map_err(resolve_to_install_error(&skill.name))?;
+        pairs.push(
+            HarnessResolver::resolve_skill_harness(&skill, harness_id, &registry)
+                .map_err(resolve_to_install_error(&skill.name))?,
+        );
+    }
+    let pairs = validate_pairs(&skill.name, pairs)?;
+
+    let mut files = Vec::new();
+    for pair in &pairs {
         let output =
-            Engine::render(&pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
+            Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
 
         let target = install_scope_to_target(ctx.target_scope);
         // User-scope installs have no project root; `resolve_skill_path`/`Router`
@@ -489,7 +507,7 @@ fn install_skillprism_skill(
             .project_root
             .as_deref()
             .unwrap_or_else(|| Path::new("."));
-        let result = Router::write(&pair, &output, project_root, target, ctx.force, skip_all)
+        let result = Router::write(pair, &output, project_root, target, ctx.force, skip_all)
             .map_err(|e| InstallError::Render(miette::Report::new(e)))?;
 
         files.push(InstalledFile {
@@ -667,6 +685,30 @@ pub fn load_skill_into_temp_project(
         })?;
 
     Ok((skill, TempProject(temp_dir)))
+}
+
+/// Validates resolved skillprism pairs before any output is written, so an
+/// undefined variable or reserved-name collision fails the install/update
+/// instead of silently rendering an empty value (DIST-I002). Shared by the
+/// `add` and `update` skillprism-format paths.
+pub fn validate_pairs(
+    skill_name: &str,
+    pairs: Vec<ResolvedPair>,
+) -> Result<Vec<ResolvedPair>, InstallError> {
+    let outcome = Validator::validate(pairs);
+    if outcome.errors.is_empty() {
+        return Ok(outcome.valid);
+    }
+    let detail = outcome
+        .errors
+        .iter()
+        .map(|e| format!("  - {e}"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    Err(InstallError::Validation {
+        skill: skill_name.to_string(),
+        detail,
+    })
 }
 
 pub fn build_registry_for_harnesses(_harnesses: &[String]) -> HarnessRegistry {
