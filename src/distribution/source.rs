@@ -38,13 +38,6 @@ pub enum SourceParseError {
     #[error("source cannot be empty or whitespace")]
     EmptySource,
 
-    /// The source is not a recognized v1 source form.
-    #[error("unsupported source form: {input}")]
-    #[diagnostic(help(
-        "Supported forms: local path, github:owner/repo, gitlab:owner/repo, https://github.com/..., https://gitlab.com/..., owner/repo, owner/repo@skill, owner/repo#ref, owner/repo#ref@skill"
-    ))]
-    UnsupportedSource { input: String },
-
     /// The source contains an unsafe subpath with path-traversal segments.
     #[error("unsafe subpath in source: {subpath}")]
     #[diagnostic(help("Subpaths must not contain '..' segments."))]

@@ -14,10 +14,6 @@
 
 //! Distribution CLI commands: add, list, remove, update.
 
-// Placeholder modules; dead-code warnings are temporary until each command is
-// implemented in its milestone.
-#![allow(dead_code)]
-
 use std::fmt;
 
 pub mod add;

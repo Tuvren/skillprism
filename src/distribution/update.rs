@@ -936,7 +936,7 @@ mod tests {
 
         let path_str = leak_str(path.to_string_lossy().to_string());
         let old_hash = leak_str(format!("sha256:{}", sha256_bytes(b"Version: A")));
-        let old_files: HashMap<&str, &str> = [(path_str, old_hash)].into_iter().collect();
+        let old_files: HashMap<&str, &str> = std::iter::once((path_str, old_hash)).collect();
 
         let mut new_files = Vec::new();
         let mut changed = false;

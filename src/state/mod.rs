@@ -14,10 +14,6 @@
 
 //! Installation state tracking for the distribution CLI.
 
-// Some state types are only used by distribution commands that are implemented
-// in later milestones; keep dead-code warnings quiet until the epic is complete.
-#![allow(dead_code)]
-
 mod installed;
 
 pub use installed::*;

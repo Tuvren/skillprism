@@ -35,6 +35,7 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
 **Deferred to future epics:**
 - `find` — ecosystem skill search. Can be implemented by querying Vercel's `skills.sh` API directly (no registry needed). Deferred on implementation priority, not infrastructure availability.
 - `use` — render to temp + launch agent (convenience command, adds process-launching complexity). Explicitly ruled out for now.
+- **`.well-known` index installs** (DIST-I002 `WellKnown` form) — the source parser recognizes `https://example.com` index URLs, but `install_from_well_known` intentionally returns a clear "not supported yet" error. Full index-driven installs are deferred until a registry backend is available; the DIST-I002 Gherkin for well-known indexes is deferred with it.
 <!-- - Harness coverage expansion — keep 5 built-in harnesses; grow via community contributions (`init harness` + `harnesses/<name>.yaml`) -->
 
 **Key contracts (resolved by the spike):**

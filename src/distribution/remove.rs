@@ -66,10 +66,47 @@ pub fn run_remove(
     if removals.is_empty() {
         let requested = if skills.is_empty() {
             "No skills selected for removal. Provide skill names or use --all.".to_string()
-        } else if skills.len() == 1 {
-            format!("Skill '{}' is not installed", skills[0])
         } else {
-            format!("Skills [{}] are not installed", skills.join(", "))
+            // A named skill may be installed in a scope the caller did not
+            // select (named removals default to project scope). Point the user
+            // at the scope where it actually lives instead of the misleading
+            // "not installed".
+            let other_scopes: Vec<InstallScope> = store
+                .skills()
+                .iter()
+                .filter(|s| skills.contains(&s.name) && !scopes.contains(&s.scope))
+                .map(|s| s.scope)
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect();
+            let subject = if skills.len() == 1 {
+                format!("Skill '{}'", skills[0])
+            } else {
+                format!("Skills [{}]", skills.join(", "))
+            };
+            if other_scopes.is_empty() {
+                format!("{subject} is not installed")
+            } else {
+                let hint = other_scopes
+                    .iter()
+                    .map(|s| match s {
+                        InstallScope::Project => "--target project",
+                        InstallScope::User => "--target user",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" or ");
+                let where_scopes = other_scopes
+                    .iter()
+                    .map(|s| match s {
+                        InstallScope::Project => "project",
+                        InstallScope::User => "user",
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!(
+                    "{subject} is not installed in the selected scope(s), but is installed in the {where_scopes} scope. Re-run with {hint} or --all-scopes to remove it."
+                )
+            }
         };
         return Err(CommandError::Runtime(miette::miette!(requested)));
     }

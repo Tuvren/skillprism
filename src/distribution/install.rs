@@ -85,10 +85,6 @@ pub enum InstallError {
     #[error("skill `{skill}` not found in source `{source_input}`")]
     SkillNotFound { source_input: String, skill: String },
 
-    /// The template path is ambiguous.
-    #[error("{detail}")]
-    AmbiguousTemplate { detail: String },
-
     /// This source type is not yet supported for installation.
     #[error("{source_input}: {detail}")]
     #[diagnostic(help("{help}"))]
@@ -206,19 +202,25 @@ pub fn install_source(
     // to check. If the remote does not advertise a default branch, fall back to
     // the cloned HEAD SHA so the record is still updateable.
     let effective_ref = r#ref.or_else(|| {
-        cleanup_dir.is_some().then(|| match network::git_default_branch(&source_url) {
-            Ok(Some(branch)) => branch,
+        // Only remote git sources (which produced a clone dir) get a resolved ref.
+        cleanup_dir.as_ref()?;
+        // Fall back to the cloned HEAD SHA only when it is a real, non-empty
+        // ref; never record an empty string, which a later `update` would then
+        // feed to `ls-remote`/clone as if it were a valid ref.
+        let head_fallback = || resolved_ref.clone().filter(|r| !r.is_empty());
+        match network::git_default_branch(&source_url) {
+            Ok(Some(branch)) => Some(branch),
             Ok(None) => {
                 eprintln!(
                     "Warning: no default branch advertised by {source_url}; using resolved HEAD as ref"
                 );
-                resolved_ref.clone().unwrap_or_default()
+                head_fallback()
             }
             Err(e) => {
                 eprintln!("Warning: could not resolve default branch for {source_url}: {e}; using resolved HEAD as ref");
-                resolved_ref.clone().unwrap_or_default()
+                head_fallback()
             }
-        })
+        }
     });
 
     let result = install_discovered_skills(
@@ -400,10 +402,20 @@ pub fn detect_format(skill_dir: &Path) -> Result<SkillFormat, InstallError> {
         })?;
 
     raw.get("skillprism").map_or_else(
-        // A skill.yaml without `skillprism:` is treated as plain format; this
-        // matches the documented convention that plain skills may carry extra
-        // metadata in skill.yaml.
-        || Ok(SkillFormat::Plain),
+        // A `skill.yaml` that is present but omits the `skillprism:` field is a
+        // malformed manifest (EPIC-I DIST-I002 format rule 3): the author must
+        // either declare the format or drop the file. Silently treating it as
+        // plain would copy a skillprism skill verbatim, leaving unrendered
+        // MiniJinja markers in place.
+        || {
+            Err(InstallError::MalformedManifest {
+                path: manifest.to_string_lossy().to_string(),
+                detail: "skill.yaml is present but missing the `skillprism:` field; either add \
+                         `skillprism: '1'` to declare skillprism-format, or remove skill.yaml to \
+                         declare plain-format."
+                    .to_string(),
+            })
+        },
         |value| match value.as_str() {
             None => Err(InstallError::MalformedManifest {
                 path: manifest.to_string_lossy().to_string(),
@@ -581,13 +593,6 @@ fn install_plain_skill(
 /// RAII guard that removes a temporary render project directory on drop.
 pub struct TempProject(PathBuf);
 
-impl TempProject {
-    /// Returns a reference to the temporary directory path.
-    pub fn path(&self) -> &Path {
-        &self.0
-    }
-}
-
 impl Drop for TempProject {
     fn drop(&mut self) {
         let _ = fs::remove_dir_all(&self.0);
@@ -632,12 +637,13 @@ pub fn load_skill_into_temp_project(
     Ok((skill, TempProject(temp_dir)))
 }
 
-pub fn build_registry_for_harnesses(harnesses: &[String]) -> HarnessRegistry {
-    let registry = HarnessRegistry::with_builtins();
-    for id in harnesses {
-        let _ = registry.resolve(id); // ensure it exists
-    }
-    registry
+pub fn build_registry_for_harnesses(_harnesses: &[String]) -> HarnessRegistry {
+    // Harness ids are validated per-skill during rendering via
+    // `HarnessResolver::resolve_skill_harness`, which surfaces a clear error for
+    // unknown ids. This constructor only assembles the built-in registry; the
+    // parameter is retained for call-site symmetry and future upfront
+    // validation.
+    HarnessRegistry::with_builtins()
 }
 
 pub const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
@@ -892,6 +898,38 @@ mod tests {
                 .unwrap()
                 .is_symlink()
         );
+    }
+
+    #[test]
+    fn detect_format_no_manifest_is_plain() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("SKILL.md"), b"# plain").unwrap();
+        assert_eq!(detect_format(tmp.path()).unwrap(), SkillFormat::Plain);
+    }
+
+    #[test]
+    fn detect_format_declared_skillprism() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("skill.yaml"), "skillprism: '1'\n").unwrap();
+        assert_eq!(detect_format(tmp.path()).unwrap(), SkillFormat::Skillprism);
+    }
+
+    #[test]
+    fn detect_format_manifest_missing_skillprism_field_errors() {
+        // EPIC-I DIST-I002 format rule 3: skill.yaml present without the
+        // `skillprism:` field is a malformed manifest, not a plain skill.
+        let tmp = tempfile::tempdir().unwrap();
+        fs::write(tmp.path().join("skill.yaml"), "name: my-skill\n").unwrap();
+        let err = detect_format(tmp.path()).unwrap_err();
+        match err {
+            InstallError::MalformedManifest { detail, .. } => {
+                assert!(
+                    detail.contains("missing the `skillprism:` field"),
+                    "unexpected detail: {detail}"
+                );
+            }
+            other => panic!("expected MalformedManifest, got {other:?}"),
+        }
     }
 
     #[test]

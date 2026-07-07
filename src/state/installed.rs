@@ -72,7 +72,7 @@ pub enum StateError {
 }
 
 /// Where a skill was installed to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum InstallScope {
     /// Project-local install (e.g., `.claude/skills/` inside the project).
@@ -173,6 +173,7 @@ impl InstalledState {
     }
 
     /// Returns the record for the named skill, if present.
+    #[cfg(test)]
     pub fn get(&self, name: &str) -> Option<&InstalledSkill> {
         self.skills.iter().find(|s| s.name == name)
     }
@@ -234,18 +235,15 @@ impl StateStore {
     }
 
     /// Path to the state file.
+    #[cfg(test)]
     pub fn path(&self) -> &Path {
         &self.path
     }
 
     /// Immutable view of the loaded state.
+    #[cfg(test)]
     pub const fn state(&self) -> &InstalledState {
         &self.state
-    }
-
-    /// Mutable view of the loaded state.
-    pub const fn state_mut(&mut self) -> &mut InstalledState {
-        &mut self.state
     }
 
     /// Returns all installed skills.
@@ -254,6 +252,7 @@ impl StateStore {
     }
 
     /// Returns the record for the named skill, if present.
+    #[cfg(test)]
     pub fn get(&self, name: &str) -> Option<&InstalledSkill> {
         self.state.get(name)
     }
@@ -654,7 +653,7 @@ mod tests {
             let dir = store.path().parent().unwrap();
             let leftover: Vec<_> = fs::read_dir(dir)
                 .unwrap()
-                .filter_map(|e| e.ok())
+                .filter_map(std::result::Result::ok)
                 .filter(|e| e.file_name().to_string_lossy().starts_with(".tmp-"))
                 .collect();
             assert!(leftover.is_empty(), "temp files should be renamed away");
