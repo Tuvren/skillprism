@@ -234,19 +234,12 @@ fn filter_candidates(
 ) -> Vec<InstalledSkill> {
     skills
         .into_iter()
-        .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
-        .filter(|s| {
-            harnesses.is_none_or(|h| {
-                let wanted = super::parse_harness_list(h);
-                wanted.is_empty()
-                    || s.harnesses
-                        .iter()
-                        .any(|installed| wanted.contains(installed))
-            })
-        })
+        .filter(|s| super::scope_harness_matches(s, target, harnesses))
         .collect()
 }
 
+// reason: linear per-skill update pipeline (ref check → fetch → per-harness
+// render/compare) kept as one readable unit.
 #[allow(clippy::too_many_lines)]
 fn update_skill(
     old: &InstalledSkill,
@@ -416,6 +409,8 @@ fn update_skill(
     Ok(())
 }
 
+// reason: mirrors the install path — threads source-provenance fields through
+// the per-harness render/update loop; `SourceMeta` bundling is a tracked follow-up.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn update_skillprism_skill(
     old: &InstalledSkill,
@@ -564,6 +559,8 @@ fn update_skillprism_skill(
     })
 }
 
+// reason: mirrors `update_skillprism_skill` — threads source-provenance fields
+// through the per-harness update loop; `SourceMeta` bundling is a tracked follow-up.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn update_plain_skill(
     old: &InstalledSkill,
@@ -717,6 +714,8 @@ fn update_plain_skill(
     })
 }
 
+// reason: asset-dir diff/copy needs source+dest dirs, the old-file hash map, the
+// accumulators, and the diff/force/skip flags together in a single pass.
 #[allow(clippy::too_many_arguments, clippy::too_many_lines)]
 fn update_asset_dir(
     src_dir: &Path,
@@ -904,6 +903,8 @@ fn collect_updated_prefixes(
         .collect::<Result<Vec<_>, _>>()
 }
 
+// reason: single-file change detection needs the path, content, old-hash map,
+// output accumulators, and the diff/force/skip flags together.
 #[allow(clippy::too_many_arguments)]
 fn update_file_record(
     path: &Path,

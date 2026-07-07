@@ -16,6 +16,8 @@
 
 use std::fmt;
 
+use crate::state::{InstallScope, InstalledSkill};
+
 mod add;
 mod detect;
 mod install;
@@ -42,6 +44,25 @@ pub fn parse_harness_list(raw: &str) -> Vec<String> {
         .filter(|s| !s.is_empty())
         .map(ToString::to_string)
         .collect()
+}
+
+/// Returns whether a skill passes the shared scope + harness filter used by
+/// `list` and `update`: it must be in the requested scope (if any) and expose at
+/// least one of the requested harnesses (if any).
+pub fn scope_harness_matches(
+    skill: &InstalledSkill,
+    target: Option<InstallScopeArg>,
+    harnesses: Option<&String>,
+) -> bool {
+    target.is_none_or(|t| InstallScope::from(t) == skill.scope)
+        && harnesses.is_none_or(|h| {
+            let wanted = parse_harness_list(h);
+            wanted.is_empty()
+                || skill
+                    .harnesses
+                    .iter()
+                    .any(|installed| wanted.contains(installed))
+        })
 }
 
 use std::path::PathBuf;

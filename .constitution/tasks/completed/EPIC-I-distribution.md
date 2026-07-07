@@ -72,11 +72,19 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
       installedAt: 2026-07-02T14:23:45Z
       updatedAt: 2026-07-02T14:23:45Z
       files:                                          # per-file records for change detection
-        - path: .claude/skills/my-skill/SKILL.md
+        - path: .claude/skills/my-skill/SKILL.md      # (impl) stored ABSOLUTE for project scope — resolved under `projectRoot`; the relative form here is illustrative
           hash: sha256:abc123...
         - path: .claude/skills/my-skill/references/api.md
           hash: sha256:def456...
   ```
+
+  **File-path storage (implementation note):** `files[].path` is stored as the
+  absolute resolved output path (for project scope, under `projectRoot`; for
+  user scope, under `$HOME`). `remove`/`update` recompute prefixes from the same
+  roots and match with `Path::starts_with`, so records are self-consistent. The
+  tradeoff: `installed.yaml` is not portable across a moved project directory —
+  relocating a project would strand its absolute `files[]` prefixes. Accepted for
+  v1; normalizing to project-relative paths is a possible future refinement.
 
   **Field order and merge friendliness:** the top-level keys are emitted in declaration order (`version`, `skills`); the `skills[]` array is sorted alphabetically by `name`; per-record keys are emitted in declaration order. This matches Vercel's `src/local-lock.ts:80-85` pattern (alphabetical sort for deterministic output and clean git diffs) and prevents the implementation PR from picking a `serde` default that produces hard-to-merge diffs on concurrent updates.
 
@@ -329,12 +337,12 @@ And a clear error is printed to stderr explaining that `git` is required and how
 - **Type:** Feature
 - **Effort:** 3
 - **Dependencies:** DIST-I001
-- **Description:** Implement the `skillprism list` command (alias: `ls`). Reads the state tracking layer and displays installed skills in a table: name, source, ref (short SHA or branch name), scope, harnesses. The `--target` flag filters by scope (project|user). The `--harnesses` flag (`-H`, comma-separated) filters by harness — same flag name as the existing `init` and `add` commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints "No skills installed" to stdout.
+- **Description:** Implement the `skillprism list` command (alias: `ls`). Reads the state tracking layer and displays installed skills in a tab-separated table: name, source, ref (short SHA or branch name), format (skillprism|plain), scope, harnesses. (The `format` column is an implementation addition to the original five-column sketch; it is cheap, useful, and kept.) The `--target` flag filters by scope (project|user). The `--harnesses` flag (`-H`, comma-separated) filters by harness — same flag name as the existing `init` and `add` commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints "No skills installed" to stdout.
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given 3 skills installed across project and user scopes
 When the user runs `skillprism list`
-Then a table is printed to stdout showing all 3 skills with name, source, ref, scope, and harnesses
+Then a table is printed to stdout showing all 3 skills with name, source, ref, format, scope, and harnesses
 
 Given skills installed in both project and user scopes
 When the user runs `skillprism list --target user`

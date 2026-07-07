@@ -14,6 +14,8 @@
 
 mod project;
 
+// Glob re-export already surfaces the two free helpers below; the explicit line
+// is retained (as pinned by DIST-I002) to document the distribution commands'
+// dependency on them.
 pub use project::*;
-
 pub use project::{discover_asset_dirs, find_template_path};

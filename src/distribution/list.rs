@@ -14,7 +14,7 @@
 
 //! `skillprism list` command implementation.
 
-use crate::state::{InstallScope, InstalledSkill, SkillFormat, StateStore};
+use crate::state::{InstalledSkill, SkillFormat, StateStore};
 
 use super::add::InstallScopeArg;
 use super::source::mask_credentials;
@@ -50,16 +50,7 @@ fn filter_skills(
 ) -> Vec<InstalledSkill> {
     skills
         .iter()
-        .filter(|s| target.is_none_or(|t| InstallScope::from(t) == s.scope))
-        .filter(|s| {
-            harnesses.is_none_or(|h| {
-                let wanted = super::parse_harness_list(h);
-                wanted.is_empty()
-                    || s.harnesses
-                        .iter()
-                        .any(|installed| wanted.contains(installed))
-            })
-        })
+        .filter(|s| super::scope_harness_matches(s, target, harnesses))
         .cloned()
         .collect()
 }
@@ -97,7 +88,7 @@ fn print_skill(skill: &InstalledSkill) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::state::{InstalledFile, SkillFormat, SourceType, now_rfc3339};
+    use crate::state::{InstallScope, InstalledFile, SkillFormat, SourceType, now_rfc3339};
 
     fn sample_skill(name: &str, scope: InstallScope, harnesses: &[&str]) -> InstalledSkill {
         InstalledSkill {

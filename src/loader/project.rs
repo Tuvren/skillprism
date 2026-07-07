@@ -273,6 +273,11 @@ impl ProjectLoader {
     }
 }
 
+// Crate-internal free-function aliases for the distribution commands. The
+// `loader` module is private (declared `mod loader;`), so these are effectively
+// crate-scoped; they stay `pub` rather than `pub(crate)` because the crate
+// enforces `deny(clippy::nursery)`, whose `redundant_pub_crate` lint rejects
+// `pub(crate)` inside a private module.
 pub fn find_template_path(dir: &Path) -> Result<Option<std::path::PathBuf>, ProjectError> {
     ProjectLoader::find_template_path(dir)
 }

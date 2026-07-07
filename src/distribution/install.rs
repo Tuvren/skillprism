@@ -250,6 +250,10 @@ pub fn install_source(
     result
 }
 
+// reason: linear install pipeline (discover → per-skill render → record) kept as
+// one readable unit; it threads the source-provenance fields (url, type, ref,
+// resolved_ref, skill_path) plus render context. Bundling those into a
+// `SourceMeta` struct is a tracked maintainability follow-up.
 #[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
 #[allow(clippy::too_many_arguments)]
 fn install_discovered_skills(
@@ -454,6 +458,8 @@ pub fn detect_format(skill_dir: &Path) -> Result<SkillFormat, InstallError> {
     )
 }
 
+// reason: threads the owned `InstallContext` plus source-provenance fields
+// through the per-skill render path; `SourceMeta` bundling is a tracked follow-up.
 #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 fn install_skillprism_skill(
     ctx: &InstallContext,
@@ -519,6 +525,8 @@ fn install_skillprism_skill(
     ))
 }
 
+// reason: mirrors `install_skillprism_skill` — threads the owned context and
+// source-provenance fields; `SourceMeta` bundling is a tracked follow-up.
 #[allow(clippy::too_many_arguments, clippy::needless_pass_by_value)]
 fn install_plain_skill(
     ctx: &InstallContext,
@@ -677,6 +685,8 @@ pub const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
     }
 }
 
+// reason: assembles the full `InstalledSkill` record from its individual
+// provenance/render fields; `SourceMeta` bundling is a tracked follow-up.
 #[allow(clippy::too_many_arguments)]
 fn build_record(
     skill_name: &str,

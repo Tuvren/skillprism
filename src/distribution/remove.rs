@@ -30,6 +30,9 @@ use super::find_project_root;
 use super::install::install_scope_to_target;
 
 /// Runs the `remove` command.
+// reason: signature mirrors the clap `remove` command surface (skills, target,
+// harnesses, all, all_scopes, force, verbose); the bool flags map 1:1 to CLI
+// flags, and the body is the linear select → confirm → delete → persist pipeline.
 #[allow(clippy::too_many_lines)]
 #[allow(clippy::fn_params_excessive_bools)]
 pub fn run_remove(
