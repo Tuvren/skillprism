@@ -337,7 +337,7 @@ And a clear error is printed to stderr explaining that `git` is required and how
 - **Type:** Feature
 - **Effort:** 3
 - **Dependencies:** DIST-I001
-- **Description:** Implement the `skillprism list` command (alias: `ls`). Reads the state tracking layer and displays installed skills in a tab-separated table: name, source, ref (short SHA or branch name), format (skillprism|plain), scope, harnesses. (The `format` column is an implementation addition to the original five-column sketch; it is cheap, useful, and kept.) The `--target` flag filters by scope (project|user). The `--harnesses` flag (`-H`, comma-separated) filters by harness — same flag name as the existing `init` and `add` commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints "No skills installed" to stdout.
+- **Description:** Implement the `skillprism list` command (alias: `ls`). Reads the state tracking layer and displays installed skills in a tab-separated table: name, source, ref (short SHA or branch name), format (skillprism|plain), scope, harnesses. (The `format` column is an implementation addition to the original five-column sketch; it is cheap, useful, and kept.) The `--target` flag filters by scope (project|user). The `--harnesses` flag (`-H`, comma-separated) filters by harness — same flag name as the existing `init` and `add` commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints an empty-state notice ("No installed skills"). (Implementation note: per `guidelines.md` stdout-discipline, this status notice is emitted to **stderr** so piped stdout stays empty/clean — superseding the "to stdout" wording in the Gherkin below, exactly as the `is up to date` status is handled in DIST-I005.)
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given 3 skills installed across project and user scopes
@@ -354,7 +354,7 @@ Then only skills installed for the claude harness are listed
 
 Given no skills installed
 When the user runs `skillprism list`
-Then "No skills installed" is printed to stdout
+Then "No installed skills" is printed to stderr (stdout stays empty per stdout-discipline)
 And the exit code is 0
 ```
 
@@ -478,7 +478,7 @@ Given both skills are installed
 When the integration test runs `skillprism remove --all --force --all-scopes`
 Then both skills are removed from all harness paths
 And the state tracking layer is empty
-And `skillprism list` outputs "No skills installed"
+And `skillprism list` emits "No installed skills" to stderr (stdout stays empty)
 
 Given a skillprism-format skill installed at version A
 When the fixture is updated to version B and the test runs `skillprism update --force`

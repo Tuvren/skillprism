@@ -32,7 +32,9 @@ pub fn run_list(
     let skills = filter_skills(store.skills(), target, harnesses);
 
     if skills.is_empty() {
-        println!("No skills installed");
+        // Status message, not table data: stdout stays clean for piping
+        // (guidelines.md stdout-discipline; mirrors update's empty-state notice).
+        eprintln!("No installed skills");
         return Ok(());
     }
 

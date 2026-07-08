@@ -168,12 +168,18 @@ fn distribution_lifecycle_add_list_remove() {
         }
     }
 
-    // Verify list shows empty
+    // Verify list shows empty. The "No installed skills" notice is a status
+    // message, so it goes to stderr; stdout stays clean for piping.
     let list_after_result = env.bin().arg("list").assert().success();
     let list_after_stdout = String::from_utf8_lossy(&list_after_result.get_output().stdout);
+    let list_after_stderr = String::from_utf8_lossy(&list_after_result.get_output().stderr);
     assert!(
-        list_after_stdout.contains("No skills installed"),
-        "list after remove should show empty, got: {list_after_stdout}"
+        list_after_stderr.contains("No installed skills"),
+        "empty-list notice should be on stderr, got stderr: {list_after_stderr}"
+    );
+    assert!(
+        list_after_stdout.trim().is_empty(),
+        "stdout should stay clean when no skills are installed, got: {list_after_stdout}"
     );
 }
 
