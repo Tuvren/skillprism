@@ -380,8 +380,11 @@ fn install_from_well_known(
     Err(InstallError::UnsupportedSource {
         source_input: ctx.source_input.clone(),
         detail: "well-known skill indexes are not supported yet".to_string(),
-        help: "Install directly from a git repository or GitHub/GitLab shorthand instead."
-            .to_string(),
+        // A self-hosted git URL without a `.git` suffix (e.g.
+        // `https://git.example.com/team/project`) is classified as a well-known
+        // index, not a git source. Add the `.git` suffix (or use `github:`/
+        // `gitlab:` / an SSH URL) so it is cloned directly.
+        help: "Install directly from a git repository (append a `.git` suffix to a self-hosted URL, e.g. `https://git.example.com/team/project.git`), a GitHub/GitLab shorthand, or a local path.".to_string(),
     })
 }
 

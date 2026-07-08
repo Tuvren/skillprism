@@ -14,7 +14,7 @@
 - Single static binary with no runtime dependencies, *except for the `git` binary which is required for the `add` and `update` distribution commands.*
 - The `git` binary is assumed to be present on the user's PATH. If it is missing, the OS-level `ENOENT` from `Command::status` surfaces as a normal runtime error (the same path as any missing external command); no dedicated startup gate is implemented.
 - The `build`, `validate`, `init`, and `completions` commands remain purely static-binary and have no runtime dependencies.
-- Binary is built from source via Cargo; no pre-built binary distribution for v1.
+- Binary is built from source via Cargo. Pre-built binaries are also distributed via GitHub Releases and consumed by the npm launcher (`npm/bin/cli.mjs`, DIST-I009), which downloads the correct per-platform Release artifact and verifies it against the pinned `checksums.json` before executing. The Rust source build remains the canonical/primary path.
 
 ## Error Handling
 

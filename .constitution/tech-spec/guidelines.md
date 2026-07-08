@@ -60,6 +60,8 @@ skillprism/
 │   │   ├── mod.rs          # Output Router — path resolution, writing, diffs, manifests
 │   │   ├── paths.rs        # Target scope path resolution
 │   │   ├── write.rs        # Atomic writes (temp → rename) + asset copy
+│   │   ├── overwrite.rs    # Shared overwrite prompt/decision (force/skip-all/abort)
+│   │   ├── manifest.rs     # Manifest entry records + aggregation
 │   │   └── diff.rs         # Diff computation against installed files
 │   ├── scaffold/
 │   │   ├── mod.rs          # Scaffolder — init command handlers

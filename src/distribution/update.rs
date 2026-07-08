@@ -222,10 +222,13 @@ pub fn run_update(
             force,
             &mut clone_cache,
         )?;
-        // Persist after each *changed* skill (incremental durability if a later
-        // skill errors), but skip the rewrite for no-op skills that upserted
-        // nothing — otherwise `update` with N already-current skills would do N
-        // redundant full-file rewrites.
+        // Persist after each skill that ran its full update path (incremental
+        // durability if a later skill errors, and it may re-persist refreshed
+        // provenance like `resolved_ref` even when file content is unchanged).
+        // The *early* no-op returns (local, no ref, pinned SHA, up-to-date via
+        // ls-remote, no matching harness) upsert nothing, so `mutated` is false
+        // there and we skip the rewrite — otherwise `update` with N skills that
+        // short-circuit as up-to-date would do N redundant full-file rewrites.
         if !diff && mutated {
             store
                 .save()
