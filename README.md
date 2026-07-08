@@ -277,15 +277,35 @@ cargo test
 ### Lint
 
 ```bash
-cargo clippy -- -D warnings
+cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
+
+### Matching CI (toolchain parity)
+
+CI lints and tests on the **pinned MSRV toolchain** (`1.85`, see
+`rust-toolchain.toml` and `.github/workflows/ci.yml`) with `--all-targets`. The
+crate denies `clippy::pedantic` and `clippy::nursery`, and those experimental
+lints **vary between toolchain versions** — so a newer local `rustc` (or a
+source-built toolchain that ignores `rust-toolchain.toml`) can pass clippy while
+CI's `1.85` fails. Before pushing, reproduce CI exactly:
+
+```bash
+./scripts/ci-check.sh   # build + test + clippy + fmt on the pinned 1.85 toolchain
+```
+
+It uses `rustup run 1.85 …`, installing the toolchain if needed. Override the
+version with `SKILLPRISM_CI_TOOLCHAIN` if CI's pin changes.
 
 ### Pre-commit Hooks
 
 This project includes pre-commit hooks for `cargo fmt` and `cargo clippy`,
 managed through devenv. Hooks install automatically when entering the
 environment via `devenv shell` or `direnv`.
+
+> **Note:** the hooks run clippy on your *local* toolchain and without
+> `--all-targets`, so they do not fully match CI. Run `./scripts/ci-check.sh`
+> for an exact CI reproduction (pinned toolchain + `--all-targets`).
 
 To run hooks manually:
 
