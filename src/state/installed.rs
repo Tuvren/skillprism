@@ -701,12 +701,11 @@ mod tests {
             // The writer uses unique `.tmp-<pid>-<nanos>-<name>` files and
             // renames them into place; no temp file should remain.
             let dir = store.path().parent().unwrap();
-            let leftover: Vec<_> = fs::read_dir(dir)
+            let no_temp_files = fs::read_dir(dir)
                 .unwrap()
                 .filter_map(std::result::Result::ok)
-                .filter(|e| e.file_name().to_string_lossy().starts_with(".tmp-"))
-                .collect();
-            assert!(leftover.is_empty(), "temp files should be renamed away");
+                .all(|e| !e.file_name().to_string_lossy().starts_with(".tmp-"));
+            assert!(no_temp_files, "temp files should be renamed away");
         });
     }
 

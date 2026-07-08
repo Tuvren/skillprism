@@ -75,7 +75,7 @@ pub struct UndefinedMacro {
 mod tests {
     use super::*;
 
-    fn empty_macros() -> BTreeMap<String, MacroDef> {
+    const fn empty_macros() -> BTreeMap<String, MacroDef> {
         BTreeMap::new()
     }
 
