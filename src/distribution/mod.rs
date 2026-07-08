@@ -15,8 +15,10 @@
 //! Distribution CLI commands: add, list, remove, update.
 
 use std::fmt;
+use std::path::PathBuf;
 
 use crate::state::{InstallScope, InstalledSkill};
+use crate::types::ProjectError;
 
 mod add;
 mod detect;
@@ -64,10 +66,6 @@ pub fn scope_harness_matches(
                     .any(|installed| wanted.contains(installed))
         })
 }
-
-use std::path::PathBuf;
-
-use crate::types::ProjectError;
 
 /// Locates the nearest project root by walking up from the current directory
 /// looking for `skillprism.yaml`.

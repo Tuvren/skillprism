@@ -214,7 +214,7 @@ pub fn run_update(
 
     let mut clone_cache = CloneCache::new();
     for skill in &candidates {
-        update_skill(
+        let mutated = update_skill(
             skill,
             &mut store,
             harness_filter.as_deref(),
@@ -222,7 +222,11 @@ pub fn run_update(
             force,
             &mut clone_cache,
         )?;
-        if !diff {
+        // Persist after each *changed* skill (incremental durability if a later
+        // skill errors), but skip the rewrite for no-op skills that upserted
+        // nothing — otherwise `update` with N already-current skills would do N
+        // redundant full-file rewrites.
+        if !diff && mutated {
             store
                 .save()
                 .map_err(|e| miette::Report::new(UpdateError::from(e)))?;
@@ -266,27 +270,27 @@ fn update_skill(
     diff: bool,
     force: bool,
     clone_cache: &mut CloneCache,
-) -> Result<(), miette::Report> {
+) -> Result<bool, miette::Report> {
     if old.source_type == SourceType::Local {
         eprintln!("{} is a local skill, no remote to update", old.name);
-        return Ok(());
+        return Ok(false);
     }
 
     let Some(r#ref) = &old.r#ref else {
         eprintln!("{} has no git ref, cannot check for updates", old.name);
-        return Ok(());
+        return Ok(false);
     };
 
     if network::is_sha_ref(r#ref) {
         eprintln!("{} is pinned to commit {ref}, skipping update", old.name);
-        return Ok(());
+        return Ok(false);
     }
 
     if let Some(resolved) = &old.resolved_ref {
         match network::git_remote_head(&old.source_url, r#ref) {
             Ok(Some(upstream_sha)) if upstream_sha == *resolved => {
                 eprintln!("{} is up to date", old.name);
-                return Ok(());
+                return Ok(false);
             }
             Ok(Some(_)) => {} // different SHA → proceed with update
             Ok(None) => {
@@ -380,7 +384,7 @@ fn update_skill(
     );
     if harnesses.is_empty() {
         eprintln!("No matching harnesses to update for {}", old.name);
-        return Ok(());
+        return Ok(false);
     }
     let project_root: Option<PathBuf> = match old.scope {
         InstallScope::Project => old
@@ -424,7 +428,8 @@ fn update_skill(
         store.upsert(new_record);
     }
 
-    Ok(())
+    // `store` was mutated only when we upserted (i.e. not in diff mode).
+    Ok(!diff)
 }
 
 // reason: mirrors the install path — threads source-provenance fields through

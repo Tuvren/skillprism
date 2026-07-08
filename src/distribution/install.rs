@@ -69,6 +69,13 @@ pub enum InstallError {
     ))]
     Render(miette::Report),
 
+    /// Writing rendered output to disk failed (path/IO/overwrite).
+    #[error("{0}")]
+    #[diagnostic(help(
+        "Check that the destination path is writable and not blocked by an existing file or permission."
+    ))]
+    Write(miette::Report),
+
     /// Skill template validation failed before any output was written.
     #[error("validation failed for `{skill}`:\n{detail}")]
     #[diagnostic(help(
@@ -448,6 +455,16 @@ fn walk_for_skills(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), InstallErro
             continue;
         }
         if metadata.is_dir() {
+            // Skip dotfiles/dot-directories (`.git`, `.github`, …): a skill dir is
+            // never hidden, and recursing a cloned repo's `.git` tree on every
+            // install is wasted I/O.
+            if path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.starts_with('.'))
+            {
+                continue;
+            }
             if path.join("SKILL.md").exists() || path.join("SKILL.md.j2").exists() {
                 out.push(path);
             } else {
@@ -549,7 +566,7 @@ fn install_skillprism_skill(
             .as_deref()
             .unwrap_or_else(|| Path::new("."));
         let result = Router::write(pair, &output, project_root, target, ctx.force, skip_all)
-            .map_err(|e| InstallError::Render(miette::Report::new(e)))?;
+            .map_err(|e| InstallError::Write(miette::Report::new(e)))?;
 
         files.push(InstalledFile {
             path: result.written.skill_path.to_string_lossy().to_string(),
@@ -651,6 +668,11 @@ fn install_plain_skill(
                     })?
                     .to_string_lossy()
                     .to_string();
+                // Intentionally stricter than the spec's "escape the skill root":
+                // each asset dir is its own symlink-escape root, so a symlink
+                // pointing outside *this* directory (even elsewhere in the same
+                // skill) is rejected. For untrusted remote sources, failing
+                // closed on cross-directory symlinks is the safer default.
                 copy_dir(asset_dir, &skill_dir_out.join(&dir_name), asset_dir)?;
                 record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
             }
