@@ -1,8 +1,12 @@
 # Epic I — Distribution CLI
 
-Acronym: **DIST** | Story Points: **32**
+Acronym: **DIST** | Story Points: **37** (32 original + 5 Phase 2)
+
+**Status:** ✅ Completed and archived (2026-07-04)
 
 **Dependencies:** Epic H (RELS) — release artifacts must exist before the v1.0.0 tag is cut; PRD non-goal `plugin-marketplace.md` reopened by operator directive (see `.constitution/prd/out-of-scope/plugin-marketplace.md` for the `[REOPENED 2026-07-02]` annotation; full PRD revision is a downstream follow-up tracked in `prd/changelog.md`).
+
+**Phase 2 note:** agent auto-detection (DIST-I010) is used as contextual information (e.g. a "Detected agents" hint in the interactive `add` prompt), not as a default selection. Users must explicitly choose which harnesses to install to.
 
 **Operator directive (audit trail):** the directive that reopened `plugin-marketplace.md` and triggered Epic I is recorded in `prd/changelog.md` v0.2.0 (2026-07-02 entry) and `tasks/changelog.md` v0.11.0 (Epic I Activated and Specified entry). The git history of this PR is the source of truth; the changelog entries are the canonical pointer.
 
@@ -24,11 +28,15 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
 - `list` — show installed skills from state
 - `remove` — delete installed skills + update state
 - `update` — re-fetch latest, render/copy, update state
+- **Interactive `add`** (GAP-A) — when no `--harnesses`/`--target` flags, prompt user for selections
+- **npm launcher** (GAP-B) — thin npm package that downloads + execs the Release binary
+- **Agent auto-detection** (GAP-C) — probe common agent paths when no config exists
 
 **Deferred to future epics:**
-- `find` — requires a directory/registry backend that doesn't exist yet
-- `use` — render to temp + launch agent (convenience command, adds process-launching complexity)
-- Harness coverage expansion — keep 5 built-in harnesses; grow via community contributions (`init harness` + `harnesses/<name>.yaml`)
+- `find` — ecosystem skill search. Can be implemented by querying Vercel's `skills.sh` API directly (no registry needed). Deferred on implementation priority, not infrastructure availability.
+- `use` — render to temp + launch agent (convenience command, adds process-launching complexity). Explicitly ruled out for now.
+- **`.well-known` index installs** (DIST-I002 `WellKnown` form) — the source parser recognizes `https://example.com` index URLs, but `install_from_well_known` intentionally returns a clear "not supported yet" error. Full index-driven installs are deferred until a registry backend is available; the DIST-I002 Gherkin for well-known indexes is deferred with it.
+<!-- - Harness coverage expansion — keep 5 built-in harnesses; grow via community contributions (`init harness` + `harnesses/<name>.yaml`) -->
 
 **Key contracts (resolved by the spike):**
 - **Fetch method:** `git clone --depth 1 [--branch <ref>] [--single-branch] <url> <tempdir>` via `std::process::Command`. No new Rust dependencies.
@@ -55,18 +63,28 @@ Expand skillprism from a build-time compiler into a distribution CLI — a Verce
       sourceUrl: https://github.com/anthropics/skills.git
       sourceType: github                              # github | gitlab | git | local | wellknown
       ref: main                                       # branch/tag/SHA at install time (null for local)
+      resolvedRef: 9f2c...                            # (impl extension) concrete commit SHA HEAD resolved to; powers the `update` ls-remote no-op check (DIST-I005)
       skillPath: skills/pdf                           # subpath within the source (null if root)
+      projectRoot: /path/to/project                   # (impl extension) project root captured at install; needed for update/remove path resolution (null for user scope)
       scope: project                                  # project | user
       harnesses: [claude, opencode]
       format: skillprism                              # skillprism | plain
       installedAt: 2026-07-02T14:23:45Z
       updatedAt: 2026-07-02T14:23:45Z
       files:                                          # per-file records for change detection
-        - path: .claude/skills/my-skill/SKILL.md
+        - path: .claude/skills/my-skill/SKILL.md      # (impl) stored ABSOLUTE for project scope — resolved under `projectRoot`; the relative form here is illustrative
           hash: sha256:abc123...
         - path: .claude/skills/my-skill/references/api.md
           hash: sha256:def456...
   ```
+
+  **File-path storage (implementation note):** `files[].path` is stored as the
+  absolute resolved output path (for project scope, under `projectRoot`; for
+  user scope, under `$HOME`). `remove`/`update` recompute prefixes from the same
+  roots and match with `Path::starts_with`, so records are self-consistent. The
+  tradeoff: `installed.yaml` is not portable across a moved project directory —
+  relocating a project would strand its absolute `files[]` prefixes. Accepted for
+  v1; normalizing to project-relative paths is a possible future refinement.
 
   **Field order and merge friendliness:** the top-level keys are emitted in declaration order (`version`, `skills`); the `skills[]` array is sorted alphabetically by `name`; per-record keys are emitted in declaration order. This matches Vercel's `src/local-lock.ts:80-85` pattern (alphabetical sort for deterministic output and clean git diffs) and prevents the implementation PR from picking a `serde` default that produces hard-to-merge diffs on concurrent updates.
 
@@ -143,7 +161,7 @@ And the state file is atomically rewritten
   **Template handling (per skill directory, after format is determined):** the existing `find_template_path` from `src/loader/project.rs:121` is the canonical source-of-truth for which file is the template and MUST be reused, not re-implemented. It returns one of `SKILL.md.j2`, `SKILL.md`, or `None`. The `find_template_path` ambiguity check (`Both SKILL.md and SKILL.md.j2 exist` → `ProjectError::AmbiguousTemplate`) is preserved verbatim. The visibility fix (below) covers the `pub(crate)` lift.
 
   - `skillprism-format` → render per configured harness. The `skill.yaml` provides the variable context (top-level `variables:` and per-harness `harnesses.<harness>.variables`).
-  - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement — see visibility fix below). The state record carries `format: plain`.
+  - `plain-format` → copy the template bytes verbatim to each harness's output path (renamed to `SKILL.md` if the source was `SKILL.md.j2`), plus copy every direct subdirectory of the skill's source directory via the existing `discover_asset_dirs` / `copy_assets` helpers (the new module MUST reuse them, not re-implement — see visibility fix below). The state record carries `format: plain`. **Implementation note (asset copy):** `discover_asset_dirs` is reused as pinned, but the asset *copy* step intentionally diverges from `router::copy_assets`. `copy_assets` *preserves* symlinks (`src/router/write.rs`), which is safe for a trusted local project but a path-escape vector for **untrusted remote** sources fetched by `add`. The distribution module therefore uses a hardened in-module `copy_dir` that materializes in-tree symlinks, rejects targets escaping the source root, and detects cycles. This security-motivated divergence supersedes the literal "MUST reuse copy_assets" wording for the copy side.
 
   **Visibility fix:** `find_template_path` and `discover_asset_dirs` are currently module-private in `src/loader/project.rs`. The new `src/distribution/` module needs to call them. The implementation PR MUST lift them to `pub(crate)` in `src/loader/project.rs:121` and `src/loader/project.rs:257` and add explicit re-exports to `src/loader/mod.rs`. Because the items are `pub(crate)`, the explicit re-exports MUST be written as `pub(crate) use project::find_template_path;` and `pub(crate) use project::discover_asset_dirs;` — a literal `pub use` of a `pub(crate)` item would itself default to `pub(crate)` (the more restrictive of the two wins), so the implementation PR can type either, but the planning doc pins the explicit form for clarity. `src/loader/mod.rs` already contains `mod project;` and `pub use project::*;`; the lift adds the two explicit re-exports rather than starting from an empty file. This is the minimum-surface change — no free-function extraction needed. The `copy_assets` helper at `src/router/write.rs:34` is already `pub` and is the right reference for the asset-copy side.
 
@@ -264,6 +282,8 @@ When the user runs `skillprism add owner/repo` (default --target project)
 Then the command fails with a clear error explaining that --target project requires being inside a project directory
 And the error suggests using --target user
 And the exit code is 2 (usage error)
+<!-- SUPERSEDED by DIST-I008 (Phase 2): the no-flags path no longer silently defaults to `--target project`. With no `--target`, `add` now prompts interactively for scope (offering `user` when outside a project), or errors with actionable guidance on a non-TTY. The exit-2 usage error still applies to the explicit `--target project` outside-a-project path (add.rs `resolve_scope`) and to malformed sources (empty/whitespace). -->
+
 
 Given a skill directory containing both SKILL.md and SKILL.md.j2 (ambiguous template)
 When the user runs `skillprism add owner/repo --skill that-skill`
@@ -317,12 +337,12 @@ And a clear error is printed to stderr explaining that `git` is required and how
 - **Type:** Feature
 - **Effort:** 3
 - **Dependencies:** DIST-I001
-- **Description:** Implement the `skillprism list` command (alias: `ls`). Reads the state tracking layer and displays installed skills in a table: name, source, ref (short SHA or branch name), scope, harnesses. The `--target` flag filters by scope (project|user). The `--harnesses` flag (`-H`, comma-separated) filters by harness — same flag name as the existing `init` and `add` commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints "No skills installed" to stdout.
+- **Description:** Implement the `skillprism list` command (alias: `ls`). Reads the state tracking layer and displays installed skills in a tab-separated table: name, source, ref (short SHA or branch name), format (skillprism|plain), scope, harnesses. (The `format` column is an implementation addition to the original five-column sketch; it is cheap, useful, and kept.) The `--target` flag filters by scope (project|user). The `--harnesses` flag (`-H`, comma-separated) filters by harness — same flag name as the existing `init` and `add` commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints an empty-state notice ("No installed skills"). (Implementation note: per `guidelines.md` stdout-discipline, this status notice is emitted to **stderr** so piped stdout stays empty/clean — superseding the "to stdout" wording in the Gherkin below, exactly as the `is up to date` status is handled in DIST-I005.)
 - **Acceptance Criteria (Gherkin):**
 ```gherkin
 Given 3 skills installed across project and user scopes
 When the user runs `skillprism list`
-Then a table is printed to stdout showing all 3 skills with name, source, ref, scope, and harnesses
+Then a table is printed to stdout showing all 3 skills with name, source, ref, format, scope, and harnesses
 
 Given skills installed in both project and user scopes
 When the user runs `skillprism list --target user`
@@ -334,7 +354,7 @@ Then only skills installed for the claude harness are listed
 
 Given no skills installed
 When the user runs `skillprism list`
-Then "No skills installed" is printed to stdout
+Then "No installed skills" is printed to stderr (stdout stays empty per stdout-discipline)
 And the exit code is 0
 ```
 
@@ -364,9 +384,14 @@ And .opencode/skills/my-skill/ remains
 And the state record is updated to reflect only opencode
 
 Given 3 installed skills in project scope and 2 in user scope
-When the user runs `skillprism remove --all --force`
+When the user runs `skillprism remove --all --force --all-scopes`
 Then all 5 installed skills are removed from both project and user scopes
 And the state file is empty
+
+Given 3 installed skills in project scope and 2 in user scope
+When the user runs `skillprism remove --all --force`
+Then only the 3 project-scope skills are removed
+And the 2 user-scope skills remain
 
 Given the user invokes `skillprism remove` with --target dist
 When the command runs
@@ -450,10 +475,10 @@ When the integration test runs `skillprism list`
 Then stdout contains both skill names with correct metadata
 
 Given both skills are installed
-When the integration test runs `skillprism remove --all --force`
+When the integration test runs `skillprism remove --all --force --all-scopes`
 Then both skills are removed from all harness paths
 And the state tracking layer is empty
-And `skillprism list` outputs "No skills installed"
+And `skillprism list` emits "No installed skills" to stderr (stdout stays empty)
 
 Given a skillprism-format skill installed at version A
 When the fixture is updated to version B and the test runs `skillprism update --force`
@@ -490,4 +515,71 @@ And a "Prerequisites" note documents that `git` must be on PATH for `add` and `u
 Given the CHANGELOG.md
 When it is updated
 Then an "Unreleased" entry documents the new distribution commands
+```
+
+---
+
+#### DIST-I008 Interactive `add` Prompts
+- **Type:** Feature
+- **Effort:** 2
+- **Dependencies:** DIST-I002, DIST-I010
+- **Description:** When `--harnesses` is not provided and no `skillprism.yaml` exists, prompt the user interactively to select which harnesses to install to. When `--target` is not provided, prompt the user to choose project or user scope. Show a summary before executing. Reuse `--force` to skip prompts. Use `dialoguer` crate for interactive multi-select and confirm prompts. No harnesses are pre-selected; detected agents are shown as a hint only. The user must explicitly choose which agents to install to.
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given no --harnesses flag and no skillprism.yaml
+When the user runs skillprism add owner/repo
+Then the user is prompted to select harnesses interactively
+And no harnesses are pre-selected
+And detected agents are shown as a hint
+
+Given no --target flag
+When the user runs skillprism add owner/repo
+Then the user is prompted to choose project or user scope
+
+Given all selections made and user confirms
+When the installation proceeds
+Then the selected scope and harnesses are used
+```
+
+---
+
+#### DIST-I009 npm Launcher
+- **Type:** Feature
+- **Effort:** 1
+- **Dependencies:** Release CI (Epic H)
+- **Description:** Create a thin npm package (`npm/` at repo root) whose `bin` entry is a small JS launcher script. On `npx skillprism` or `npm install -g skillprism`, the launcher detects the platform, downloads the correct pre-built binary from the latest GitHub Release, caches it, and execs it. The binary is never built from npm — the npm package is purely a download + exec gateway. Modeled after Biome's approach (`@biomejs/biome`).
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given the npm package is scaffolding exists
+When node npm/bin/cli.mjs --help is run
+Then it downloads the correct binary for the platform
+And forwards --help to the binary
+And prints the help output
+
+Given the binary is cached
+When node npm/bin/cli.mjs list is run a second time
+Then it uses the cached binary
+```
+
+---
+
+#### DIST-I010 Agent Auto-Detection
+- **Type:** Feature
+- **Effort:** 2
+- **Dependencies:** None
+- **Description:** Implement a module that probes common agent installation paths (`~/.claude/`, `~/.config/opencode/`, `~/.codex/`, `~/.factory/`, `~/.pi/`) to detect which agents the user has installed. Detection is purely filesystem-based (no API calls). Used by DIST-I008 to display a "Detected agents" hint in the interactive `add` prompt; detected agents are **not** pre-selected.
+- **Acceptance Criteria (Gherkin):**
+```gherkin
+Given no skillprism.yaml and no --harnesses flag
+When add probes for installed agents
+Then it checks ~/.claude, ~/.config/opencode, ~/.codex, ~/.factory, ~/.pi
+
+Given ~/.claude exists but ~/.opencode does not
+When detection runs
+Then only claude is returned as detected
+
+Given the interactive add harness prompt is shown
+When agents are detected
+Then a hint lists the detected agents
+And no harnesses are pre-selected
 ```

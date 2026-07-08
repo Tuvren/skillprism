@@ -128,17 +128,25 @@ impl Default for HarnessRegistry {
     }
 }
 
+/// IDs of the built-in harnesses shipped with skillprism.
+pub const BUILTIN_HARNESS_IDS: &[&str] = &["claude", "codex", "opencode", "factory", "pi"];
+
 fn builtin_sources() -> Vec<(&'static str, &'static str)> {
-    vec![
-        ("claude", include_str!("../builtin_harnesses/claude.yaml")),
-        ("codex", include_str!("../builtin_harnesses/codex.yaml")),
-        (
-            "opencode",
-            include_str!("../builtin_harnesses/opencode.yaml"),
-        ),
-        ("factory", include_str!("../builtin_harnesses/factory.yaml")),
-        ("pi", include_str!("../builtin_harnesses/pi.yaml")),
-    ]
+    BUILTIN_HARNESS_IDS
+        .iter()
+        .map(|id| (*id, builtin_yaml(id)))
+        .collect()
+}
+
+fn builtin_yaml(id: &str) -> &'static str {
+    match id {
+        "claude" => include_str!("../builtin_harnesses/claude.yaml"),
+        "codex" => include_str!("../builtin_harnesses/codex.yaml"),
+        "opencode" => include_str!("../builtin_harnesses/opencode.yaml"),
+        "factory" => include_str!("../builtin_harnesses/factory.yaml"),
+        "pi" => include_str!("../builtin_harnesses/pi.yaml"),
+        _ => panic!("unknown builtin harness: {id}"),
+    }
 }
 
 #[cfg(test)]

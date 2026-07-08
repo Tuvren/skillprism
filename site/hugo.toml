@@ -1,7 +1,7 @@
 baseURL = "https://tuvren.github.io/skillprism/"
 locale = "en-us"
 title = "skillprism"
-description = "Build once, ship spec-compliant Agent Skills to Claude Code, Codex, OpenCode, Factory, and Pi from one source."
+description = "Distribution CLI with per-harness templating for agent skills."
 enableRobotsTXT = true
 
 [markup.highlight]
@@ -16,7 +16,7 @@ unsafe = true
 dir = ":cacheDir/images"
 
 [params]
-description = "Build-time compiler that transforms canonical skill sources into harness-specific agent files."
+description = "Distribution CLI with per-harness templating for agent skills."
 github = "https://github.com/tuvren/skillprism"
 spec = "https://agentskills.io/specification"
 version = "0.1.0"

@@ -62,7 +62,7 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
 ///
 /// Returns `true` if the caller should write the file, `false` if it should skip.
 /// Handles `skip_all` progression and abort exit internally.
-pub(super) fn resolve_overwrite(
+pub fn resolve_overwrite(
     path: &Path,
     force: bool,
     skip_all: &mut bool,
@@ -87,7 +87,16 @@ pub(super) fn resolve_overwrite(
             false
         }
         Some(OverwriteChoice::Abort) => {
-            eprintln!("Aborting build.");
+            // Shared by build/add/update — keep the message operation-neutral.
+            //
+            // Known tradeoff: `process::exit` skips RAII unwinding, so an
+            // interactive abort mid-`add`/`update` can leave the temporary git
+            // clone/render directory behind (the OS temp reaper eventually
+            // reclaims it). `build` has no temp dir, so it is unaffected.
+            // Converting abort into an unwinding error across the shared
+            // Router/Install error surfaces is a tracked follow-up; the narrow,
+            // interactive-only trigger does not justify that churn here.
+            eprintln!("Aborting.");
             std::process::exit(1);
         }
     }

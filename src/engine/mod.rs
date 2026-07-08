@@ -212,10 +212,17 @@ mod tests {
         template_content: &str,
         vars: BTreeMap<String, yaml_serde::Value>,
     ) -> SkillModel {
+        // Unique per invocation: several tests reuse the same skill `name`, so a
+        // name-only path let one test's `remove_dir_all` delete another's
+        // template mid-render under parallel execution (intermittent failure).
+        // Disambiguate by pid + an atomic counter so no two calls share a dir.
+        use std::sync::atomic::{AtomicU64, Ordering};
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
         let dir = std::env::temp_dir()
             .join("skillprism_test")
             .join("engine")
-            .join(name);
+            .join(format!("{name}-{}-{unique}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let tmpl_path = dir.join("SKILL.md.j2");

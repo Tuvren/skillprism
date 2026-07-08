@@ -1,0 +1,23 @@
+{
+  "name": "skillprism",
+  "version": "0.1.0",
+  "description": "Distribution CLI with per-harness templating for agent skills",
+  "type": "module",
+  "bin": {
+    "skillprism": "./bin/cli.mjs"
+  },
+  "files": [
+    "bin/",
+    "checksums.json",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tuvren/skillprism.git"
+  },
+  "homepage": "https://github.com/tuvren/skillprism#readme",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,5 +1,23 @@
 # Tasks Changelog
 
+## v0.12.0 — Epic I Complete: Distribution CLI (including Phase 2)
+
+- **Epic I (Distribution CLI)** fully implemented and archived via `git mv`
+- 10 tickets completed: DIST-I001 through DIST-I010 (37 story points: 32 original + 5 Phase 2)
+- **DIST-I001:** State tracking layer (`~/.config/skillprism/installed.yaml`, schema-versioned, atomic writes, SHA-256 per-file hashes)
+- **DIST-I002:** `add` command — fetch from remote (`git clone --depth 1`), auto-detect format (skillprism vs plain), render/copy per harness, record state
+- **DIST-I003:** `list` command — display installed skills with metadata, filter by scope/harness
+- **DIST-I004:** `remove` command — delete skill files from filesystem and state, scope/harness filtering, `--all`, `--all-scopes`
+- **DIST-I005:** `update` command — `git ls-remote` lightweight up-to-date check, re-render with per-file SHA-256 comparison, `--diff` preview, per-skill transactional state save
+- **DIST-I006:** Integration tests — `TestEnv` with XDG_CONFIG_HOME isolation, lifecycle test (add→list→remove), error cases
+- **DIST-I007:** Docs and website — README distribution workflow, Hugo docs (distribution.md, comparison.md), CLI reference, homepage repositioning, CHANGELOG
+- **DIST-I008:** Interactive `add` prompts — harness selection (no pre-selection, detected agents shown as hint), scope choice via `dialoguer`, install summary confirmation, `--force` skips prompts
+- **DIST-I009:** npm launcher — thin JS gateway in `npm/` that downloads + execs the GitHub Release binary (Biome pattern)
+- **DIST-I010:** Agent auto-detection — probe `~/.claude`, `~/.config/opencode/`, etc.; used as a hint in the interactive `add` prompt, not for pre-selection
+- 221 tests pass, clippy deny-level clean, Hugo builds 21 pages
+- Total delivery trajectory: 125 SP across 9 completed epics
+- Post-mortem driven Phase 2: gaps identified by comparing Epic I output against Vercel's `skills` CLI v1.5.14; `find` deferred (can query Vercel's `skills.sh` API directly)
+
 ## v0.11.0 — Epic I Activated and Specified: Distribution CLI
 
 - **Epic I (Distribution CLI)** planned, activated, and specified — 7 implementation tickets, 32 story points.

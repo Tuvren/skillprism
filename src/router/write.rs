@@ -14,15 +14,30 @@
 
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// Atomically writes content to a file by writing to a temp file then renaming.
 pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
+    atomic_write_bytes(path, content.as_bytes())
+}
+
+/// Atomically writes bytes to a file by writing to a unique temp file then renaming.
+pub fn atomic_write_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent)?;
     }
 
-    let tmp_path = path.with_extension("tmp");
+    let tmp_name = format!(
+        ".tmp-{}-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos(),
+        path.file_name()
+            .map_or_else(|| "file".to_string(), |n| n.to_string_lossy().to_string())
+    );
+    let tmp_path = path.with_file_name(tmp_name);
     fs::write(&tmp_path, content)?;
     fs::rename(&tmp_path, path)?;
 
@@ -31,7 +46,14 @@ pub fn atomic_write(path: &Path, content: &str) -> io::Result<()> {
 
 /// Copies asset directories (every direct subdirectory of a skill's own directory,
 /// regardless of name) to the skill output directory.
-pub fn copy_assets(source_dirs: &[impl AsRef<Path>], target_dir: &Path) -> io::Result<()> {
+///
+/// Returns the paths of every copied file so callers can record hashes for update
+/// comparisons.
+pub fn copy_assets(
+    source_dirs: &[impl AsRef<Path>],
+    target_dir: &Path,
+) -> io::Result<Vec<PathBuf>> {
+    let mut copied = Vec::new();
     for src in source_dirs {
         let src = src.as_ref();
         if !src.exists() {
@@ -41,13 +63,13 @@ pub fn copy_assets(source_dirs: &[impl AsRef<Path>], target_dir: &Path) -> io::R
         let dir_name = src.file_name().expect("asset dir should have a name");
 
         let dst = target_dir.join(dir_name);
-        copy_dir_recursive(src, &dst)?;
+        copy_dir_recursive(src, &dst, &mut copied)?;
     }
 
-    Ok(())
+    Ok(copied)
 }
 
-fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
+fn copy_dir_recursive(src: &Path, dst: &Path, copied: &mut Vec<PathBuf>) -> io::Result<()> {
     if !src.is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -70,9 +92,10 @@ fn copy_dir_recursive(src: &Path, dst: &Path) -> io::Result<()> {
             #[cfg(not(unix))]
             fs::copy(&src_path, &dst_path)?;
         } else if metadata.is_dir() {
-            copy_dir_recursive(&src_path, &dst_path)?;
+            copy_dir_recursive(&src_path, &dst_path, copied)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
+            copied.push(dst_path);
         }
     }
 

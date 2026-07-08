@@ -21,6 +21,7 @@ use clap_mangen::Man;
 
 use miette::IntoDiagnostic;
 
+use crate::distribution::InstallScopeArg;
 use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
@@ -70,6 +71,88 @@ enum Command {
         /// Shell to generate completions for
         #[arg(value_enum)]
         shell: ShellKind,
+    },
+    /// Install skills from a remote source or local path
+    Add {
+        /// Source to install from
+        source: String,
+
+        /// Install scope: project or user (prompts interactively if not provided)
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Install only the named skill from a multi-skill source
+        #[arg(long = "skill")]
+        skill: Option<String>,
+
+        /// Comma-separated list of harnesses to install to
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+
+        /// Overwrite existing files and skip interactive prompts
+        #[arg(long = "force")]
+        force: bool,
+    },
+    /// List installed skills
+    #[command(visible_alias = "ls")]
+    List {
+        /// Filter by install scope: project or user
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Comma-separated list of harnesses to filter by
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+    },
+    /// Remove installed skills
+    #[command(visible_alias = "rm")]
+    Remove {
+        /// Skill names to remove
+        #[arg(required = false)]
+        skills: Vec<String>,
+
+        /// Filter by install scope: project or user
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Comma-separated list of harnesses to remove from
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+
+        /// Remove all installed skills
+        #[arg(long = "all")]
+        all: bool,
+
+        /// Allow removing across both project and user scopes
+        #[arg(long = "all-scopes")]
+        all_scopes: bool,
+
+        /// Skip confirmation prompts
+        #[arg(long = "force")]
+        force: bool,
+    },
+    /// Update installed skills to their latest source versions
+    #[command(visible_alias = "up")]
+    Update {
+        /// Skill names to update (default: all)
+        #[arg(required = false)]
+        skills: Vec<String>,
+
+        /// Filter by install scope: project or user
+        #[arg(long = "target")]
+        target: Option<InstallScopeArg>,
+
+        /// Comma-separated list of harnesses to update
+        #[arg(short = 'H', long = "harnesses")]
+        harnesses: Option<String>,
+
+        /// Show diff without writing files
+        #[arg(long = "diff", visible_alias = "dry-run")]
+        diff: bool,
+
+        /// Skip confirmation prompts
+        #[arg(long = "force")]
+        force: bool,
     },
 }
 
@@ -142,6 +225,65 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => run_init(kind),
         Command::Completions { shell } => run_completions(shell),
+        Command::Add {
+            source,
+            target,
+            skill,
+            harnesses,
+            force,
+        } => {
+            match crate::distribution::run_add(source, target, skill, harnesses, force, cli.verbose)
+            {
+                Ok(()) => Ok(()),
+                Err(e) => {
+                    eprintln!("{e:?}");
+                    std::process::exit(e.exit_code());
+                }
+            }
+        }
+        // `list`/`update` return `miette::Report` (always exit 1 via `run`)
+        // rather than `CommandError`: unlike `add`/`remove`, they have no
+        // usage-level (exit 2) error of their own — a bad `--target` is rejected
+        // by clap's `InstallScopeArg` parse (exit 2) before the command runs.
+        Command::List { target, harnesses } => {
+            crate::distribution::run_list(target, harnesses.as_ref(), cli.verbose)
+        }
+        Command::Remove {
+            skills,
+            target,
+            harnesses,
+            all,
+            all_scopes,
+            force,
+        } => match crate::distribution::run_remove(
+            &skills,
+            target,
+            harnesses,
+            all,
+            all_scopes,
+            force,
+            cli.verbose,
+        ) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                eprintln!("{e:?}");
+                std::process::exit(e.exit_code());
+            }
+        },
+        Command::Update {
+            skills,
+            target,
+            harnesses,
+            diff,
+            force,
+        } => crate::distribution::run_update(
+            &skills,
+            target,
+            harnesses.as_ref(),
+            diff,
+            force,
+            cli.verbose,
+        ),
     }
 }
 
@@ -155,7 +297,7 @@ fn run_build(
 ) -> Result<(), miette::Report> {
     install_signal_handlers();
 
-    let project_root = find_project_root()?;
+    let project_root = crate::distribution::find_project_root().into_diagnostic()?;
     if verbose {
         eprintln!("[build] project root: {}", project_root.display());
     }
@@ -500,13 +642,13 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             Ok(())
         }
         InitKind::Skill { name } => {
-            let root = find_project_root()?;
+            let root = crate::distribution::find_project_root().into_diagnostic()?;
             crate::scaffold::skill::scaffold_skill(&root, &name).into_diagnostic()?;
             println!("Created skill `{name}`");
             Ok(())
         }
         InitKind::Harness { name } => {
-            let root = find_project_root()?;
+            let root = crate::distribution::find_project_root().into_diagnostic()?;
             crate::scaffold::harness::scaffold_harness(&root, &name).into_diagnostic()?;
             println!("Created harness `{name}`");
             Ok(())
@@ -595,23 +737,6 @@ fn fmt_duration(d: std::time::Duration) -> String {
     }
 }
 
-fn find_project_root() -> Result<PathBuf, miette::Report> {
-    let cwd = std::env::current_dir().into_diagnostic()?;
-    let mut dir = cwd.as_path();
-    loop {
-        if dir.join("skillprism.yaml").exists() {
-            return Ok(dir.to_path_buf());
-        }
-        if let Some(parent) = dir.parent() {
-            dir = parent;
-        } else {
-            return Err(miette::miette!(
-                "No skillprism.yaml found. Run `skillprism init project <name>` to create one, or cd into a skillprism project."
-            ));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -638,6 +763,22 @@ mod tests {
         assert!(
             output.contains("completions"),
             "bash completions should include completions"
+        );
+        assert!(
+            output.contains("add"),
+            "bash completions should include add"
+        );
+        assert!(
+            output.contains("list"),
+            "bash completions should include list"
+        );
+        assert!(
+            output.contains("remove"),
+            "bash completions should include remove"
+        );
+        assert!(
+            output.contains("update"),
+            "bash completions should include update"
         );
     }
 

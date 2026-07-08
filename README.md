@@ -2,11 +2,16 @@
 
 [![CI](https://github.com/tuvren/skillprism/actions/workflows/ci.yml/badge.svg)](https://github.com/tuvren/skillprism/actions/workflows/ci.yml)
 
-Build-time compiler that transforms canonical skill sources into harness-specific agent files. Every rendered `SKILL.md` is compliant with the [Agent Skills specification](https://agentskills.io/specification).
+Distribution CLI with per-harness templating for agent skills. Install skills from remote sources, compile from local sources — all rendered once per harness, always [Agent Skills spec](https://agentskills.io/specification)-compliant.
 
 **Documentation: [tuvren.github.io/skillprism](https://tuvren.github.io/skillprism/)**
 
 ## Installation
+
+### Prerequisites
+
+- **Rust 1.85+** (edition 2024)
+- **`git`** must be on `PATH` for the `add` and `update` distribution commands (they clone remote sources via `git clone --depth 1` and check for updates via `git ls-remote`)
 
 ### From source
 
@@ -122,6 +127,59 @@ skillprism validate
 
 Checks templates for syntax errors, undefined variables, and missing macros without writing output. Also enforces [Agent Skills spec](https://agentskills.io/specification) constraints: skill name format (`^[a-z0-9]+(-[a-z0-9]+)*$`, must match the directory name), non-empty description, and per-harness length caps. Values over the spec's portable cap but within a harness's own cap (e.g. a 1200-char description for Claude) are reported as warnings, not errors.
 
+## Distribution workflow
+
+skillprism can install skills from remote Git repositories or local paths, manage their lifecycle, and keep them up to date — all while rendering each skill once per harness.
+
+### Install skills
+
+```bash
+# From a GitHub shorthand
+skillprism add owner/repo
+
+# From a full Git URL (GitHub, GitLab, etc.)
+skillprism add https://github.com/owner/repo.git
+
+# Pin to a specific ref or filter to one skill from a multi-skill repo
+skillprism add owner/repo#v1.0.0
+skillprism add owner/repo --skill my-skill
+
+# From a local path
+skillprism add ./path/to/skills
+
+# Filter which harnesses to install to
+skillprism add owner/repo -H claude,opencode
+```
+
+Each skill is either **skillprism-format** (has `skill.yaml` with `skillprism: '1'` — rendered through MiniJinja per harness) or **plain-format** (bare `SKILL.md` — copied as-is). The format is auto-detected per skill.
+
+### List installed skills
+
+```bash
+skillprism list              # all installed
+skillprism list --target user  # only user-scoped
+skillprism list -H claude      # only claude harness
+```
+
+### Remove skills
+
+```bash
+skillprism remove my-skill        # remove one skill
+skillprism remove --all           # remove everything
+skillprism remove --all --force   # skip confirmation
+```
+
+### Update skills
+
+```bash
+skillprism update                 # check all installed skills for updates
+skillprism update my-skill        # update a specific skill
+skillprism update --diff          # preview changes without writing
+skillprism update -H claude       # only update claude harness files
+```
+
+Update performs a lightweight up-to-date check via `git ls-remote` before cloning, then re-renders only files whose content actually changed (SHA-256 comparison).
+
 ## Spec compliance
 
 skillprism renders `SKILL.md` files with the YAML frontmatter the [Agent Skills specification](https://agentskills.io/specification) requires (`name` + `description` at minimum). Without this frontmatter, no compatible agent can discover a skill. The scaffold (`init skill`, `init project`) and `validate` both enforce spec constraints so a successful `skillprism build` produces skills that load in any spec-compatible client.
@@ -161,6 +219,10 @@ skillprism init project <name> [--out <dir>] [-H <harnesses>]
 skillprism init skill <name>
 skillprism init harness <name>
 skillprism completions <bash|fish|zsh>
+skillprism add <source> [--target project|user] [--skill <name>] [-H <harnesses>] [--force]
+skillprism list [--target project|user] [-H <harnesses>]          (alias: ls)
+skillprism remove [<skills>...] [--target project|user] [-H <harnesses>] [--all] [--all-scopes] [--force]  (alias: rm)
+skillprism update [<skills>...] [--target project|user] [-H <harnesses>] [--diff|--dry-run] [--force]  (alias: up)
 ```
 
 ### Global flags
@@ -215,15 +277,35 @@ cargo test
 ### Lint
 
 ```bash
-cargo clippy -- -D warnings
+cargo clippy --all-targets -- -D warnings
 cargo fmt --check
 ```
+
+### Matching CI (toolchain parity)
+
+CI lints and tests on the **pinned MSRV toolchain** (`1.85`, see
+`rust-toolchain.toml` and `.github/workflows/ci.yml`) with `--all-targets`. The
+crate denies `clippy::pedantic` and `clippy::nursery`, and those experimental
+lints **vary between toolchain versions** — so a newer local `rustc` (or a
+source-built toolchain that ignores `rust-toolchain.toml`) can pass clippy while
+CI's `1.85` fails. Before pushing, reproduce CI exactly:
+
+```bash
+./scripts/ci-check.sh   # build + test + clippy + fmt on the pinned 1.85 toolchain
+```
+
+It uses `rustup run 1.85 …`, installing the toolchain if needed. Override the
+version with `SKILLPRISM_CI_TOOLCHAIN` if CI's pin changes.
 
 ### Pre-commit Hooks
 
 This project includes pre-commit hooks for `cargo fmt` and `cargo clippy`,
 managed through devenv. Hooks install automatically when entering the
 environment via `devenv shell` or `direnv`.
+
+> **Note:** the hooks run clippy on your *local* toolchain and without
+> `--all-targets`, so they do not fully match CI. Run `./scripts/ci-check.sh`
+> for an exact CI reproduction (pinned toolchain + `--all-targets`).
 
 To run hooks manually:
 

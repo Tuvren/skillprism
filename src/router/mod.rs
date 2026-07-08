@@ -28,6 +28,7 @@ use crate::cli::TargetScope;
 use crate::engine::HarnessOutput;
 use crate::resolver::ResolvedPair;
 
+pub use overwrite::resolve_overwrite;
 pub use paths::*;
 pub use write::*;
 
@@ -234,7 +235,7 @@ impl Router {
                 );
             }
         }
-        if !pair.skill.asset_dirs.is_empty() && !skill_was_skipped {
+        let asset_paths = if !pair.skill.asset_dirs.is_empty() && !skill_was_skipped {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
                 RouterError::AssetCopyError {
                     skill: skill_name.clone(),
@@ -242,13 +243,16 @@ impl Router {
                     path: skill_dir.to_string_lossy().to_string(),
                     detail: e.to_string(),
                 }
-            })?;
-        }
+            })?
+        } else {
+            Vec::new()
+        };
 
         Ok(WriteResult {
             written: WrittenFiles {
                 skill_path,
                 sidecar_paths,
+                asset_paths,
             },
             skipped,
         })
@@ -405,6 +409,8 @@ pub struct WrittenFiles {
     pub skill_path: std::path::PathBuf,
     /// Paths to any sidecar files written.
     pub sidecar_paths: Vec<std::path::PathBuf>,
+    /// Paths to any asset files copied alongside the skill.
+    pub asset_paths: Vec<std::path::PathBuf>,
 }
 
 /// A single file's diff output for the --diff mode.
