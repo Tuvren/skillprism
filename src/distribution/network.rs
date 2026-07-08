@@ -107,7 +107,7 @@ struct GitHubRepoInfo {
 /// The caller is responsible for cleaning up the returned directory via
 /// [`cleanup_temp_dir`].
 pub fn fetch_git_repo(url: &str, r#ref: Option<&str>) -> Result<PathBuf, NetworkError> {
-    let is_sha = r#ref.map_or(false, is_sha_ref);
+    let is_sha = r#ref.is_some_and(is_sha_ref);
     // SHA refs cannot be cloned with `--branch`; fetch the default branch first
     // and then checkout the specific object.
     let clone_ref = if is_sha { None } else { r#ref };

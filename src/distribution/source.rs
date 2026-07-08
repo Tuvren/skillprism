@@ -225,21 +225,21 @@ const fn is_windows_drive_path(input: &str) -> bool {
 }
 
 fn normalize_local_path(input: &str) -> PathBuf {
-    let expanded = input.strip_prefix('~').map_or_else(
-        || input.to_string(),
-        |rest| {
-            std::env::var("HOME").map_or_else(
-                |_| input.to_string(),
-                |home| {
-                    if rest.is_empty() {
-                        home
-                    } else {
-                        format!("{home}{rest}")
-                    }
-                },
-            )
-        },
-    );
+    // Only expand a leading `~` when it is the whole token (`~`) or introduces
+    // the current user's home (`~/…`). A `~user/…` form (another user's home) is
+    // left untouched rather than silently mis-joined onto $HOME — otherwise
+    // `~alice/x` would become `${HOME}alice/x` (e.g. `/home/mealice/x`), a wrong
+    // path. Most shells pre-expand `~user`; a literal that still reaches us
+    // should surface as a clear "path does not exist" error, not a wrong path.
+    let expanded = if input == "~" || input.starts_with("~/") {
+        std::env::var("HOME").map_or_else(
+            |_| input.to_string(),
+            // `input[1..]` keeps the leading '/' for `~/…` and is "" for `~`.
+            |home| format!("{home}{}", &input[1..]),
+        )
+    } else {
+        input.to_string()
+    };
     PathBuf::from(expanded)
 }
 
@@ -819,6 +819,27 @@ mod tests {
             panic!("expected Local");
         };
         assert_eq!(path, PathBuf::from("C:\\skills"));
+    }
+
+    #[test]
+    fn local_tilde_current_user_expands() {
+        if let Ok(home) = std::env::var("HOME") {
+            let ParsedSource::Local { path } = parse_source("~/my-skills").unwrap() else {
+                panic!("expected Local");
+            };
+            assert_eq!(path, PathBuf::from(format!("{home}/my-skills")));
+        }
+    }
+
+    #[test]
+    fn local_tilde_other_user_is_left_literal() {
+        // `~user/…` must not be silently mis-joined onto $HOME (regression: it
+        // previously produced `${HOME}user/…`, e.g. `/home/mealice/x`). It stays
+        // literal so a missing path fails clearly instead of resolving elsewhere.
+        let ParsedSource::Local { path } = parse_source("~alice/my-skills").unwrap() else {
+            panic!("expected Local");
+        };
+        assert_eq!(path, PathBuf::from("~alice/my-skills"));
     }
 
     #[test]

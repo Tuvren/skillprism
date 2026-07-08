@@ -177,6 +177,11 @@ pub fn run_update(
             .filter_map(|name| {
                 let found = all_skills.iter().find(|s| s.name == *name);
                 if found.is_none() {
+                    // `update` is intentionally lenient/idempotent about an
+                    // absent named skill (warn + skip, exit 0) — unlike `remove`,
+                    // which treats a missing named target as an error (exit 1)
+                    // per the DIST-I004 Gherkin. Updating "everything I have"
+                    // where one name is already gone is not a failure.
                     eprintln!("Skill `{name}` is not installed, skipping");
                 }
                 found.cloned()
@@ -511,6 +516,12 @@ fn update_skillprism_skill(
             &mut skip_all,
         )?;
 
+        // Known gap (tracked follow-up): re-render/re-record every sidecar the
+        // current version produces, but do not prune a sidecar that existed in a
+        // prior version and vanished upstream. Its old `files[]` record is
+        // dropped (filtered by `updated_prefixes`) yet the file stays on disk as
+        // an untracked orphan. Assets are pruned (`update_asset_dir`); sidecars
+        // are not, since they are not confined to a scannable asset directory.
         for sidecar in &output.sidecars {
             let sidecar_path = resolve_sidecar_path(
                 skill_path_buf.parent().unwrap(),
