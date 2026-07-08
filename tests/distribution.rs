@@ -280,6 +280,62 @@ fn distribution_remove_nonexistent_skill_fails() {
     );
 }
 
+#[test]
+fn distribution_add_root_plain_skill_names_from_repo_slug() {
+    // Regression: a plain SKILL.md at a fetched repo root must be named from the
+    // repo slug, not the opaque temp clone dir (`skillprism-clone-<pid>-…`).
+    let project = tempfile::TempDir::with_prefix("skillprism_rootname_project_").unwrap();
+    fs::write(
+        project.path().join("skillprism.yaml"),
+        "name: rootname-test\nharnesses:\n  - claude\nskills_dir: skills\n",
+    )
+    .unwrap();
+    let source = tempfile::TempDir::with_prefix("skillprism_rootskill_").unwrap();
+    fs::write(
+        source.path().join("SKILL.md"),
+        "---\nname: ignored-by-plain\ndescription: A root-level plain skill\n---\n# Root skill\n",
+    )
+    .unwrap();
+    let state = tempfile::TempDir::with_prefix("skillprism_rootname_state_").unwrap();
+
+    init_git_repo(source.path());
+    commit_all(source.path(), "root skill");
+
+    let slug = source
+        .path()
+        .file_name()
+        .unwrap()
+        .to_string_lossy()
+        .to_string();
+    let source_url = format!("file://{}", source.path().display());
+
+    let mut add_cmd = Command::cargo_bin("skillprism").unwrap();
+    add_cmd
+        .current_dir(project.path())
+        .env("XDG_CONFIG_HOME", state.path())
+        .arg("add")
+        .arg(&source_url)
+        .arg("--force");
+    add_cmd.assert().success();
+
+    // Installed under the repo slug, never the temp clone basename.
+    let installed = project
+        .path()
+        .join(format!(".claude/skills/{slug}/SKILL.md"));
+    assert!(
+        installed.exists(),
+        "skill should install under repo slug `{slug}`, missing at {}",
+        installed.display()
+    );
+    for entry in fs::read_dir(project.path().join(".claude/skills")).unwrap() {
+        let name = entry.unwrap().file_name().to_string_lossy().to_string();
+        assert!(
+            !name.starts_with("skillprism-clone"),
+            "skill dir should not be named after the temp clone dir, got `{name}`"
+        );
+    }
+}
+
 fn init_git_repo(path: &Path) {
     run_git(path, &["init"])
         .args(["--initial-branch", "main"])

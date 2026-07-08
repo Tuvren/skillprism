@@ -312,8 +312,25 @@ fn install_discovered_skills(
     let mut skip_all = false;
 
     for skill_dir in filtered {
-        let name = skill_dir_name(&skill_dir);
-        eprintln!("Installing {name}...");
+        // A plain skill whose SKILL.md sits at the fetched repo root has, as its
+        // on-disk directory, the opaque temp clone dir (`skillprism-clone-…`).
+        // Naming it from that basename would record a garbage, non-deterministic
+        // name, so derive it from the repo slug instead. This applies only to
+        // remote sources with no subpath (a local path's or a subpath dir's
+        // basename is already meaningful; skillprism skills take their name from
+        // `skill.yaml` regardless).
+        let name_override = if skill_dir.as_path() == source_path
+            && source_type != SourceType::Local
+            && !source_has_subpath(&ctx.parsed)
+        {
+            repo_slug_from_url(source_url)
+        } else {
+            None
+        };
+        let display_name = name_override
+            .clone()
+            .unwrap_or_else(|| skill_dir_name(&skill_dir));
+        eprintln!("Installing {display_name}...");
         let format = detect_format(&skill_dir)?;
         let record = match format {
             SkillFormat::Skillprism => install_skillprism_skill(
@@ -334,6 +351,7 @@ fn install_discovered_skills(
                 r#ref,
                 resolved_ref.clone(),
                 skill_path,
+                name_override.as_deref(),
                 &mut skip_all,
             )?,
         };
@@ -367,6 +385,29 @@ fn skill_filter_from_parsed(parsed: &ParsedSource) -> Option<String> {
         }
         _ => None,
     }
+}
+
+const fn source_has_subpath(parsed: &ParsedSource) -> bool {
+    matches!(
+        parsed,
+        ParsedSource::GitHub {
+            subpath: Some(_),
+            ..
+        } | ParsedSource::GitLab {
+            subpath: Some(_),
+            ..
+        }
+    )
+}
+
+/// Derives a human-meaningful skill name from a remote repo URL: the last path
+/// segment, minus a trailing `.git`. Used for a plain skill that lives at the
+/// fetched repository root, whose on-disk directory is an opaque temp clone dir
+/// (`skillprism-clone-…`) rather than a meaningful name.
+fn repo_slug_from_url(url: &str) -> Option<String> {
+    let last = url.trim_end_matches('/').rsplit(['/', ':']).next()?;
+    let slug = last.strip_suffix(".git").unwrap_or(last);
+    (!slug.is_empty()).then(|| slug.to_string())
 }
 
 pub fn skill_dir_name(dir: &Path) -> String {
@@ -554,9 +595,10 @@ fn install_plain_skill(
     r#ref: Option<&String>,
     resolved_ref: Option<String>,
     skill_path: Option<&String>,
+    name_override: Option<&str>,
     skip_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
-    let skill_name = skill_dir_name(skill_dir);
+    let skill_name = name_override.map_or_else(|| skill_dir_name(skill_dir), str::to_string);
     let template = crate::loader::find_template_path(skill_dir)
         .map_err(InstallError::Project)?
         .ok_or_else(|| InstallError::NoSkillsFound {
@@ -952,6 +994,32 @@ fn hex_encode(bytes: &[u8]) -> String {
 mod tests {
     use super::*;
     use std::io::Write;
+
+    #[test]
+    fn repo_slug_from_url_extracts_last_segment() {
+        assert_eq!(
+            repo_slug_from_url("https://github.com/owner/repo"),
+            Some("repo".to_string())
+        );
+        assert_eq!(
+            repo_slug_from_url("https://github.com/owner/repo.git"),
+            Some("repo".to_string())
+        );
+        assert_eq!(
+            repo_slug_from_url("https://gitlab.com/group/sub/proj.git/"),
+            Some("proj".to_string())
+        );
+        // scp-like SSH form: last segment sits after the `:`.
+        assert_eq!(
+            repo_slug_from_url("git@github.com:owner/repo.git"),
+            Some("repo".to_string())
+        );
+        assert_eq!(
+            repo_slug_from_url("file:///tmp/my-skill-repo"),
+            Some("my-skill-repo".to_string())
+        );
+        assert_eq!(repo_slug_from_url(""), None);
+    }
 
     #[test]
     fn copy_dir_materializes_in_tree_symlink() {

@@ -59,8 +59,14 @@ pub enum SourceParseError {
 /// history.
 pub fn mask_credentials(source: &str) -> String {
     if let Some((scheme, rest)) = source.split_once("://") {
-        if let Some((_, path)) = rest.split_once('@') {
-            return format!("{scheme}://***@{path}");
+        // Userinfo (credentials) lives in the authority, before the first '/'.
+        // An '@' that appears later is part of the path and must NOT be treated
+        // as a credential separator — otherwise the real host gets hidden (e.g.
+        // `https://host/a/b@c` would wrongly render as `https://***@c`).
+        let authority_end = rest.find('/').unwrap_or(rest.len());
+        if let Some(at) = rest[..authority_end].find('@') {
+            let host_and_path = &rest[at + 1..];
+            return format!("{scheme}://***@{host_and_path}");
         }
     }
     source.to_string()
@@ -819,6 +825,21 @@ mod tests {
             panic!("expected Local");
         };
         assert_eq!(path, PathBuf::from("C:\\skills"));
+    }
+
+    #[test]
+    fn mask_credentials_redacts_userinfo_only() {
+        assert_eq!(
+            mask_credentials("https://token@github.com/owner/repo.git"),
+            "https://***@github.com/owner/repo.git"
+        );
+        // An '@' in the path must not hide the host.
+        assert_eq!(
+            mask_credentials("https://github.com/owner/repo@v1"),
+            "https://github.com/owner/repo@v1"
+        );
+        // No credentials, no scheme → unchanged.
+        assert_eq!(mask_credentials("owner/repo"), "owner/repo");
     }
 
     #[test]

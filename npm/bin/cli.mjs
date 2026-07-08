@@ -166,8 +166,22 @@ async function extractTarXz(tarXzPath, destDir) {
   });
 }
 
+function sanitizeVersion(version) {
+  // A user-supplied SKILLPRISM_VERSION flows into both a cache file path and the
+  // download URL, so reject anything that isn't a plain semver-ish token before
+  // it can introduce `../` path traversal or URL trickery.
+  if (!/^v?\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(version)) {
+    throw new Error(
+      `Invalid SKILLPRISM_VERSION "${version}". Expected a version like 0.1.0.`
+    );
+  }
+  return version.replace(/^v/, "");
+}
+
 async function run() {
-  const version = process.env.SKILLPRISM_VERSION || (await getLatestVersion());
+  const version = process.env.SKILLPRISM_VERSION
+    ? sanitizeVersion(process.env.SKILLPRISM_VERSION)
+    : await getLatestVersion();
   const binaryPath = getBinaryPath(version);
 
   if (!existsSync(binaryPath)) {

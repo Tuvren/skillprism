@@ -198,6 +198,13 @@ fn maybe_checkout_sha(guard: CloneGuard, r#ref: Option<&str>) -> Result<PathBuf,
 pub fn git_remote_head(url: &str, r#ref: &str) -> Result<Option<String>, NetworkError> {
     let output = run_git_output(&["ls-remote".to_string(), url.to_string(), r#ref.to_string()])?;
 
+    // Known tradeoff: we take the first `ls-remote` line. For an *annotated* tag
+    // that is the tag-object SHA (`refs/tags/x`), not the commit it peels to
+    // (`refs/tags/x^{}`), whereas the stored `resolved_ref` is the commit SHA.
+    // So the cheap no-op short-circuit in `update` misses for annotated tags and
+    // falls through to a full clone — which still renders the same bytes and
+    // reports "up to date", so the end state is correct, only slower. Branches
+    // and lightweight tags resolve straight to the commit and hit the fast path.
     for line in output.lines() {
         let mut parts = line.split_whitespace();
         if let Some(sha) = parts.next() {
