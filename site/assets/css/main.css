@@ -777,8 +777,9 @@ body.sidebar-open .docs-backdrop { display: block; }
   margin: 0;
   border: 1px solid var(--rule);
   background:
-    radial-gradient(ellipse 55% 50% at 54% 50%, color-mix(in srgb, var(--sodium) 8%, transparent), transparent 70%),
-    linear-gradient(160deg, color-mix(in srgb, var(--panel) 90%, #1a1e2c), var(--ink-2));
+    radial-gradient(ellipse 62% 58% at 48% 52%, color-mix(in srgb, var(--sodium) 10%, transparent), transparent 68%),
+    radial-gradient(ellipse 45% 40% at 72% 48%, color-mix(in srgb, #6c8ae6 6%, transparent), transparent 70%),
+    linear-gradient(165deg, color-mix(in srgb, var(--panel) 88%, #1a1e2c), var(--ink-2));
   box-shadow:
     0 30px 80px rgba(0, 0, 0, 0.45),
     inset 0 1px 0 color-mix(in srgb, var(--paper) 6%, transparent);

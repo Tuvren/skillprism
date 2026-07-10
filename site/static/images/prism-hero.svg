@@ -1,1 +1,93 @@
-<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1600 900' fill='none' role='presentation'><defs><radialGradient id='bg' cx='50%' cy='48%' r='72%'><stop offset='0%' stop-color='#141820'/><stop offset='55%' stop-color='#0a0c12'/><stop offset='100%' stop-color='#06070a'/></radialGradient><radialGradient id='haze' cx='58%' cy='50%' r='42%'><stop offset='0%' stop-color='#ffb020' stop-opacity='0.14'/><stop offset='45%' stop-color='#6c8ae6' stop-opacity='0.06'/><stop offset='100%' stop-color='#08090e' stop-opacity='0'/></radialGradient><linearGradient id='beamIn' x1='0' y1='0' x2='1' y2='0'><stop offset='0%' stop-color='#e8e4da' stop-opacity='0'/><stop offset='35%' stop-color='#e8e4da' stop-opacity='0.12'/><stop offset='78%' stop-color='#f4f0e6' stop-opacity='0.85'/><stop offset='100%' stop-color='#fff8ee' stop-opacity='1'/></linearGradient><linearGradient id='glassFace' x1='0.15' y1='0' x2='0.85' y2='1'><stop offset='0%' stop-color='#2a3040' stop-opacity='0.92'/><stop offset='45%' stop-color='#12151e' stop-opacity='0.78'/><stop offset='100%' stop-color='#0a0c12' stop-opacity='0.88'/></linearGradient><linearGradient id='glassEdge' x1='0' y1='0' x2='0' y2='1'><stop offset='0%' stop-color='#ffe4a8'/><stop offset='50%' stop-color='#ffb020'/><stop offset='100%' stop-color='#8a5520'/></linearGradient><linearGradient id='spectrum' x1='0' y1='0' x2='1' y2='0'><stop offset='0%' stop-color='#ff3b3b'/><stop offset='16%' stop-color='#ff7a2f'/><stop offset='32%' stop-color='#ffc83d'/><stop offset='48%' stop-color='#3ecf8e'/><stop offset='64%' stop-color='#4f8cff'/><stop offset='80%' stop-color='#7b5cff'/><stop offset='100%' stop-color='#c44dff'/></linearGradient><filter id='glowSoft' x='-80%' y='-80%' width='260%' height='260%'><feGaussianBlur stdDeviation='6' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter><filter id='glowWide' x='-100%' y='-100%' width='300%' height='300%'><feGaussianBlur stdDeviation='18' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter><filter id='glowTight' x='-50%' y='-50%' width='200%' height='200%'><feGaussianBlur stdDeviation='2.5' result='b'/><feMerge><feMergeNode in='b'/><feMergeNode in='SourceGraphic'/></feMerge></filter><filter id='grain' x='0' y='0' width='100%' height='100%'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch' result='n'/><feColorMatrix type='matrix' values='0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.035 0' in='n' result='g'/><feBlend in='SourceGraphic' in2='g' mode='overlay'/></filter><clipPath id='frame'><rect width='1600' height='900'/></clipPath></defs><g clip-path='url(#frame)' filter='url(#grain)'><rect width='1600' height='900' fill='url(#bg)'/><rect width='1600' height='900' fill='url(#haze)'/><line x1='120' y1='620' x2='1480' y2='620' stroke='#8b90a0' stroke-opacity='0.06' stroke-width='1'/><g filter='url(#glowWide)' opacity='0.55'><line x1='80' y1='450' x2='700' y2='450' stroke='#f4f0e6' stroke-width='14' stroke-linecap='round' opacity='0.18'/></g><g filter='url(#glowSoft)'><line x1='120' y1='450' x2='700' y2='450' stroke='url(#beamIn)' stroke-width='5' stroke-linecap='round'/><line x1='120' y1='450' x2='700' y2='450' stroke='#fff8ee' stroke-width='1.2' stroke-linecap='round' opacity='0.9'/></g><circle cx='700' cy='450' r='5' fill='#fff8ee' filter='url(#glowTight)'/><g transform='translate(700 450)'><polygon points='0,-155 0,155 268,0' fill='none' stroke='#ff4444' stroke-width='2.2' stroke-linejoin='round' opacity='0.22' transform='translate(-1.5 0)'/><polygon points='0,-155 0,155 268,0' fill='none' stroke='#44aaff' stroke-width='2.2' stroke-linejoin='round' opacity='0.18' transform='translate(1.5 0)'/><polygon points='0,-155 0,155 268,0' fill='url(#glassFace)' stroke='url(#glassEdge)' stroke-width='1.8' stroke-linejoin='round' filter='url(#glowSoft)'/><polygon points='18,-128 18,128 220,0' fill='#ffb020' opacity='0.05'/><line x1='0' y1='-155' x2='268' y2='0' stroke='#ffe4a8' stroke-width='1' opacity='0.45'/><line x1='0' y1='155' x2='268' y2='0' stroke='#c47a18' stroke-width='1' opacity='0.35'/><line x1='0' y1='0' x2='268' y2='0' stroke='#e8e4da' stroke-width='0.6' opacity='0.25'/><circle cx='268' cy='0' r='28' fill='#ffb020' opacity='0.08' filter='url(#glowWide)'/><circle cx='268' cy='0' r='6' fill='#fff8ee' opacity='0.65' filter='url(#glowTight)'/></g><g transform='translate(968 450)' filter='url(#glowSoft)'><path d='M0 0 L520 -200' stroke='#ff3b3b' stroke-width='3.2' stroke-linecap='round' opacity='0.92'/><path d='M0 0 L540 -148' stroke='#ff6a2f' stroke-width='3.1' stroke-linecap='round' opacity='0.9'/><path d='M0 0 L552 -96' stroke='#ffaa30' stroke-width='3' stroke-linecap='round' opacity='0.9'/><path d='M0 0 L560 -48' stroke='#ffd84a' stroke-width='2.9' stroke-linecap='round' opacity='0.88'/><path d='M0 0 L566 0' stroke='#3ecf8e' stroke-width='2.8' stroke-linecap='round' opacity='0.88'/><path d='M0 0 L560 48' stroke='#4f8cff' stroke-width='2.9' stroke-linecap='round' opacity='0.9'/><path d='M0 0 L552 96' stroke='#5b6dff' stroke-width='3' stroke-linecap='round' opacity='0.9'/><path d='M0 0 L540 148' stroke='#7b5cff' stroke-width='3.1' stroke-linecap='round' opacity='0.92'/><path d='M0 0 L520 200' stroke='#c44dff' stroke-width='3.2' stroke-linecap='round' opacity='0.92'/><path d='M0 0 L566 0' stroke='#ffffff' stroke-width='0.8' stroke-linecap='round' opacity='0.35'/></g><g transform='translate(968 450)' opacity='0.45' filter='url(#glowWide)'><path d='M0 0 L500 -190' stroke='#ff3b3b' stroke-width='10' stroke-linecap='round' opacity='0.12'/><path d='M0 0 L500 190' stroke='#c44dff' stroke-width='10' stroke-linecap='round' opacity='0.12'/><path d='M0 0 L560 0' stroke='#4f8cff' stroke-width='12' stroke-linecap='round' opacity='0.1'/></g><ellipse cx='1180' cy='450' rx='220' ry='160' fill='url(#spectrum)' opacity='0.04' filter='url(#glowWide)'/></g></svg>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none">
+  <defs>
+    <radialGradient id="lamp" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="10%" stop-color="#fffaf2"/>
+      <stop offset="35%" stop-color="#f0e6d4" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#ffb020" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="beam" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#e8e4da" stop-opacity="0"/>
+      <stop offset="20%" stop-color="#e8e4da" stop-opacity="0.15"/>
+      <stop offset="68%" stop-color="#fff8ee" stop-opacity="0.9"/>
+      <stop offset="100%" stop-color="#ffffff"/>
+    </linearGradient>
+    <linearGradient id="glass" x1="0.05" y1="0" x2="0.95" y2="1">
+      <stop offset="0%" stop-color="#d8e0f0" stop-opacity="0.18"/>
+      <stop offset="45%" stop-color="#4a5568" stop-opacity="0.42"/>
+      <stop offset="100%" stop-color="#10141c" stop-opacity="0.78"/>
+    </linearGradient>
+    <linearGradient id="fadeR" x1="880" y1="0" x2="1580" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="72%" stop-color="#ffffff"/>
+      <stop offset="100%" stop-color="#000000"/>
+    </linearGradient>
+    <mask id="rayMask"><rect width="1600" height="900" fill="url(#fadeR)"/></mask>
+    <filter id="b5" x="-70%" y="-70%" width="240%" height="240%"><feGaussianBlur stdDeviation="5"/></filter>
+    <filter id="b12" x="-85%" y="-85%" width="270%" height="270%"><feGaussianBlur stdDeviation="12"/></filter>
+    <filter id="b22" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="22"/></filter>
+    <filter id="b2" x="-45%" y="-45%" width="190%" height="190%"><feGaussianBlur stdDeviation="2"/></filter>
+    <filter id="hot" x="-120%" y="-120%" width="340%" height="340%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="4.5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <clipPath id="c"><rect width="1600" height="900"/></clipPath>
+  </defs>
+
+  <g clip-path="url(#c)">
+    <!-- beam -->
+    <circle cx="128" cy="450" r="88" fill="url(#lamp)" filter="url(#b22)" opacity="0.8"/>
+    <line x1="36" y1="450" x2="648" y2="450" stroke="#fff8ee" stroke-width="26" stroke-linecap="round" opacity="0.055" filter="url(#b12)"/>
+    <line x1="88" y1="450" x2="648" y2="450" stroke="#fff8ee" stroke-width="7.5" stroke-linecap="round" opacity="0.11" filter="url(#b5)"/>
+    <line x1="108" y1="450" x2="648" y2="450" stroke="url(#beam)" stroke-width="3" stroke-linecap="round" filter="url(#hot)"/>
+    <line x1="108" y1="450" x2="648" y2="450" stroke="#ffffff" stroke-width="0.8" stroke-linecap="round"/>
+
+    <!-- prism -->
+    <g transform="translate(648 450)">
+      <polygon points="0,-178 0,178 286,0" fill="url(#glass)"/>
+      <line x1="24" y1="-62" x2="238" y2="-12" stroke="#ff7070" stroke-width="0.7" opacity="0.22"/>
+      <line x1="24" y1="-8" x2="248" y2="0" stroke="#88ffcc" stroke-width="0.7" opacity="0.2"/>
+      <line x1="24" y1="48" x2="238" y2="14" stroke="#7098ff" stroke-width="0.7" opacity="0.2"/>
+      <polygon points="0,-178 0,178 286,0" fill="none" stroke="#ffffff" stroke-width="0.9" opacity="0.22"/>
+      <line x1="0" y1="-178" x2="286" y2="0" stroke="#ffffff" stroke-width="1.1" opacity="0.42"/>
+      <line x1="0" y1="178" x2="286" y2="0" stroke="#ffffff" stroke-width="0.65" opacity="0.22"/>
+      <polygon points="10,-150 10,150 36,0" fill="#ffffff" opacity="0.05"/>
+      <circle cx="0" cy="0" r="3" fill="#ffffff" filter="url(#hot)"/>
+      <circle cx="286" cy="0" r="16" fill="#ffffff" opacity="0.09" filter="url(#b5)"/>
+      <circle cx="286" cy="0" r="3.5" fill="#fffaf2"/>
+    </g>
+
+    <!-- spectrum -->
+    <g transform="translate(934 450)" mask="url(#rayMask)">
+      <g filter="url(#b12)" opacity="0.62">
+        <line x1="0" y1="0" x2="640" y2="-255" stroke="#ff2a2a" stroke-width="5.5" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="652" y2="-218" stroke="#ff5520" stroke-width="5.2" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="660" y2="-180" stroke="#ff8520" stroke-width="5" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="666" y2="-142" stroke="#ffad28" stroke-width="4.8" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="670" y2="-104" stroke="#ffd040" stroke-width="4.6" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="672" y2="-66" stroke="#ffe870" stroke-width="4.4" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="672" y2="-28" stroke="#c8f0a0" stroke-width="4.2" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="670" y2="10" stroke="#68e8a8" stroke-width="4.2" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="666" y2="48" stroke="#40d8c8" stroke-width="4.4" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="660" y2="86" stroke="#48a8ff" stroke-width="4.6" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="652" y2="124" stroke="#5080ff" stroke-width="4.8" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="640" y2="162" stroke="#6868ff" stroke-width="5" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="624" y2="198" stroke="#8858ff" stroke-width="5.2" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="604" y2="232" stroke="#b048ff" stroke-width="5.5" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="580" y2="262" stroke="#d038ff" stroke-width="5.8" stroke-linecap="round"/>
+      </g>
+      <g filter="url(#b2)" opacity="0.88">
+        <line x1="0" y1="0" x2="640" y2="-255" stroke="#ff7777" stroke-width="1.1" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="660" y2="-180" stroke="#ffaa55" stroke-width="1" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="672" y2="-66" stroke="#ffe880" stroke-width="0.95" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="670" y2="10" stroke="#77ffbb" stroke-width="0.95" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="660" y2="86" stroke="#77aaff" stroke-width="1" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="624" y2="198" stroke="#aa77ff" stroke-width="1.1" stroke-linecap="round"/>
+        <line x1="0" y1="0" x2="580" y2="262" stroke="#cc66ff" stroke-width="1.15" stroke-linecap="round"/>
+      </g>
+    </g>
+
+    <ellipse cx="1040" cy="562" rx="280" ry="18" fill="#6b8cff" opacity="0.03" filter="url(#b22)"/>
+  </g>
+</svg>
