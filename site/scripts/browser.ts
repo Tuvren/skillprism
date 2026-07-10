@@ -13,7 +13,19 @@ import { execSync } from "child_process";
  */
 export function resolveBrowser(): string | undefined {
   const override = process.env.BROWSER?.trim();
-  if (override) return override;
+  if (override) {
+    // Puppeteer spawns executablePath directly and does not PATH-resolve a bare
+    // binary name, so resolve one here. An explicit path is used as-is; an
+    // unresolvable name is returned verbatim to surface a clear error.
+    if (override.includes("/")) return override;
+    try {
+      const path = execSync(`command -v ${override}`, { encoding: "utf8" }).trim();
+      if (path) return path;
+    } catch {
+      // not on PATH — honour the explicit choice and let puppeteer report it
+    }
+    return override;
+  }
 
   const candidates = [
     "brave",
