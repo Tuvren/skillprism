@@ -561,7 +561,6 @@ body.sidebar-open .docs-backdrop { display: block; }
   margin: 0;
   max-width: 36rem;
 }
-.docs-body > h1:first-child { display: none; }
 .docs-body.prose h2 {
   margin: 2.75rem 0 1rem;
   padding: 0 0 0.65rem;

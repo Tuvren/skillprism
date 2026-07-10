@@ -4,9 +4,6 @@ description: "An honest comparison of two approaches to agent skill management"
 group: "Guides"
 weight: 110
 ---
-
-# skillprism vs Vercel Skills CLI
-
 [Vercel's Skills CLI](https://github.com/vercel-labs/skills) (`npx vercel-skills`) is another tool for working with agent skills. Both tools install skills and manage their lifecycle, but they take fundamentally different approaches.
 
 ## Philosophy

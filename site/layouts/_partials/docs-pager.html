@@ -1,13 +1,6 @@
-{{ $pages := where .Site.RegularPages "Section" "docs" }}
-{{ $pages = $pages.ByWeight }}
-{{ $currentIndex := 0 }}
-{{ range $i, $page := $pages }}
-  {{ if eq $page.RelPermalink $.RelPermalink }}
-    {{ $currentIndex = $i }}
-  {{ end }}
-{{ end }}
-{{ $prev := index $pages (sub $currentIndex 1) }}
-{{ $next := index $pages (add $currentIndex 1) }}
+{{ $pages := .CurrentSection.RegularPages.ByWeight.Reverse }}
+{{ $prev := $pages.Prev . }}
+{{ $next := $pages.Next . }}
 {{ if or $prev $next }}
 <nav class="docs-pager" aria-label="Page navigation">
   {{ with $prev }}

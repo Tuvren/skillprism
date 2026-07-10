@@ -4,9 +4,6 @@ description: "Installing, listing, updating, and removing skills"
 group: "Guides"
 weight: 90
 ---
-
-# Distribution
-
 skillprism's distribution commands let you install skills from remote Git repositories or local paths, manage their lifecycle, and keep them up to date — all with per-harness rendering built in.
 
 ## Prerequisites

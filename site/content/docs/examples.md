@@ -4,9 +4,6 @@ description: "Real skills compiled across harnesses"
 group: "Guides"
 weight: 100
 ---
-
-# Examples
-
 The [`examples/`](https://github.com/tuvren/skillprism/tree/master/examples) directory in the repo contains three skills that exercise skillprism's mechanics:
 
 ## quickstart

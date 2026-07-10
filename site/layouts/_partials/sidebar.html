@@ -2,8 +2,7 @@
   <nav class="sidebar-nav">
     {{ $current := .RelPermalink }}
     {{ $groups := slice "Get started" "Authoring" "Reference" "Guides" }}
-    {{ $pages := where .Site.RegularPages "Section" "docs" }}
-    {{ $pages = $pages.ByWeight }}
+    {{ $pages := .CurrentSection.RegularPages.ByWeight }}
     {{ range $groups }}
       {{ $group := . }}
       {{ $groupPages := where $pages "Params.group" $group }}

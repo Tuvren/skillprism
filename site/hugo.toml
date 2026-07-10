@@ -3,6 +3,20 @@ locale = "en-us"
 title = "skillprism"
 description = "Distribution CLI with per-harness templating for agent skills."
 enableRobotsTXT = true
+disableKinds = ["taxonomy", "term"]
+
+[[menus.main]]
+name = "Docs"
+pageRef = "/docs"
+weight = 10
+
+[[menus.main]]
+name = "GitHub"
+url = "https://github.com/tuvren/skillprism"
+weight = 20
+[menus.main.params]
+external = true
+
 
 [markup.highlight]
 style = "github-dark"
