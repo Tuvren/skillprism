@@ -428,6 +428,12 @@ hr { border: none; border-top: 1px solid var(--rule-soft); margin: 2.5rem 0; }
   opacity: 0.55;
   flex-shrink: 0;
 }
+/* external-link icon inside prose (render-link hook), aligned to the text baseline */
+.link-external-icon {
+  opacity: 0.55;
+  margin-left: 0.15em;
+  vertical-align: -0.05em;
+}
 .sidebar-toggle {
   display: none;
   flex-shrink: 0;

@@ -1,8 +1,9 @@
+// Local visual-QA helper. Requires `puppeteer` (install: `bun add -d puppeteer`)
+// and a Chromium-family browser resolved from $BROWSER or PATH (see ./browser).
 import puppeteer from "puppeteer";
 import { mkdirSync } from "fs";
-import { execSync } from "child_process";
+import { resolveBrowser } from "./browser";
 
-const brave = execSync("command -v brave", { encoding: "utf8" }).trim();
 const out = new URL("../.preview", import.meta.url).pathname;
 const base = process.env.PREVIEW_BASE ?? "http://localhost:1314/skillprism";
 
@@ -20,7 +21,7 @@ const pages = [
 type LayoutIssue = { page: string; check: string; detail: string };
 
 const browser = await puppeteer.launch({
-  executablePath: brave,
+  executablePath: resolveBrowser(),
   headless: true,
   args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
 });
