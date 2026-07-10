@@ -1,6 +1,8 @@
 ---
 title: "Harnesses"
 description: "The 5 built-in harnesses, custom harnesses, capability gating"
+group: "Authoring"
+weight: 60
 ---
 
 # Harnesses

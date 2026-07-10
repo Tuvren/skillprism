@@ -1,6 +1,8 @@
 ---
 title: "CLI reference"
 description: "Complete command and flag reference"
+group: "Reference"
+weight: 70
 ---
 
 # CLI reference

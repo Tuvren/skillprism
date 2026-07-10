@@ -1,6 +1,8 @@
 ---
 title: "skill.yaml reference"
 description: "Every metadata field and what it does"
+group: "Authoring"
+weight: 40
 ---
 
 # skill.yaml reference

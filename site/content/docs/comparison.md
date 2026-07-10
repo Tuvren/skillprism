@@ -1,6 +1,8 @@
 ---
 title: "skillprism vs Vercel Skills CLI"
 description: "An honest comparison of two approaches to agent skill management"
+group: "Guides"
+weight: 110
 ---
 
 # skillprism vs Vercel Skills CLI

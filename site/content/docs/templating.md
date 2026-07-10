@@ -1,6 +1,8 @@
 ---
 title: "Templating"
 description: "MiniJinja built-ins, variables, harness macros, per-harness overrides"
+group: "Authoring"
+weight: 50
 ---
 
 # Templating

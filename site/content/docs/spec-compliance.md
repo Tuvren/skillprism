@@ -1,6 +1,8 @@
 ---
 title: "Spec compliance"
 description: "How skillprism maps to the Agent Skills spec"
+group: "Reference"
+weight: 80
 ---
 
 # Spec compliance

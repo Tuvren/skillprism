@@ -1,6 +1,8 @@
 ---
 title: "Quickstart"
 description: "Create your first skill and build it end-to-end"
+group: "Get started"
+weight: 20
 ---
 
 # Quickstart

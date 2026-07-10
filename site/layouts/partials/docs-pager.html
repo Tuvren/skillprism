@@ -1,0 +1,28 @@
+{{ $pages := where .Site.RegularPages "Section" "docs" }}
+{{ $pages = $pages.ByWeight }}
+{{ $currentIndex := 0 }}
+{{ range $i, $page := $pages }}
+  {{ if eq $page.RelPermalink $.RelPermalink }}
+    {{ $currentIndex = $i }}
+  {{ end }}
+{{ end }}
+{{ $prev := index $pages (sub $currentIndex 1) }}
+{{ $next := index $pages (add $currentIndex 1) }}
+{{ if or $prev $next }}
+<nav class="docs-pager" aria-label="Page navigation">
+  {{ with $prev }}
+  <a class="docs-pager-prev" href="{{ .RelPermalink }}">
+    <span class="docs-pager-dir">Previous</span>
+    <span class="docs-pager-title">{{ .Title }}</span>
+  </a>
+  {{ else }}
+  <span></span>
+  {{ end }}
+  {{ with $next }}
+  <a class="docs-pager-next" href="{{ .RelPermalink }}">
+    <span class="docs-pager-dir">Next</span>
+    <span class="docs-pager-title">{{ .Title }}</span>
+  </a>
+  {{ end }}
+</nav>
+{{ end }}

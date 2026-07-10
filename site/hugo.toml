@@ -9,6 +9,10 @@ style = "github-dark"
 lineNos = false
 codeFences = true
 
+[markup.tableOfContents]
+startLevel = 2
+endLevel = 3
+
 [markup.goldmark.renderer]
 unsafe = true
 

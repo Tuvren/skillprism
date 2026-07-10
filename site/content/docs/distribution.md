@@ -1,6 +1,8 @@
 ---
 title: "Distribution"
 description: "Installing, listing, updating, and removing skills"
+group: "Guides"
+weight: 90
 ---
 
 # Distribution

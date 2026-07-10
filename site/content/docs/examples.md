@@ -1,6 +1,8 @@
 ---
 title: "Examples"
 description: "Real skills compiled across harnesses"
+group: "Guides"
+weight: 100
 ---
 
 # Examples
