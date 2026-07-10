@@ -1,0 +1,17 @@
+{{ define "main" }}
+<article class="docs-main">
+  <header class="docs-page-header">
+    {{ with .Params.group }}<p class="kicker">{{ . }}</p>{{ end }}
+    <h1 class="docs-title">{{ .Title }}</h1>
+    {{ with .Description }}<p class="docs-lede">{{ . }}</p>{{ end }}
+  </header>
+  <div class="docs-body prose">
+    {{ .Content }}
+  </div>
+  {{ partial "docs-pager.html" . }}
+</article>
+<aside class="docs-toc" aria-label="On this page">
+  <p class="kicker">On this page</p>
+  {{ .TableOfContents }}
+</aside>
+{{ end }}

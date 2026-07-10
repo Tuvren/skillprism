@@ -1,10 +1,9 @@
 ---
 title: "Templating"
 description: "MiniJinja built-ins, variables, harness macros, per-harness overrides"
+group: "Authoring"
+weight: 50
 ---
-
-# Templating
-
 `SKILL.md` is a [MiniJinja](https://docs.rs/minijinja) template — a Rust implementation of Jinja2 syntax. It's rendered once per configured harness, with the `skill.yaml` metadata and harness context available inside `{{ }}`.
 
 ## Built-in variables

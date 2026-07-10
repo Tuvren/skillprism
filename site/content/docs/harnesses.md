@@ -1,10 +1,9 @@
 ---
 title: "Harnesses"
 description: "The 5 built-in harnesses, custom harnesses, capability gating"
+group: "Authoring"
+weight: 60
 ---
-
-# Harnesses
-
 A harness is an agent product that reads skills. skillprism ships with 5 built-in harness definitions and supports custom ones.
 
 ## Built-in harnesses

@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" fill="none" role="img" aria-label="Optical schematic: one source ray refracts through a prism into labelled harness channels">
+  <defs>
+    <marker id="arw" markerWidth="11" markerHeight="11" refX="7.5" refY="3.6" orient="auto" markerUnits="userSpaceOnUse">
+      <path d="M0.5,0.6 L7.6,3.6 L0.5,6.6" fill="none" stroke="#ffb020" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+    <clipPath id="frame"><rect width="1600" height="900"/></clipPath>
+    <clipPath id="prismClip"><polygon points="700,248 502,660 898,660"/></clipPath>
+    <linearGradient id="glassFill" x1="0.3" y1="0" x2="0.7" y2="1">
+      <stop offset="0%" stop-color="#aab6e0" stop-opacity="0.11"/>
+      <stop offset="58%" stop-color="#12141c" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="#0a0e18" stop-opacity="0.16"/>
+    </linearGradient>
+  </defs>
+
+  <g clip-path="url(#frame)" font-family="'IBM Plex Mono','SFMono-Regular',ui-monospace,monospace">
+    <!-- transparent: the .refract card supplies background, border, shadow and glow -->
+
+    <!-- faint plotting grid -->
+    <g stroke="#e8e4da" opacity="0.04" stroke-width="1">
+      <line x1="0" y1="150" x2="1600" y2="150"/><line x1="0" y1="300" x2="1600" y2="300"/>
+      <line x1="0" y1="450" x2="1600" y2="450"/><line x1="0" y1="600" x2="1600" y2="600"/>
+      <line x1="0" y1="750" x2="1600" y2="750"/>
+      <line x1="200" y1="0" x2="200" y2="900"/><line x1="400" y1="0" x2="400" y2="900"/>
+      <line x1="600" y1="0" x2="600" y2="900"/><line x1="800" y1="0" x2="800" y2="900"/>
+      <line x1="1000" y1="0" x2="1000" y2="900"/><line x1="1200" y1="0" x2="1200" y2="900"/>
+      <line x1="1400" y1="0" x2="1400" y2="900"/>
+    </g>
+
+    <!-- diagram scaled up ~7% around its centre to fill the plate; grid + caption stay full-frame -->
+    <g transform="translate(795 452) scale(1.07) translate(-795 -452)">
+    <!-- ===== SOURCE (left) ===== -->
+    <g stroke="#e8e4da" fill="none">
+      <circle cx="150" cy="430" r="30" opacity="0.75" stroke-width="1.5"/>
+      <line x1="120" y1="430" x2="180" y2="430" opacity="0.5" stroke-width="1.1"/>
+      <line x1="150" y1="400" x2="150" y2="460" opacity="0.5" stroke-width="1.1"/>
+    </g>
+    <circle cx="150" cy="430" r="5" fill="#ffb020"/>
+    <text x="150" y="498" fill="#c5c0b4" font-size="22" letter-spacing="1.5" text-anchor="middle">SKILL.md</text>
+
+    <!-- collimated incident beam (two rails) source -> entry E(616,430) -->
+    <g stroke="#ffb020">
+      <line x1="188" y1="421" x2="600" y2="421" stroke-width="1.2" opacity="0.55"/>
+      <line x1="188" y1="439" x2="600" y2="439" stroke-width="1.2" opacity="0.55"/>
+      <line x1="188" y1="430" x2="604" y2="430" stroke-width="2" marker-end="url(#arw)"/>
+    </g>
+    <text x="384" y="408" fill="#8b90a0" font-size="19" letter-spacing="1" text-anchor="middle" font-style="italic">one source ray</text>
+
+    <!-- ===== PRISM  A(700,248) BL(502,660) BR(898,660) ===== -->
+    <!-- subtle glass body so the prism reads as an object on the card glow -->
+    <polygon points="700,248 502,660 898,660" fill="url(#glassFill)"/>
+    <g clip-path="url(#prismClip)" stroke="#e8e4da" opacity="0.10" stroke-width="1.1">
+      <line x1="470" y1="700" x2="700" y2="470"/><line x1="540" y1="700" x2="770" y2="470"/>
+      <line x1="610" y1="700" x2="840" y2="470"/><line x1="680" y1="700" x2="910" y2="470"/>
+      <line x1="750" y1="700" x2="980" y2="470"/><line x1="820" y1="700" x2="1050" y2="470"/>
+    </g>
+    <!-- prism outline -->
+    <polygon points="700,248 502,660 898,660" stroke="#e8e4da" stroke-width="2" opacity="0.95"/>
+    <!-- vertex plus-marks -->
+    <g stroke="#e8e4da" stroke-width="1.1" opacity="0.6">
+      <line x1="691" y1="248" x2="709" y2="248"/><line x1="700" y1="239" x2="700" y2="257"/>
+      <line x1="493" y1="660" x2="511" y2="660"/><line x1="502" y1="651" x2="502" y2="669"/>
+      <line x1="889" y1="660" x2="907" y2="660"/><line x1="898" y1="651" x2="898" y2="669"/>
+    </g>
+    <!-- apex angle arc + label -->
+    <path d="M676,304 A56,56 0 0 1 724,304" stroke="#5c6170" stroke-width="1.2" fill="none"/>
+    <text x="700" y="336" fill="#8b90a0" font-size="20" text-anchor="middle" font-style="italic">A</text>
+    <!-- index label -->
+    <text x="700" y="580" fill="#8b90a0" font-size="22" text-anchor="middle" font-style="italic">n</text>
+
+    <!-- entry normal (dashed construction) at E(616,430) -->
+    <line x1="522" y1="384" x2="712" y2="474" stroke="#5c6170" stroke-width="1.1" stroke-dasharray="6 5" opacity="0.85"/>
+    <circle cx="616" cy="430" r="4" fill="#ffb020"/>
+
+    <!-- internal refracted ray E(616,430) -> exit X(800,455) -->
+    <line x1="616" y1="430" x2="800" y2="455" stroke="#ffb020" stroke-width="2"/>
+    <circle cx="800" cy="455" r="4.5" fill="#ffb020"/>
+
+    <!-- ===== EXIT FAN X(800,455) -> ports (x=1230) ===== -->
+    <g stroke="#ffb020" stroke-width="1.9">
+      <line x1="800" y1="455" x2="1218" y2="235" marker-end="url(#arw)"/>
+      <line x1="800" y1="455" x2="1218" y2="324" marker-end="url(#arw)"/>
+      <line x1="800" y1="455" x2="1218" y2="413" marker-end="url(#arw)"/>
+      <line x1="800" y1="455" x2="1218" y2="502" marker-end="url(#arw)"/>
+      <line x1="800" y1="455" x2="1218" y2="591" marker-end="url(#arw)"/>
+      <line x1="800" y1="455" x2="1218" y2="680" marker-end="url(#arw)"/>
+    </g>
+
+    <!-- ===== PORTS + harness labels ===== -->
+    <g stroke="#e8e4da" stroke-width="1.6" opacity="0.9">
+      <path d="M1246,222 h-20 v26 h20" fill="none"/><path d="M1246,222 h5 M1246,248 h5"/>
+      <path d="M1246,311 h-20 v26 h20" fill="none"/><path d="M1246,311 h5 M1246,337 h5"/>
+      <path d="M1246,400 h-20 v26 h20" fill="none"/><path d="M1246,400 h5 M1246,426 h5"/>
+      <path d="M1246,489 h-20 v26 h20" fill="none"/><path d="M1246,489 h5 M1246,515 h5"/>
+      <path d="M1246,578 h-20 v26 h20" fill="none"/><path d="M1246,578 h5 M1246,604 h5"/>
+      <path d="M1246,667 h-20 v26 h20" fill="none"/><path d="M1246,667 h5 M1246,693 h5"/>
+    </g>
+    <g fill="#e8e4da" font-size="27" letter-spacing="0.5">
+      <text x="1270" y="244">claude</text>
+      <text x="1270" y="333">codex</text>
+      <text x="1270" y="422">opencode</text>
+      <text x="1270" y="511">factory</text>
+      <text x="1270" y="600">pi</text>
+      <text x="1270" y="689" fill="#8b90a0">…any harness</text>
+    </g>
+    </g>
+    <!-- /diagram scale wrapper -->
+  </g>
+</svg>

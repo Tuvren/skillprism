@@ -1,10 +1,9 @@
 ---
 title: "skill.yaml reference"
 description: "Every metadata field and what it does"
+group: "Authoring"
+weight: 40
 ---
-
-# skill.yaml reference
-
 `skill.yaml` is the metadata half of a skill. Every field is available in `SKILL.md` as a template variable under its own name (with three exceptions noted below).
 
 ## Required fields

@@ -1,10 +1,11 @@
 ---
 title: "Quickstart"
 description: "Create your first skill and build it end-to-end"
+aliases:
+  - /docs/
+group: "Get started"
+weight: 20
 ---
-
-# Quickstart
-
 This walkthrough creates a project, adds a skill, and builds it to multiple harnesses. It takes about 2 minutes.
 
 ## 1. Initialize a project

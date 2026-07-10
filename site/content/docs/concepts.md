@@ -1,10 +1,9 @@
 ---
 title: "Concepts"
 description: "Source vs output, harnesses, progressive disclosure"
+group: "Authoring"
+weight: 30
 ---
-
-# Concepts
-
 ## Source vs output
 
 skillprism separates **source** (what you author) from **output** (what agents read).

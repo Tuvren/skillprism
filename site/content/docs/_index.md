@@ -1,7 +1,6 @@
 ---
 title: "Docs"
 description: "skillprism documentation"
-weight: 1
+build:
+  render: never
 ---
-
-# skillprism docs

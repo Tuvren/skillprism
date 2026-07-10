@@ -1,0 +1,21 @@
+{{ $pages := .CurrentSection.RegularPages.ByWeight.Reverse }}
+{{ $prev := $pages.Prev . }}
+{{ $next := $pages.Next . }}
+{{ if or $prev $next }}
+<nav class="docs-pager" aria-label="Page navigation">
+  {{ with $prev }}
+  <a class="docs-pager-prev" href="{{ .RelPermalink }}">
+    <span class="docs-pager-dir">Previous</span>
+    <span class="docs-pager-title">{{ .Title }}</span>
+  </a>
+  {{ else }}
+  <span></span>
+  {{ end }}
+  {{ with $next }}
+  <a class="docs-pager-next" href="{{ .RelPermalink }}">
+    <span class="docs-pager-dir">Next</span>
+    <span class="docs-pager-title">{{ .Title }}</span>
+  </a>
+  {{ end }}
+</nav>
+{{ end }}

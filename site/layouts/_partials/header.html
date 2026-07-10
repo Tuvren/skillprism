@@ -1,0 +1,31 @@
+<header class="site-header">
+<nav class="nav" aria-label="Primary">
+  <div class="nav-start">
+    {{ if eq .Section "docs" }}
+    <button type="button" class="sidebar-toggle" id="sidebar-toggle" aria-controls="docs-sidebar" aria-expanded="false" aria-label="Open docs menu">
+      <span class="sidebar-toggle-bar"></span>
+      <span class="sidebar-toggle-bar"></span>
+      <span class="sidebar-toggle-bar"></span>
+    </button>
+    {{ end }}
+    <a href="{{ "" | relLangURL }}" class="nav-brand">
+      <span class="nav-mark" aria-hidden="true"></span>
+      skillprism
+    </a>
+  </div>
+  <ul class="nav-links">
+    {{ $currentPage := . }}
+    {{ range site.Menus.main }}
+    <li>
+      {{ $isActive := or ($currentPage.IsMenuCurrent "main" .) ($currentPage.HasMenuCurrent "main" .) (and (eq .Identifier "docs") (eq $currentPage.Section "docs")) }}
+      <a href="{{ .URL }}"{{ if and $isActive (not .Params.external) }} class="is-active" aria-current="page"{{ else if and $isActive .Params.external }} class="nav-external is-active" aria-current="page" rel="noopener"{{ else if .Params.external }} class="nav-external" rel="noopener"{{ end }}>
+        {{ .Name }}
+        {{ if .Params.external }}
+        <svg class="nav-external-icon" width="11" height="11" viewBox="0 0 12 12" aria-hidden="true" focusable="false"><path fill="currentColor" d="M9.5 0H8V1.5h1.1L5.2 5.4l1.1 1.1L10.2 2.6V3.7H11.7V0H9.5ZM7.8 7.1v3.4H2.3V2.8h3.4V1.3H.8C.4 1.3 0 1.7 0 2.1v8.8c0 .4.4.8.8.8h8.8c.4 0 .8-.4.8-.8V7.1H7.8Z"/></svg>
+        {{ end }}
+      </a>
+    </li>
+    {{ end }}
+  </ul>
+</nav>
+</header>

@@ -1,0 +1,25 @@
+<aside class="docs-sidebar" id="docs-sidebar" aria-label="Documentation navigation">
+  <nav class="sidebar-nav">
+    {{ $current := .RelPermalink }}
+    {{ $groups := slice "Get started" "Authoring" "Reference" "Guides" }}
+    {{ $pages := .CurrentSection.RegularPages.ByWeight }}
+    {{ range $groups }}
+      {{ $group := . }}
+      {{ $groupPages := where $pages "Params.group" $group }}
+      {{ if gt (len $groupPages) 0 }}
+      <section class="sidebar-group">
+        <h2 class="kicker sidebar-group-title">{{ $group }}</h2>
+        <ul class="sidebar-links">
+          {{ range $groupPages }}
+          <li>
+            <a href="{{ .RelPermalink }}"{{ if eq $current .RelPermalink }} class="is-active" aria-current="page"{{ end }}>
+              {{ .Title }}
+            </a>
+          </li>
+          {{ end }}
+        </ul>
+      </section>
+      {{ end }}
+    {{ end }}
+  </nav>
+</aside>

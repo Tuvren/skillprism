@@ -1,10 +1,9 @@
 ---
 title: "Spec compliance"
 description: "How skillprism maps to the Agent Skills spec"
+group: "Reference"
+weight: 80
 ---
-
-# Spec compliance
-
 skillprism renders output that complies with the [Agent Skills specification](https://agentskills.io/specification). This page explains the mapping.
 
 ## Frontmatter

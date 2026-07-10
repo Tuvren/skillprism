@@ -1,10 +1,9 @@
 ---
 title: "Install"
 description: "Get skillprism running on your machine"
+group: "Get started"
+weight: 10
 ---
-
-# Install
-
 ## From source
 
 ```bash

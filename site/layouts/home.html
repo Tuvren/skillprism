@@ -1,0 +1,138 @@
+{{ define "main" }}
+{{/* Homepage: optical instrument — one source refracts into many harnesses */}}
+<section class="hero" aria-labelledby="hero-heading">
+  <div class="hero-atmosphere" aria-hidden="true">
+    <div class="hero-atmosphere-beam"></div>
+    <div class="hero-atmosphere-spectrum"></div>
+  </div>
+
+  <div class="hero-copy">
+    <p class="hero-kicker">Distribution CLI for Agent Skills</p>
+    <h1 id="hero-heading" class="hero-title">
+      One source.<br>
+      <em>Any harness.</em>
+    </h1>
+    <p class="hero-lede">
+      Write a skill once. skillprism installs from Git, templates with MiniJinja,
+      and emits a compliant <code>SKILL.md</code> for every harness you configure.
+      No forked copies. No drift.
+    </p>
+    <div class="hero-actions">
+      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-primary">Quickstart</a>
+      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-secondary">Docs</a>
+    </div>
+  </div>
+
+  <figure class="refract" aria-hidden="true">
+    <picture>
+      <source srcset="{{ "images/prism-hero.svg" | relURL }}" type="image/svg+xml">
+      <img
+        class="refract-art"
+        src="{{ "images/prism-hero@2x.png" | relURL }}"
+        alt=""
+        width="1600"
+        height="900"
+        decoding="async"
+        fetchpriority="high"
+      >
+    </picture>
+  </figure>
+</section>
+
+<section class="section section-flow">
+  <header class="section-intro">
+    <h2>From repo to every harness path</h2>
+    <p>Three commands. One compile path. Order matters because each step feeds the next.</p>
+  </header>
+  <ol class="flow">
+    <li class="flow-step">
+      <span class="flow-cmd">skillprism add</span>
+      <h3>Install</h3>
+      <p>Pull a skill repo, detect its format, and render once per harness.</p>
+    </li>
+    <li class="flow-step">
+      <span class="flow-cmd">skill.yaml + SKILL.md</span>
+      <h3>Author</h3>
+      <p>Metadata in YAML. Body as a MiniJinja template. One source tree.</p>
+    </li>
+    <li class="flow-step">
+      <span class="flow-cmd">skillprism build</span>
+      <h3>Compile</h3>
+      <p>Write harness-native files to the paths each client already watches.</p>
+    </li>
+  </ol>
+</section>
+
+<section class="section section-demo">
+  <div class="demo-copy">
+    <h2>Manage remote skills like packages</h2>
+    <p>
+      Installed skills live in a local state file. Updates run a cheap
+      <code>git ls-remote</code> check before pulling.
+    </p>
+    <p class="demo-note">
+      State: <code>~/.config/skillprism/installed.yaml</code>
+    </p>
+  </div>
+  <div class="terminal" role="region" aria-label="CLI commands">
+    <div class="terminal-chrome">
+      <span></span><span></span><span></span>
+      <em>shell</em>
+    </div>
+    <pre><code><span class="c"># install a skill from GitHub</span>
+<span class="p">$</span> skillprism add owner/repo
+
+<span class="c"># list what is installed</span>
+<span class="p">$</span> skillprism list
+
+<span class="c"># update when upstream moves</span>
+<span class="p">$</span> skillprism update
+
+<span class="c"># remove a skill</span>
+<span class="p">$</span> skillprism remove my-skill</code></pre>
+  </div>
+</section>
+
+<section class="section section-targets">
+  <header class="section-intro">
+    <h2>One compile, many destinations</h2>
+    <p>Configure the harnesses you need in <code>skillprism.yaml</code>. Each gets its own paths, macros, and output layout.</p>
+  </header>
+  <div class="targets-config" role="region" aria-label="Example harness configuration">
+    <pre><code>harnesses:
+  - claude
+  - opencode
+  # …built-in or custom harnesses</code></pre>
+  </div>
+</section>
+
+<section class="section section-spec">
+  <div class="spec-card">
+    <h2>Compliant by construction</h2>
+    <p>
+      Every render includes the <code>name</code> and <code>description</code> frontmatter
+      the <a href="{{ .Site.Params.spec }}">Agent Skills specification</a> requires.
+      <code>skillprism validate</code> checks format, length, and emptiness before write.
+    </p>
+    <dl class="spec-dl">
+      <div><dt>frontmatter</dt><dd>name · description</dd></div>
+      <div><dt>validate</dt><dd>format · length · empty</dd></div>
+      <div><dt>render</dt><dd>MiniJinja · once per harness</dd></div>
+      <div><dt>output</dt><dd>SKILL.md · sidecars · manifests</dd></div>
+    </dl>
+  </div>
+</section>
+
+<section class="section section-close">
+  <div class="close-card">
+    <h2>Compile your first project</h2>
+    <pre class="close-commands"><code><span class="p">$</span> cargo install --path .
+<span class="p">$</span> skillprism init project my-skills
+<span class="p">$</span> cd my-skills &amp;&amp; skillprism build</code></pre>
+    <div class="hero-actions">
+      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-primary">Quickstart</a>
+      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-secondary">Docs</a>
+    </div>
+  </div>
+</section>
+{{ end }}
