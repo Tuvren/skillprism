@@ -112,12 +112,12 @@ for (const pageDef of pages) {
           const main = document.querySelector(".docs-main") as HTMLElement | null;
           if (main) {
             const mainRect = main.getBoundingClientRect();
-            main.querySelectorAll("table").forEach((table, idx) => {
-              const t = table.getBoundingClientRect();
-              if (t.right > mainRect.right + 1) {
+            main.querySelectorAll(".table-wrap").forEach((wrap, idx) => {
+              const w = wrap.getBoundingClientRect();
+              if (w.right > mainRect.right + 1) {
                 out.push({
                   check: "table-overflow",
-                  detail: `table #${idx + 1} right ${Math.round(t.right)}px exceeds main right ${Math.round(mainRect.right)}px by ${Math.round(t.right - mainRect.right)}px`,
+                  detail: `table-wrap #${idx + 1} right ${Math.round(w.right)}px exceeds main right ${Math.round(mainRect.right)}px by ${Math.round(w.right - mainRect.right)}px`,
                 });
               }
             });

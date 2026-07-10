@@ -249,26 +249,38 @@ pre code {
 .highlight { margin-bottom: 1.25rem; }
 .highlight pre { margin-bottom: 0; }
 
-table { width: 100%; border-collapse: collapse; margin-bottom: 1.25rem; font-size: 0.92rem; }
-.docs-body.prose table {
-  display: block;
-  max-width: 100%;
-  overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+  table-layout: auto;
 }
-.docs-body.prose table thead,
-.docs-body.prose table tbody,
-.docs-body.prose table tr {
-  display: table;
+.table-wrap {
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--rule-soft);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--panel) 35%, transparent);
+}
+.table-wrap table {
+  margin-bottom: 0;
   width: max-content;
   min-width: 100%;
 }
+th, td {
+  padding: 0.65rem 0.85rem;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule-soft);
+}
 .docs-body.prose th,
 .docs-body.prose td {
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  line-height: 1.5;
 }
-th, td { padding: 0.7rem 0.9rem; text-align: left; border-bottom: 1px solid var(--rule-soft); }
+.docs-body.prose td code {
+  white-space: nowrap;
+}
 th {
   font-family: var(--font-mono);
   font-size: 0.72rem;
@@ -446,8 +458,9 @@ hr { border: none; border-top: 1px solid var(--rule-soft); margin: 2.5rem 0; }
 
 /* ---- Docs shell ---- */
 .page-docs {
-  --sidebar-w: 15.5rem;
-  --toc-w: 13rem;
+  --wide: 84rem;
+  --sidebar-w: 13.5rem;
+  --toc-w: 10.5rem;
 }
 .docs-shell {
   display: grid;
@@ -524,8 +537,9 @@ body.sidebar-open .docs-backdrop { display: block; }
 /* Docs main content */
 .docs-main {
   min-width: 0;
-  padding: 2.25rem 2.5rem 4rem;
-  max-width: var(--measure);
+  width: 100%;
+  padding: 2.25rem 2rem 4rem;
+  max-width: none;
 }
 .docs-page-header { margin-bottom: 1.75rem; padding-top: 0.25rem; }
 .docs-page-header .kicker { margin-bottom: 0.85rem; }
