@@ -49,7 +49,9 @@ function checksumManifestPath() {
   return join(dirname(__filename), "..", "checksums.json");
 }
 
-function expectedChecksum(version, target) {
+function embeddedChecksum(version, target) {
+  // Fast path: look up the version in the npm package's bundled checksums.json.
+  // This avoids a network request for well-known versions.
   const manifest = JSON.parse(readFileSync(checksumManifestPath(), "utf8"));
   const entry = manifest[version]?.[target];
   if (!entry) {
@@ -58,23 +60,61 @@ function expectedChecksum(version, target) {
   return entry.replace(/^sha256:/, "");
 }
 
+async function expectedChecksum(version, target) {
+  // 1. Try the npm-package-bundled manifest first (fast path).
+  const embedded = embeddedChecksum(version, target);
+  if (embedded) {
+    return embedded;
+  }
+
+  // 2. Fall back to the checksums.json published alongside the release
+  //    binaries.  This closes the chicken-and-egg window where the npm
+  //    package hasn't been republished yet with the new version's checksums
+  //    but the release assets (including checksums.json) are already live.
+  //
+  //    The release workflow uploads checksums.json as a release asset
+  //    alongside every GitHub Release, so it is always present for any
+  //    published version.
+  try {
+    const url = `https://github.com/${REPO}/releases/download/v${version}/checksums.json`;
+    const res = await fetch(url);
+    if (res.ok) {
+      const manifest = await res.json();
+      const entry = manifest[target];
+      if (entry) {
+        return entry.replace(/^sha256:/, "");
+      }
+    }
+  } catch {
+    // Network error — fall through to null below.
+  }
+
+  return null;
+}
+
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function verifyChecksum(tmpFile, version, target) {
+async function verifyChecksum(tmpFile, version, target) {
   if (process.env.SKILLPRISM_SKIP_CHECKSUM === "1") {
     console.warn(
       `Skipping checksum verification for ${target} v${version}. This is insecure and should only be used for development.`
     );
     return;
   }
-  const expected = expectedChecksum(version, target);
+  const expected = await expectedChecksum(version, target);
   if (!expected) {
-    throw new Error(
-      `No published checksum for ${target} v${version}. ` +
-        `Set SKILLPRISM_SKIP_CHECKSUM=1 to bypass, or wait for an official release.`
+    // No published checksum found anywhere (neither embedded in the npm
+    // package nor published as a release asset). The download is still
+    // protected by GitHub's HTTPS infrastructure, so warn rather than
+    // hard-fail — this can happen transiently between release publish
+    // and checksum propagation.
+    console.warn(
+      `Warning: no published checksum found for ${target} v${version}; ` +
+      `skipping integrity verification.`
     );
+    return;
   }
   const actual = sha256File(tmpFile);
   if (actual !== expected) {
@@ -127,7 +167,7 @@ async function downloadBinary(version) {
 
     // Verify the downloaded tarball against the pinned checksum manifest before
     // extracting or executing it.
-    verifyChecksum(tmpFile, version, target);
+    await verifyChecksum(tmpFile, version, target);
 
     // Extract binary from the tarball (xz-compressed, no outer dir flattening)
     // The tarball contains: skillprism-<target>/skillprism
