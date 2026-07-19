@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[allow(unused_imports)]
 use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 
 /// User response to an overwrite prompt.
+#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub(super) enum OverwriteChoice {
     Yes,
@@ -27,6 +29,7 @@ pub(super) enum OverwriteChoice {
 /// Prompts the user for overwrite confirmation on stderr, reads choice from stdin.
 ///
 /// Returns `None` if stdin is not a terminal (non-interactive).
+#[allow(clippy::missing_const_for_fn)]
 pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
     #[cfg(test)]
     {
