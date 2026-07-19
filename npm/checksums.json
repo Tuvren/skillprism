@@ -1,7 +1,7 @@
 {
   "0.1.0": {
-    "x86_64-unknown-linux-gnu": null,
-    "x86_64-apple-darwin": null,
-    "aarch64-apple-darwin": null
+    "x86_64-unknown-linux-gnu": "sha256:70e3a5049169ee857458209ce1e20fbf6f9b51d583a12cbffa13f43893f5d0a7",
+    "x86_64-apple-darwin": "sha256:e14ee1a64b42f35f11e8c7f60946de7381278f10ef826670fb7b692ec8a495fd",
+    "aarch64-apple-darwin": "sha256:9c62f8adfea152435c595ef57275ec4e01cca208191fdb2866a04e032e872426"
   }
 }
