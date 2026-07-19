@@ -4,7 +4,7 @@
   "description": "Distribution CLI with per-harness templating for agent skills",
   "type": "module",
   "bin": {
-    "skillprism": "./bin/cli.mjs"
+    "skillprism": "bin/cli.mjs"
   },
   "files": [
     "bin/",

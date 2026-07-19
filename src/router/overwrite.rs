@@ -28,31 +28,39 @@ pub(super) enum OverwriteChoice {
 ///
 /// Returns `None` if stdin is not a terminal (non-interactive).
 pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
-    if !io::stdin().is_terminal() {
-        return None;
+    #[cfg(test)]
+    {
+        let _ = path;
+        None
     }
-
-    loop {
-        eprint!(
-            "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
-            path.display()
-        );
-        let _ = io::stderr().flush();
-
-        let mut input = String::new();
-        match io::stdin().read_line(&mut input) {
-            Ok(0) => return Some(OverwriteChoice::Abort),
-            Err(_) => return None,
-            Ok(_) => {}
+    #[cfg(not(test))]
+    {
+        if !io::stdin().is_terminal() {
+            return None;
         }
 
-        match input.trim().to_lowercase().as_str() {
-            "y" | "yes" => return Some(OverwriteChoice::Yes),
-            "n" | "no" => return Some(OverwriteChoice::No),
-            "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
-            "a" | "abort" => return Some(OverwriteChoice::Abort),
-            _ => {
-                eprintln!("Please answer y/n/s/a.");
+        loop {
+            eprint!(
+                "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
+                path.display()
+            );
+            let _ = io::stderr().flush();
+
+            let mut input = String::new();
+            match io::stdin().read_line(&mut input) {
+                Ok(0) => return Some(OverwriteChoice::Abort),
+                Err(_) => return None,
+                Ok(_) => {}
+            }
+
+            match input.trim().to_lowercase().as_str() {
+                "y" | "yes" => return Some(OverwriteChoice::Yes),
+                "n" | "no" => return Some(OverwriteChoice::No),
+                "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
+                "a" | "abort" => return Some(OverwriteChoice::Abort),
+                _ => {
+                    eprintln!("Please answer y/n/s/a.");
+                }
             }
         }
     }
