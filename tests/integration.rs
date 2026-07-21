@@ -62,8 +62,9 @@ fn bin(home: &Path) -> Command {
 fn full_build_pipeline() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
 
-    let assert = bin(&project_dir)
+    let assert = bin(home_tmp.path())
         .current_dir(&project_dir)
         .arg("build")
         .arg("--force")
@@ -138,12 +139,13 @@ fn full_build_pipeline() {
 fn validate_reports_errors() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
 
     // Introduce a syntax error into one template
     let broken_template = project_dir.join("skills/alpha/SKILL.md.j2");
     fs::write(&broken_template, "# {{ broken\n").unwrap();
 
-    let assert = bin(&project_dir)
+    let assert = bin(home_tmp.path())
         .current_dir(&project_dir)
         .arg("validate")
         .assert();
@@ -179,9 +181,26 @@ fn completions_produce_output() {
 fn build_diff_does_not_write() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--diff")
+        .assert();
+    assert.success();
+
+    assert!(
+        !project_dir.join(".claude").exists(),
+        "diff mode must not write output files"
+    );
+    assert!(
+        !project_dir.join(".opencode").exists(),
+        "diff mode must not write output files"
+    );
 
     // First do a real build so files exist
-    let build_assert = bin(&project_dir)
+    let build_assert = bin(home_tmp.path())
         .current_dir(&project_dir)
         .arg("build")
         .arg("--force")
@@ -189,7 +208,7 @@ fn build_diff_does_not_write() {
     build_assert.success();
 
     // Now run build --diff — should show diff output without modifying files
-    let diff_assert = bin(&project_dir)
+    let diff_assert = bin(home_tmp.path())
         .current_dir(&project_dir)
         .arg("build")
         .arg("--diff")

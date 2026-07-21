@@ -227,13 +227,13 @@ fn home_dir() -> Result<PathBuf, RouterError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
     /// Serialises tests that mutate the global `HOME` env var so they don't
     /// race under parallel test execution.
-    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn set_home_for_test() -> (tempfile::TempDir, PathBuf) {
         let tmp = tempfile::tempdir().unwrap();
@@ -258,7 +258,7 @@ mod tests {
 
     #[test]
     fn user_scope_path() {
-        let _lock = HOME_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (_tmp, home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let path =
@@ -342,7 +342,7 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_path() {
-        let _lock = HOME_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
@@ -378,7 +378,7 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_manifest_path() {
-        let _lock = HOME_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn user_scope_reports_missing_home() {
-        let _lock = HOME_LOCK.lock().unwrap();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let prev = std::env::var("HOME").ok();
         unsafe {
             std::env::remove_var("HOME");

@@ -635,15 +635,16 @@ mod tests {
 
     #[test]
     fn xdg_config_home_overrides_default() {
-        let _lock = STATE_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let xdg = dir.path().join("xdg_config");
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let xdg = tempfile::tempdir().unwrap();
         let prev = std::env::var("XDG_CONFIG_HOME").ok();
         unsafe {
-            std::env::set_var("XDG_CONFIG_HOME", &xdg);
+            std::env::set_var("XDG_CONFIG_HOME", xdg.path());
         }
 
-        assert_eq!(state_dir().unwrap(), xdg.join("skillprism"));
+        assert_eq!(state_dir().unwrap(), xdg.path().join("skillprism"));
 
         if let Some(prev) = prev {
             unsafe { std::env::set_var("XDG_CONFIG_HOME", prev) };
@@ -654,7 +655,9 @@ mod tests {
 
     #[test]
     fn falls_back_to_home_when_xdg_unset() {
-        let _lock = STATE_LOCK.lock().unwrap();
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         fs::create_dir_all(&home).unwrap();

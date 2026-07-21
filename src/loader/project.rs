@@ -356,7 +356,6 @@ struct HarnessOverrideRaw {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
 
     fn setup_test_dir() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()

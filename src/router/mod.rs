@@ -15,7 +15,7 @@
 pub mod diff;
 mod manifest;
 mod overwrite;
-mod paths;
+pub mod paths;
 mod write;
 
 use std::collections::BTreeMap;
@@ -439,10 +439,8 @@ mod tests {
 
     #[test]
     fn writes_skill_to_project_scope() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_project");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
         fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
 
@@ -457,15 +455,8 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(
-            &pair,
-            &output,
-            &dir,
-            TargetScope::Project,
-            false,
-            &mut false,
-        )
-        .unwrap();
+        let result =
+            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
         assert_eq!(
             result.written.skill_path,
             dir.join(".claude/skills/my-agent/SKILL.md")
@@ -475,16 +466,12 @@ mod tests {
             written_content(&result.written.skill_path),
             "my-agent-rendered"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn creates_directory_if_not_exists() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_mkdir");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
 
         let registry = HarnessRegistry::with_builtins();
         let mut skill = test_skill("new-skill", vec![]);
@@ -496,30 +483,19 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(
-            &pair,
-            &output,
-            &dir,
-            TargetScope::Project,
-            false,
-            &mut false,
-        )
-        .unwrap();
+        let result =
+            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(
             result.written.skill_path.exists(),
             "directory should be created"
         );
         assert_eq!(written_content(&result.written.skill_path), "content");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn writes_sidecar_files() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_sidecar");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/agent")).unwrap();
         fs::write(dir.join("skills/agent/SKILL.md.j2"), "main").unwrap();
 
@@ -537,31 +513,19 @@ mod tests {
             }],
         };
 
-        let result = Router::write(
-            &pair,
-            &output,
-            &dir,
-            TargetScope::Project,
-            false,
-            &mut false,
-        )
-        .unwrap();
+        let result =
+            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
         assert!(result.written.sidecar_paths[0].exists());
         assert_eq!(
             written_content(&result.written.sidecar_paths[0]),
             "key: value"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn aggregates_manifest_entries_into_json_array() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_manifest_agg");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
 
         let manifest_path = dir.join("plugin.json");
         let entries = vec![
@@ -586,16 +550,12 @@ mod tests {
         assert!(content.contains("skill-b"));
         assert!(content.starts_with('['));
         assert!(content.ends_with(']'));
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn copies_asset_directories() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_assets");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
 
         let skill_dir = dir.join("skills/test-skill");
         fs::create_dir_all(skill_dir.join("references")).unwrap();
@@ -613,29 +573,17 @@ mod tests {
             sidecars: vec![],
         };
 
-        Router::write(
-            &pair,
-            &output,
-            &dir,
-            TargetScope::Project,
-            false,
-            &mut false,
-        )
-        .unwrap();
+        Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
 
         let dest_refs = dir.join(".claude/skills/test-skill/references/guide.md");
         assert!(dest_refs.exists());
         assert_eq!(written_content(&dest_refs), "# Guide");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn diff_new_file_returns_single_entry() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_diff_new");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
         fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
 
@@ -650,20 +598,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
+        let entries = Router::diff(&pair, &output, dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 1);
         assert!(entries[0].diff.stats.is_new_file);
         assert_eq!(entries[0].diff.stats.additions, 1);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn diff_changed_file_shows_diff() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_diff_changed");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
         fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "old content").unwrap();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
@@ -680,21 +624,17 @@ mod tests {
             sidecars: vec![],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
+        let entries = Router::diff(&pair, &output, dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 1);
         assert!(!entries[0].diff.stats.is_new_file);
         assert_eq!(entries[0].diff.stats.additions, 1);
         assert_eq!(entries[0].diff.stats.deletions, 1);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn diff_unchanged_file_returns_empty_hunks() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_diff_unchanged");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
         fs::write(dir.join(".claude/skills/my-agent/SKILL.md"), "same content").unwrap();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
@@ -711,20 +651,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
+        let entries = Router::diff(&pair, &output, dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 1);
         assert!(entries[0].diff.hunks.is_empty());
         assert_eq!(entries[0].diff.stats.additions, 0);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn diff_includes_sidecar_entries() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_diff_sidecar");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/agent")).unwrap();
         fs::write(dir.join("skills/agent/SKILL.md.j2"), "main").unwrap();
 
@@ -742,55 +678,16 @@ mod tests {
             }],
         };
 
-        let entries = Router::diff(&pair, &output, &dir, TargetScope::Project).unwrap();
+        let entries = Router::diff(&pair, &output, dir, TargetScope::Project).unwrap();
         assert_eq!(entries.len(), 2);
         assert!(entries[0].diff.stats.is_new_file);
         assert!(entries[1].diff.stats.is_new_file);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn write_result_includes_skipped_vec() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_write_result");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
-        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
-
-        let registry = HarnessRegistry::with_builtins();
-        let mut skill = test_skill("my-agent", vec![]);
-        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
-        skill.variables = BTreeMap::new();
-
-        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-        let output = HarnessOutput {
-            skill_content: "rendered".to_string(),
-            sidecars: vec![],
-        };
-
-        let result = Router::write(
-            &pair,
-            &output,
-            &dir,
-            TargetScope::Project,
-            false,
-            &mut false,
-        )
-        .unwrap();
-        assert!(result.skipped.is_empty());
-        assert!(result.written.skill_path.exists());
-
-        let _ = fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn force_true_does_not_skip() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_force_true");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
         fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
 
@@ -806,27 +703,44 @@ mod tests {
         };
 
         let result =
-            Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
+        assert!(result.skipped.is_empty());
+        assert!(result.written.skill_path.exists());
+    }
+
+    #[test]
+    fn force_true_does_not_skip() {
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
+        fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
+        fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
+
+        let registry = HarnessRegistry::with_builtins();
+        let mut skill = test_skill("my-agent", vec![]);
+        skill.template_path = dir.join("skills/my-agent/SKILL.md.j2");
+        skill.variables = BTreeMap::new();
+
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = HarnessOutput {
+            skill_content: "rendered".to_string(),
+            sidecars: vec![],
+        };
+
+        let result =
+            Router::write(&pair, &output, dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
         assert_eq!(written_content(&result.written.skill_path), "rendered");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn write_aggregated_manifests_empty_entries() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_manifest_empty");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let _dir = tmp_dir.path();
 
         let written =
             Router::write_aggregated_manifests(&[], false, &mut false, &mut Vec::new()).unwrap();
         assert!(written.is_empty());
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -837,11 +751,8 @@ mod tests {
 
     #[test]
     fn diff_manifests_shows_aggregated_diff() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_diff_manifest");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
 
         let manifest_path = dir.join("plugin.json");
         fs::write(&manifest_path, r#"[{"name":"old-skill"}]"#).unwrap();
@@ -855,16 +766,12 @@ mod tests {
         assert_eq!(diffs.len(), 1);
         assert!(!diffs[0].diff.stats.is_new_file);
         assert!(diffs[0].diff.stats.additions > 0 || diffs[0].diff.stats.deletions > 0);
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn existing_file_skipped_in_non_interactive_mode() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_skip_existing");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
         fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
@@ -881,27 +788,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(
-            &pair,
-            &output,
-            &dir,
-            TargetScope::Project,
-            false,
-            &mut false,
-        )
-        .unwrap();
+        let result =
+            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(written_content(&result.written.skill_path), "old");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn skip_all_prevents_prompt_for_existing_file() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_skip_all_flag");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
         fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
@@ -922,7 +818,7 @@ mod tests {
         let result = Router::write(
             &pair,
             &output,
-            &dir,
+            dir,
             TargetScope::Project,
             false,
             &mut skip_all,
@@ -931,16 +827,12 @@ mod tests {
         assert!(skip_all);
         assert_eq!(result.skipped.len(), 1);
         assert_eq!(written_content(&result.written.skill_path), "old");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn force_overwrites_existing_file() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("router_force_overwrite");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
         fs::write(dir.join("skills/my-agent/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join(".claude/skills/my-agent")).unwrap();
@@ -958,19 +850,15 @@ mod tests {
         };
 
         let result =
-            Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+            Router::write(&pair, &output, dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(result.skipped.is_empty());
         assert_eq!(written_content(&result.written.skill_path), "overwritten");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn detect_collisions_detects_duplicate_skill_name() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("collision_dup");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/a")).unwrap();
         fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join("skills/b")).unwrap();
@@ -988,7 +876,7 @@ mod tests {
         let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
         let pairs = vec![pair_a, pair_b];
 
-        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        let result = Router::detect_collisions(&pairs, dir, TargetScope::Project);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert_eq!(errors.len(), 1);
@@ -1008,16 +896,12 @@ mod tests {
             }
             e => panic!("expected PathCollision, got {e:?}"),
         }
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn detect_collisions_no_collision_for_unique_paths() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("collision_unique");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/a")).unwrap();
         fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join("skills/b")).unwrap();
@@ -1035,21 +919,17 @@ mod tests {
         let pair_b = HarnessResolver::resolve_skill_harness(&skill_b, "claude", &registry).unwrap();
         let pairs = vec![pair_a, pair_b];
 
-        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        let result = Router::detect_collisions(&pairs, dir, TargetScope::Project);
         assert!(
             result.is_ok(),
             "expected no collisions for unique skill names, got {result:?}"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn sidecars_respect_skip_all_when_skill_skipped() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("sidecar_skip_all");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
 
         let skill_dir = dir.join("skills/test-skill");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -1082,7 +962,7 @@ mod tests {
         let result = Router::write(
             &pair,
             &output,
-            &dir,
+            dir,
             TargetScope::Project,
             false,
             &mut skip_all,
@@ -1104,16 +984,12 @@ mod tests {
             "old",
             "sidecar file should remain unchanged when skill is skipped"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn sidecars_respect_force_true() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("sidecar_force");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
 
         let skill_dir = dir.join("skills/test-skill");
         fs::create_dir_all(&skill_dir).unwrap();
@@ -1141,7 +1017,7 @@ mod tests {
         fs::write(&sidecar_output, "old").unwrap();
 
         let result =
-            Router::write(&pair, &output, &dir, TargetScope::Project, true, &mut false).unwrap();
+            Router::write(&pair, &output, dir, TargetScope::Project, true, &mut false).unwrap();
         assert!(
             result.skipped.is_empty(),
             "no files should be skipped with --force"
@@ -1156,16 +1032,12 @@ mod tests {
             "new-val",
             "sidecar should be overwritten"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn detect_sidecar_vs_sidecar_collision() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("collision_sidecar_sidecar");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/a")).unwrap();
         fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join("skills/b")).unwrap();
@@ -1197,23 +1069,19 @@ mod tests {
         };
         let pairs = vec![pair_a, pair_b];
 
-        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        let result = Router::detect_collisions(&pairs, dir, TargetScope::Project);
         assert!(result.is_err());
         let errors = result.unwrap_err();
         assert!(!errors.is_empty(), "expected at least one collision error");
         for err in &errors {
             assert!(matches!(err, RouterError::PathCollision { .. }));
         }
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn detect_collisions_no_sidecar_collision_for_unique_sidecar_names() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("collision_sidecar_unique");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp_dir = tempfile::tempdir().unwrap();
+        let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/a")).unwrap();
         fs::write(dir.join("skills/a/SKILL.md.j2"), "{{ skill_name }}").unwrap();
         fs::create_dir_all(dir.join("skills/b")).unwrap();
@@ -1242,12 +1110,10 @@ mod tests {
         };
         let pairs = vec![pair_a, pair_b];
 
-        let result = Router::detect_collisions(&pairs, &dir, TargetScope::Project);
+        let result = Router::detect_collisions(&pairs, dir, TargetScope::Project);
         assert!(
             result.is_ok(),
             "expected no collisions for unique skill names, got {result:?}"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 }

@@ -107,10 +107,12 @@ mod tests {
 
     #[test]
     fn public_api_returns_empty_when_home_has_no_agents() {
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         let old_home = std::env::var_os("HOME");
         let empty_home = tempfile::tempdir().unwrap();
-        // SAFETY: env var mutation is isolated by the test runner's default
-        // process-per-test-thread model and restored below.
+        // SAFETY: env var mutation is isolated by ENV_LOCK across tests
         unsafe { std::env::set_var("HOME", empty_home.path()) };
         assert!(detect_installed_agents().is_empty());
         if let Some(h) = old_home {
