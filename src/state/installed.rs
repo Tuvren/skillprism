@@ -637,7 +637,7 @@ mod tests {
     fn xdg_config_home_overrides_default() {
         let _lock = crate::router::paths::tests::ENV_LOCK
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let xdg = tempfile::tempdir().unwrap();
         let _guard = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", xdg.path());
 
@@ -648,7 +648,7 @@ mod tests {
     fn falls_back_to_home_when_xdg_unset() {
         let _lock = crate::router::paths::tests::ENV_LOCK
             .lock()
-            .unwrap_or_else(|e| e.into_inner());
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = tempfile::tempdir().unwrap();
         let home = dir.path().join("home");
         fs::create_dir_all(&home).unwrap();

@@ -227,12 +227,12 @@ fn home_dir() -> Result<PathBuf, RouterError> {
 }
 
 #[cfg(test)]
-pub(crate) mod tests {
+pub mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
     #[must_use = "saving guard to a variable is required to keep env var overridden until scope ends"]
-    pub(crate) struct EnvGuard {
+    pub struct EnvGuard {
         key: &'static str,
         previous: Option<std::ffi::OsString>,
     }
@@ -271,7 +271,7 @@ pub(crate) mod tests {
 
     /// Serialises tests that mutate the global `HOME` env var so they don't
     /// race under parallel test execution.
-    pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn set_home_for_test() -> (tempfile::TempDir, EnvGuard) {
         let tmp = tempfile::tempdir().unwrap();
@@ -293,7 +293,9 @@ pub(crate) mod tests {
 
     #[test]
     fn user_scope_path() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (tmp, _guard) = set_home_for_test();
         let home = tmp.path();
         let root = Path::new("/tmp/project");
@@ -378,7 +380,9 @@ pub(crate) mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_path() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
@@ -414,7 +418,9 @@ pub(crate) mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_manifest_path() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
@@ -430,7 +436,9 @@ pub(crate) mod tests {
 
     #[test]
     fn user_scope_reports_missing_home() {
-        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         let _guard = EnvGuard::remove("HOME");
 
         let root = Path::new("/tmp/project");

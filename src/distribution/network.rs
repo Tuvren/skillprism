@@ -735,10 +735,10 @@ mod tests {
                 "-m",
                 "init",
             ],
-            &base,
+            base,
         );
 
-        let head = git_dir_head(&base).unwrap();
+        let head = git_dir_head(base).unwrap();
         assert_eq!(head.len(), 40);
         assert!(head.chars().all(|c| c.is_ascii_hexdigit()));
     }
