@@ -231,6 +231,7 @@ pub(crate) mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
+    #[must_use = "saving guard to a variable is required to keep env var overridden until scope ends"]
     pub(crate) struct EnvGuard {
         key: &'static str,
         previous: Option<std::ffi::OsString>,
