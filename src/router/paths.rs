@@ -231,17 +231,51 @@ pub(crate) mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
+    pub(crate) struct EnvGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvGuard {
+        pub(crate) fn set(key: &'static str, value: &Path) -> Self {
+            let previous = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, previous }
+        }
+
+        pub(crate) fn remove(key: &'static str) -> Self {
+            let previous = std::env::var_os(key);
+            unsafe {
+                std::env::remove_var(key);
+            }
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(ref val) = self.previous {
+                unsafe {
+                    std::env::set_var(self.key, val);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
+
     /// Serialises tests that mutate the global `HOME` env var so they don't
     /// race under parallel test execution.
     pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn set_home_for_test() -> (tempfile::TempDir, PathBuf) {
+    fn set_home_for_test() -> (tempfile::TempDir, EnvGuard) {
         let tmp = tempfile::tempdir().unwrap();
-        let home = tmp.path().to_path_buf();
-        unsafe {
-            std::env::set_var("HOME", &home);
-        }
-        (tmp, home)
+        let guard = EnvGuard::set("HOME", tmp.path());
+        (tmp, guard)
     }
 
     fn claude_harness() -> HarnessDefinition {
@@ -259,12 +293,13 @@ pub(crate) mod tests {
     #[test]
     fn user_scope_path() {
         let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let (_tmp, home) = set_home_for_test();
+        let (tmp, _guard) = set_home_for_test();
+        let home = tmp.path();
         let root = Path::new("/tmp/project");
         let path =
             resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User).unwrap();
         assert!(path.ends_with(".claude/skills/my-agent/SKILL.md"));
-        assert!(path.starts_with(&home));
+        assert!(path.starts_with(home));
     }
 
     #[test]
@@ -395,21 +430,11 @@ pub(crate) mod tests {
     #[test]
     fn user_scope_reports_missing_home() {
         let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        let prev = std::env::var("HOME").ok();
-        unsafe {
-            std::env::remove_var("HOME");
-        }
+        let _guard = EnvGuard::remove("HOME");
 
         let root = Path::new("/tmp/project");
         let harness = claude_harness();
         let result = resolve_skill_path(root, &harness, "agent", TargetScope::User);
-
-        if let Some(home) = prev {
-            // SAFETY: restoring original value after the test assertion.
-            unsafe {
-                std::env::set_var("HOME", home);
-            }
-        }
 
         match result {
             Err(RouterError::MissingHome) => {}

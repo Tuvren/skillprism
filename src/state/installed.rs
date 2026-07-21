@@ -639,18 +639,9 @@ mod tests {
             .lock()
             .unwrap_or_else(|e| e.into_inner());
         let xdg = tempfile::tempdir().unwrap();
-        let prev = std::env::var("XDG_CONFIG_HOME").ok();
-        unsafe {
-            std::env::set_var("XDG_CONFIG_HOME", xdg.path());
-        }
+        let _guard = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", xdg.path());
 
         assert_eq!(state_dir().unwrap(), xdg.path().join("skillprism"));
-
-        if let Some(prev) = prev {
-            unsafe { std::env::set_var("XDG_CONFIG_HOME", prev) };
-        } else {
-            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        }
     }
 
     #[test]
@@ -662,25 +653,10 @@ mod tests {
         let home = dir.path().join("home");
         fs::create_dir_all(&home).unwrap();
 
-        let prev_xdg = std::env::var("XDG_CONFIG_HOME").ok();
-        let prev_home = std::env::var("HOME").ok();
-        unsafe {
-            std::env::remove_var("XDG_CONFIG_HOME");
-            std::env::set_var("HOME", &home);
-        }
+        let _xdg_guard = crate::router::paths::tests::EnvGuard::remove("XDG_CONFIG_HOME");
+        let _home_guard = crate::router::paths::tests::EnvGuard::set("HOME", &home);
 
         assert_eq!(state_dir().unwrap(), home.join(".config/skillprism"));
-
-        if let Some(xdg) = prev_xdg {
-            unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg) };
-        } else {
-            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        }
-        if let Some(h) = prev_home {
-            unsafe { std::env::set_var("HOME", h) };
-        } else {
-            unsafe { std::env::remove_var("HOME") };
-        }
     }
 
     #[test]
