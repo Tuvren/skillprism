@@ -74,6 +74,7 @@ impl TestEnv {
     fn bin(&self) -> Command {
         let mut cmd = Command::cargo_bin("skillprism").unwrap();
         cmd.current_dir(self.project_dir())
+            .env("HOME", self.state_config.join("home"))
             .env("XDG_CONFIG_HOME", &self.state_config);
         cmd
     }
@@ -312,6 +313,7 @@ fn distribution_add_root_plain_skill_names_from_repo_slug() {
     let mut add_cmd = Command::cargo_bin("skillprism").unwrap();
     add_cmd
         .current_dir(project.path())
+        .env("HOME", state.path().join("home"))
         .env("XDG_CONFIG_HOME", state.path())
         .arg("add")
         .arg(&source_url)
@@ -380,6 +382,7 @@ fn distribution_update_applies_source_changes() {
     let mut add_cmd = Command::cargo_bin("skillprism").unwrap();
     add_cmd
         .current_dir(project.path())
+        .env("HOME", state.path().join("home"))
         .env("XDG_CONFIG_HOME", state.path())
         .arg("add")
         .arg(&source_url)
@@ -428,6 +431,7 @@ fn distribution_update_applies_source_changes() {
     let mut update_cmd = Command::cargo_bin("skillprism").unwrap();
     update_cmd
         .current_dir(project.path())
+        .env("HOME", state.path().join("home"))
         .env("XDG_CONFIG_HOME", state.path())
         .arg("update")
         .arg("--force");

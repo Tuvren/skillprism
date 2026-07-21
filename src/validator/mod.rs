@@ -379,58 +379,56 @@ mod tests {
         name: &str,
         template_content: &str,
         vars: BTreeMap<String, yaml_serde::Value>,
-    ) -> SkillModel {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("validator")
-            .join(name);
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        let tmpl_path = dir.join("SKILL.md.j2");
+    ) -> (tempfile::TempDir, SkillModel) {
+        let dir = tempfile::tempdir().unwrap();
+        let tmpl_path = dir.path().join("SKILL.md.j2");
         fs::write(&tmpl_path, template_content).unwrap();
 
-        SkillModel {
-            name: name.to_string(),
-            directory_name: name.to_string(),
-            description: "A test skill".to_string(),
-            version: None,
-            license: None,
-            compatibility: None,
-            metadata: BTreeMap::new(),
-            allowed_tools: None,
-            when_to_use: None,
-            argument_hint: None,
-            arguments: None,
-            disable_model_invocation: None,
-            user_invocable: None,
-            disallowed_tools: None,
-            model_override: None,
-            effort: None,
-            context_fork: false,
-            agent: None,
-            hooks: None,
-            activation_paths: None,
-            shell: None,
-            required_capabilities: Vec::new(),
-            variables: vars,
-            template_path: tmpl_path,
-            asset_dirs: Vec::new(),
-            harness_overrides: BTreeMap::new(),
-        }
+        (
+            dir,
+            SkillModel {
+                name: name.to_string(),
+                directory_name: name.to_string(),
+                description: "A test skill".to_string(),
+                version: None,
+                license: None,
+                compatibility: None,
+                metadata: BTreeMap::new(),
+                allowed_tools: None,
+                when_to_use: None,
+                argument_hint: None,
+                arguments: None,
+                disable_model_invocation: None,
+                user_invocable: None,
+                disallowed_tools: None,
+                model_override: None,
+                effort: None,
+                context_fork: false,
+                agent: None,
+                hooks: None,
+                activation_paths: None,
+                shell: None,
+                required_capabilities: Vec::new(),
+                variables: vars,
+                template_path: tmpl_path,
+                asset_dirs: Vec::new(),
+                harness_overrides: BTreeMap::new(),
+            },
+        )
     }
 
-    fn resolve_pair(name: &str, harness_name: &str) -> ResolvedPair {
+    fn resolve_pair(name: &str, harness_name: &str) -> (tempfile::TempDir, ResolvedPair) {
         let registry = HarnessRegistry::with_builtins();
-        let skill = test_skill(name, "", BTreeMap::new());
-        HarnessResolver::resolve_skill_harness(&skill, harness_name, &registry).unwrap()
+        let (dir, skill) = test_skill(name, "", BTreeMap::new());
+        let pair = HarnessResolver::resolve_skill_harness(&skill, harness_name, &registry).unwrap();
+        (dir, pair)
     }
 
     #[test]
     fn all_skills_pass_validation() {
-        let pairs = vec![
-            resolve_pair("skill-a", "claude"),
-            resolve_pair("skill-b", "opencode"),
-        ];
+        let (_d1, p1) = resolve_pair("skill-a", "claude");
+        let (_d2, p2) = resolve_pair("skill-b", "opencode");
+        let pairs = vec![p1, p2];
 
         let outcome = Validator::validate(pairs);
         assert!(outcome.errors.is_empty());
@@ -440,7 +438,7 @@ mod tests {
     #[test]
     fn syntax_error_collected() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = test_skill("broken", "Hello {{ name }", BTreeMap::new());
+        let (_dir, skill) = test_skill("broken", "Hello {{ name }", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
 
         let outcome = Validator::validate(vec![pair]);
@@ -457,7 +455,7 @@ mod tests {
     #[test]
     fn undefined_variable_collected() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = test_skill("missing-var", "Hello {{ unknown }}!", BTreeMap::new());
+        let (_dir, skill) = test_skill("missing-var", "Hello {{ unknown }}!", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
 
         let outcome = Validator::validate(vec![pair]);
@@ -477,7 +475,7 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let mut vars = BTreeMap::new();
         vars.insert("version".to_string(), yaml_serde::Value::String("2".into()));
-        let skill = test_skill("shadowed", "Version: {{ version }}", vars);
+        let (_dir, skill) = test_skill("shadowed", "Version: {{ version }}", vars);
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
 
         let outcome = Validator::validate(vec![pair]);
@@ -501,12 +499,12 @@ mod tests {
     fn collect_errors_from_multiple_skills() {
         let registry = HarnessRegistry::with_builtins();
 
-        let good_skill = test_skill("good", "Hello {{ name }}!", {
+        let (_d1, good_skill) = test_skill("good", "Hello {{ name }}!", {
             let mut v = BTreeMap::new();
             v.insert("name".to_string(), yaml_serde::Value::String("test".into()));
             v
         });
-        let bad_skill = test_skill("bad", "Hello {{ unknown }}!", BTreeMap::new());
+        let (_d2, bad_skill) = test_skill("bad", "Hello {{ unknown }}!", BTreeMap::new());
 
         let pairs = vec![
             HarnessResolver::resolve_skill_harness(&good_skill, "claude", &registry).unwrap(),
@@ -530,7 +528,7 @@ mod tests {
     #[test]
     fn template_read_error_handled() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = test_skill("no-file", "anything", BTreeMap::new());
+        let (_dir, skill) = test_skill("no-file", "anything", BTreeMap::new());
         let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         pair.skill.template_path = Path::new("/nonexistent/template.j2").to_path_buf();
 
@@ -545,7 +543,8 @@ mod tests {
     #[test]
     fn harness_only_variable_not_flagged_undefined_for_its_own_harness() {
         let registry = HarnessRegistry::with_builtins();
-        let mut skill = test_skill("harness-var", "Hello {{ custom_var }}!", BTreeMap::new());
+        let (_dir, mut skill) =
+            test_skill("harness-var", "Hello {{ custom_var }}!", BTreeMap::new());
         let mut claude_vars = BTreeMap::new();
         claude_vars.insert(
             "custom_var".to_string(),
@@ -582,7 +581,7 @@ mod tests {
     #[test]
     fn harness_only_macro_not_flagged_undefined_for_its_own_harness() {
         let registry = HarnessRegistry::with_builtins();
-        let mut skill = test_skill(
+        let (_dir, mut skill) = test_skill(
             "harness-macro",
             "{{ harness.custom_macro }}",
             BTreeMap::new(),
@@ -621,12 +620,8 @@ mod tests {
     fn valid_skills_included_with_partial_failures() {
         let registry = HarnessRegistry::with_builtins();
 
-        // Distinct names from other tests in this file's `good`/`broken` pairs —
-        // test_skill() writes to a path keyed only by name under the shared
-        // std::env::temp_dir(), so reusing a name races other tests under parallel
-        // execution (each test's setup removes and recreates the same directory).
-        let good = test_skill("good-partial", "ok", BTreeMap::new());
-        let broken = test_skill("broken-partial", "{{ broken", BTreeMap::new());
+        let (_d1, good) = test_skill("good-partial", "ok", BTreeMap::new());
+        let (_d2, broken) = test_skill("broken-partial", "{{ broken", BTreeMap::new());
 
         let pairs = vec![
             HarnessResolver::resolve_skill_harness(&good, "claude", &registry).unwrap(),

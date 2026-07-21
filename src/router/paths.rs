@@ -235,12 +235,13 @@ mod tests {
     /// race under parallel test execution.
     static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn set_home_for_test() -> PathBuf {
-        let home = std::env::temp_dir().join("skillprism-test-home");
+    fn set_home_for_test() -> (tempfile::TempDir, PathBuf) {
+        let tmp = tempfile::tempdir().unwrap();
+        let home = tmp.path().to_path_buf();
         unsafe {
             std::env::set_var("HOME", &home);
         }
-        home
+        (tmp, home)
     }
 
     fn claude_harness() -> HarnessDefinition {
@@ -258,7 +259,7 @@ mod tests {
     #[test]
     fn user_scope_path() {
         let _lock = HOME_LOCK.lock().unwrap();
-        let home = set_home_for_test();
+        let (_tmp, home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let path =
             resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User).unwrap();
@@ -342,7 +343,7 @@ mod tests {
     #[test]
     fn rejects_traversal_in_user_scope_path() {
         let _lock = HOME_LOCK.lock().unwrap();
-        set_home_for_test();
+        let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
         harness.paths.user_scope_path = "../../escape".to_string();
@@ -377,6 +378,8 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_manifest_path() {
+        let _lock = HOME_LOCK.lock().unwrap();
+        let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
         harness.paths.manifest_scope_path = Some("../hijack".to_string());

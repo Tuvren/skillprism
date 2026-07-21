@@ -72,8 +72,11 @@ fn cp_dir(src: &Path, dst: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn bin() -> Command {
-    Command::cargo_bin("skillprism").unwrap()
+fn bin(home: &Path) -> Command {
+    let mut cmd = Command::cargo_bin("skillprism").unwrap();
+    cmd.env("HOME", home.join(".home"))
+        .env("XDG_CONFIG_HOME", home.join(".config"));
+    cmd
 }
 
 fn skill_output_path(project_dir: &Path, scope_dir: &str, skill: &str) -> PathBuf {
@@ -84,7 +87,7 @@ fn skill_output_path(project_dir: &Path, scope_dir: &str, skill: &str) -> PathBu
 /// (where `[resolve] skipped: ...` warnings land).
 fn build_examples() -> (TempDir, String) {
     let tmp = copy_examples();
-    let assert = bin()
+    let assert = bin(tmp.path())
         .current_dir(tmp.path())
         .arg("build")
         .arg("--force")

@@ -188,11 +188,8 @@ mod tests {
 
     #[test]
     fn resolve_user_override_over_builtin() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("override_test");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(dir.join("harnesses")).unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("harnesses")).unwrap();
 
         let override_yaml = r"
 id: opencode
@@ -205,22 +202,16 @@ paths:
   user_scope_path: custom/skills
   skill_filename: SKILL.md
 ";
-        std::fs::write(dir.join("harnesses/opencode.yaml"), override_yaml).unwrap();
+        std::fs::write(dir.path().join("harnesses/opencode.yaml"), override_yaml).unwrap();
 
         let mut registry = HarnessRegistry::with_builtins();
         registry
-            .load_user_overrides(&dir.join("harnesses"))
+            .load_user_overrides(&dir.path().join("harnesses"))
             .unwrap();
 
         let def = registry.resolve("opencode").unwrap();
         assert_eq!(def.name, "OpenCode Custom");
         assert_eq!(def.paths.project_scope_path, "custom/skills");
-
-        drop_dir(&dir);
-    }
-
-    fn drop_dir(path: &std::path::Path) {
-        let _ = std::fs::remove_dir_all(path);
     }
 
     #[test]

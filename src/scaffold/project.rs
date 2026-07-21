@@ -78,12 +78,10 @@ mod tests {
 
     #[test]
     fn scaffold_creates_expected_structure() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_project");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
 
-        scaffold_project(&dir, "test-project", &[]).unwrap();
+        scaffold_project(dir, "test-project", &[]).unwrap();
         assert!(dir.join("skillprism.yaml").exists());
         assert!(dir.join("skills").is_dir());
         assert!(dir.join("harnesses").is_dir());
@@ -97,37 +95,29 @@ mod tests {
         let lines: Vec<&str> = content.lines().collect();
         assert!(lines.contains(&"  - claude"));
         assert!(lines.contains(&"  - opencode"));
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn scaffold_with_custom_harnesses() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_custom_harnesses");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
 
         let h = vec!["claude".to_string(), "codex".to_string(), "pi".to_string()];
-        scaffold_project(&dir, "custom", &h).unwrap();
+        scaffold_project(dir, "custom", &h).unwrap();
 
         let content = fs::read_to_string(dir.join("skillprism.yaml")).unwrap();
         let lines: Vec<&str> = content.lines().collect();
         assert!(lines.contains(&"  - claude"));
         assert!(lines.contains(&"  - codex"));
         assert!(lines.contains(&"  - pi"));
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn scaffold_sample_skill_contains_frontmatter_and_builtins() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_sample_refs");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
 
-        scaffold_project(&dir, "test", &[]).unwrap();
+        scaffold_project(dir, "test", &[]).unwrap();
 
         let template = fs::read_to_string(dir.join("skills/sample/SKILL.md")).unwrap();
         // The spec requires frontmatter — the scaffold must emit it.
@@ -157,24 +147,18 @@ mod tests {
             skill_yaml.contains("sample"),
             "skill.yaml must contain the skill name"
         );
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn scaffold_writes_gitignore_for_harness_output() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_gitignore");
-        let _ = fs::remove_dir_all(&dir);
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path();
 
-        scaffold_project(&dir, "test", &[]).unwrap();
+        scaffold_project(dir, "test", &[]).unwrap();
 
         let gitignore = fs::read_to_string(dir.join(".gitignore")).unwrap();
         assert!(gitignore.contains(".claude/"));
         assert!(gitignore.contains(".opencode/"));
         assert!(gitignore.contains("dist/"));
-
-        let _ = fs::remove_dir_all(&dir);
     }
 }

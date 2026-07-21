@@ -480,23 +480,14 @@ mod tests {
     // need an isolated directory use `StateStore::open_at` instead.
     static STATE_LOCK: Mutex<()> = Mutex::new(());
 
-    fn temp_state_dir(name: &str) -> PathBuf {
-        std::env::temp_dir()
-            .join("skillprism_test")
-            .join("state")
-            .join(name)
-    }
-
-    fn with_temp_store<F>(name: &str, f: F)
+    fn with_temp_store<F>(_name: &str, f: F)
     where
         F: FnOnce(StateStore),
     {
         let _lock = STATE_LOCK.lock().unwrap();
-        let dir = temp_state_dir(name);
-        let _ = fs::remove_dir_all(&dir);
-        let store = StateStore::open_at(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let store = StateStore::open_at(tmp.path()).unwrap();
         f(store);
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -645,9 +636,8 @@ mod tests {
     #[test]
     fn xdg_config_home_overrides_default() {
         let _lock = STATE_LOCK.lock().unwrap();
-        let dir = temp_state_dir("xdg_override");
-        let _ = fs::remove_dir_all(&dir);
-        let xdg = dir.join("xdg_config");
+        let dir = tempfile::tempdir().unwrap();
+        let xdg = dir.path().join("xdg_config");
         let prev = std::env::var("XDG_CONFIG_HOME").ok();
         unsafe {
             std::env::set_var("XDG_CONFIG_HOME", &xdg);
@@ -660,15 +650,13 @@ mod tests {
         } else {
             unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
         }
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn falls_back_to_home_when_xdg_unset() {
         let _lock = STATE_LOCK.lock().unwrap();
-        let dir = temp_state_dir("home_fallback");
-        let _ = fs::remove_dir_all(&dir);
-        let home = dir.join("home");
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
         fs::create_dir_all(&home).unwrap();
 
         let prev_xdg = std::env::var("XDG_CONFIG_HOME").ok();
@@ -690,7 +678,6 @@ mod tests {
         } else {
             unsafe { std::env::remove_var("HOME") };
         }
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

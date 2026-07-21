@@ -181,16 +181,10 @@ mod tests {
 
     #[test]
     fn read_existing_returns_content_for_existing_file() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("diff_read");
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        std::fs::write(dir.join("test.md"), "content").unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("test.md"), "content").unwrap();
 
-        let content = read_existing(&dir.join("test.md"));
+        let content = read_existing(&dir.path().join("test.md"));
         assert_eq!(content.as_deref(), Some("content"));
-
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

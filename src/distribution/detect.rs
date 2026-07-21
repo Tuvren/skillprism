@@ -77,37 +77,16 @@ fn detect_from_home(home: &Path) -> Vec<String> {
 mod tests {
     use super::*;
 
-    struct TempDir(PathBuf);
-
-    impl TempDir {
-        fn new(suffix: &str) -> Self {
-            let dir = std::env::temp_dir().join(format!("skillprism-detect-{suffix}"));
-            let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(&dir).unwrap();
-            Self(dir)
-        }
-
-        fn path(&self) -> &Path {
-            &self.0
-        }
-    }
-
-    impl Drop for TempDir {
-        fn drop(&mut self) {
-            let _ = std::fs::remove_dir_all(&self.0);
-        }
-    }
-
     #[test]
     fn detects_nothing_when_no_paths_exist() {
-        let dir = TempDir::new("none");
+        let dir = tempfile::tempdir().unwrap();
         let detected = detect_from_home(dir.path());
         assert!(detected.is_empty());
     }
 
     #[test]
     fn detects_single_agent() {
-        let dir = TempDir::new("single");
+        let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
         let detected = detect_from_home(dir.path());
         assert_eq!(detected, vec!["claude"]);
@@ -115,7 +94,7 @@ mod tests {
 
     #[test]
     fn detects_multiple_agents() {
-        let dir = TempDir::new("multi");
+        let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join(".claude")).unwrap();
         std::fs::create_dir_all(dir.path().join(".config/opencode")).unwrap();
         std::fs::create_dir_all(dir.path().join(".factory")).unwrap();
@@ -129,11 +108,10 @@ mod tests {
     #[test]
     fn public_api_returns_empty_when_home_has_no_agents() {
         let old_home = std::env::var_os("HOME");
-        let empty_home = std::env::temp_dir().join("skillprism-empty-home-test");
-        std::fs::create_dir_all(&empty_home).unwrap();
+        let empty_home = tempfile::tempdir().unwrap();
         // SAFETY: env var mutation is isolated by the test runner's default
         // process-per-test-thread model and restored below.
-        unsafe { std::env::set_var("HOME", &empty_home) };
+        unsafe { std::env::set_var("HOME", empty_home.path()) };
         assert!(detect_installed_agents().is_empty());
         if let Some(h) = old_home {
             // SAFETY: restoring the original HOME after the assertion.

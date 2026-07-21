@@ -358,15 +358,14 @@ mod tests {
     use std::fs;
     use std::path::PathBuf;
 
-    fn setup_test_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join("skillprism_test").join(name);
-        let _ = fs::remove_dir_all(&dir);
-        dir
+    fn setup_test_dir() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
     }
 
     #[test]
     fn load_valid_project() {
-        let root = setup_test_dir("valid_project");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/my-skill/references")).unwrap();
 
         fs::write(
@@ -381,7 +380,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
 
-        let model = ProjectLoader::load(&root).unwrap();
+        let model = ProjectLoader::load(root).unwrap();
         assert_eq!(
             model.config.harnesses,
             vec!["claude".to_string(), "opencode".to_string()]
@@ -393,7 +392,8 @@ mod tests {
 
     #[test]
     fn dot_directories_excluded_from_asset_dirs() {
-        let root = setup_test_dir("dot_dirs_excluded");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/my-skill/references")).unwrap();
         fs::create_dir_all(root.join("skills/my-skill/.venv")).unwrap();
         fs::create_dir_all(root.join("skills/my-skill/.git")).unwrap();
@@ -406,7 +406,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
 
-        let model = ProjectLoader::load(&root).unwrap();
+        let model = ProjectLoader::load(root).unwrap();
         assert_eq!(model.skills.len(), 1);
         let asset_names: Vec<String> = model.skills[0]
             .asset_dirs
@@ -419,7 +419,8 @@ mod tests {
 
     #[test]
     fn load_valid_project_with_bare_skill_md() {
-        let root = setup_test_dir("valid_project_bare_md");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/my-skill")).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
@@ -430,7 +431,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md"), "# {{ name }}\n").unwrap();
 
-        let model = ProjectLoader::load(&root).unwrap();
+        let model = ProjectLoader::load(root).unwrap();
         assert_eq!(model.skills.len(), 1);
         assert_eq!(
             model.skills[0].template_path,
@@ -440,7 +441,8 @@ mod tests {
 
     #[test]
     fn ambiguous_template_both_extensions_present() {
-        let root = setup_test_dir("ambiguous_template");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/my-skill")).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
@@ -452,7 +454,7 @@ mod tests {
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md"), "# {{ name }}\n").unwrap();
 
-        let result = ProjectLoader::load(&root);
+        let result = ProjectLoader::load(root);
         match result.unwrap_err() {
             ProjectError::AmbiguousTemplate { dir } => {
                 assert!(dir.contains("my-skill"));
@@ -463,10 +465,11 @@ mod tests {
 
     #[test]
     fn missing_skillprism_yaml() {
-        let root = setup_test_dir("missing_config");
-        fs::create_dir_all(&root).unwrap();
+        let tmp = setup_test_dir();
+        let root = tmp.path();
+        fs::create_dir_all(root).unwrap();
 
-        let result = ProjectLoader::load(&root);
+        let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
             ProjectError::ConfigNotFound { .. } => {}
@@ -476,12 +479,13 @@ mod tests {
 
     #[test]
     fn invalid_yaml_syntax() {
-        let root = setup_test_dir("invalid_yaml");
-        fs::create_dir_all(&root).unwrap();
+        let tmp = setup_test_dir();
+        let root = tmp.path();
+        fs::create_dir_all(root).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses: [invalid\n").unwrap();
 
-        let result = ProjectLoader::load(&root);
+        let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
             ProjectError::YamlParse { .. } => {}
@@ -491,14 +495,15 @@ mod tests {
 
     #[test]
     fn invalid_skill_yaml() {
-        let root = setup_test_dir("invalid_skill_yaml");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/bad-skill")).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(root.join("skills/bad-skill/skill.yaml"), "name: 'broken\n").unwrap();
         fs::write(root.join("skills/bad-skill/SKILL.md.j2"), "content\n").unwrap();
 
-        let result = ProjectLoader::load(&root);
+        let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
             ProjectError::YamlParse { .. } => {}
@@ -508,7 +513,8 @@ mod tests {
 
     #[test]
     fn typo_in_harness_override_field_rejected() {
-        let root = setup_test_dir("typo_harness_override");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/my-skill")).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
@@ -519,7 +525,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
 
-        let result = ProjectLoader::load(&root);
+        let result = ProjectLoader::load(root);
         assert!(
             result.is_err(),
             "a typo'd override field should not be silently dropped"
@@ -532,7 +538,8 @@ mod tests {
 
     #[test]
     fn harness_overrides_parsed_from_skill_yaml() {
-        let root = setup_test_dir("harness_overrides");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/my-skill")).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
@@ -552,7 +559,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# test\n").unwrap();
 
-        let model = ProjectLoader::load(&root).unwrap();
+        let model = ProjectLoader::load(root).unwrap();
         let skill = &model.skills[0];
 
         // The top-level default is untouched by the override.
@@ -577,7 +584,8 @@ mod tests {
 
     #[test]
     fn group_variable_merge_child_wins() {
-        let root = setup_test_dir("var_merge");
+        let tmp = setup_test_dir();
+        let root = tmp.path();
         fs::create_dir_all(root.join("skills/group/child")).unwrap();
 
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
@@ -595,7 +603,7 @@ mod tests {
         .unwrap();
         fs::write(root.join("skills/group/child/SKILL.md.j2"), "# test\n").unwrap();
 
-        let model = ProjectLoader::load(&root).unwrap();
+        let model = ProjectLoader::load(root).unwrap();
         assert_eq!(model.skills.len(), 1);
 
         let vars = &model.skills[0].variables;

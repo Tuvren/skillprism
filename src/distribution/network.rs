@@ -676,21 +676,14 @@ mod tests {
         assert!(status.success(), "git {args:?} failed");
     }
 
-    fn temp_dir() -> PathBuf {
-        static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let dir = std::env::temp_dir().join(format!(
-            "skillprism-network-test-{}-{n}",
-            std::process::id()
-        ));
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
-        dir
+    fn temp_dir() -> tempfile::TempDir {
+        tempfile::tempdir().unwrap()
     }
 
     #[test]
     fn git_default_branch_resolves_main() {
-        let base = temp_dir();
+        let base_tmp = temp_dir();
+        let base = base_tmp.path();
         let origin = base.join("origin.git");
         let work = base.join("work");
         fs::create_dir_all(&origin).unwrap();
@@ -727,10 +720,11 @@ mod tests {
 
     #[test]
     fn git_dir_head_returns_sha() {
-        let base = temp_dir();
-        run_git(&["init"], &base);
+        let base_tmp = temp_dir();
+        let base = base_tmp.path();
+        run_git(&["init"], base);
         fs::write(base.join("file.txt"), "content").unwrap();
-        run_git(&["add", "file.txt"], &base);
+        run_git(&["add", "file.txt"], base);
         run_git(
             &[
                 "-c",
