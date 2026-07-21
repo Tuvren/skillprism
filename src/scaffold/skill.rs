@@ -67,10 +67,8 @@ mod tests {
 
     #[test]
     fn scaffold_creates_skill_files() {
-        let project_root = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_skill");
-        let _ = fs::remove_dir_all(&project_root);
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
 
         fs::create_dir_all(project_root.join("skills")).unwrap();
         fs::write(
@@ -79,7 +77,7 @@ mod tests {
         )
         .unwrap();
 
-        scaffold_skill(&project_root, "my-skill").unwrap();
+        scaffold_skill(project_root, "my-skill").unwrap();
 
         let skill_dir = project_root.join("skills/my-skill");
         assert!(skill_dir.join("skill.yaml").exists());
@@ -89,16 +87,12 @@ mod tests {
 
         let yaml = fs::read_to_string(skill_dir.join("skill.yaml")).unwrap();
         assert!(yaml.contains("my-skill"));
-
-        let _ = fs::remove_dir_all(&project_root);
     }
 
     #[test]
     fn scaffold_skill_emits_spec_compliant_frontmatter() {
-        let project_root = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_skill_frontmatter");
-        let _ = fs::remove_dir_all(&project_root);
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
 
         fs::create_dir_all(project_root.join("skills")).unwrap();
         fs::write(
@@ -107,7 +101,7 @@ mod tests {
         )
         .unwrap();
 
-        scaffold_skill(&project_root, "my-skill").unwrap();
+        scaffold_skill(project_root, "my-skill").unwrap();
 
         let skill_dir = project_root.join("skills/my-skill");
 
@@ -134,16 +128,12 @@ mod tests {
         // the description.
         assert!(template.contains("{{ skill_name }}"));
         assert!(template.contains("{{ skill_description }}"));
-
-        let _ = fs::remove_dir_all(&project_root);
     }
 
     #[test]
     fn scaffold_skill_variables_are_optional_comment() {
-        let project_root = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_skill_optional_vars");
-        let _ = fs::remove_dir_all(&project_root);
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
 
         fs::create_dir_all(project_root.join("skills")).unwrap();
         fs::write(
@@ -152,7 +142,7 @@ mod tests {
         )
         .unwrap();
 
-        scaffold_skill(&project_root, "my-skill").unwrap();
+        scaffold_skill(project_root, "my-skill").unwrap();
 
         let skill_dir = project_root.join("skills/my-skill");
 
@@ -175,7 +165,5 @@ mod tests {
             !template.contains("{{ greeting }}"),
             "template should not reference an undefined variable"
         );
-
-        let _ = fs::remove_dir_all(&project_root);
     }
 }

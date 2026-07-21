@@ -56,14 +56,10 @@ mod tests {
 
     #[test]
     fn scaffold_creates_harness_yaml() {
-        let project_root = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_harness");
-        let _ = fs::remove_dir_all(&project_root);
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
 
-        fs::create_dir_all(&project_root).unwrap();
-
-        scaffold_harness(&project_root, "my-custom").unwrap();
+        scaffold_harness(project_root, "my-custom").unwrap();
 
         let harness_file = project_root.join("harnesses/my-custom.yaml");
         assert!(harness_file.exists());
@@ -77,23 +73,15 @@ mod tests {
         // Verify placeholder values are present
         assert!(content.contains("supports_subagent: false"));
         assert!(content.contains("project_scope_path:"));
-
-        let _ = fs::remove_dir_all(&project_root);
     }
 
     #[test]
     fn scaffold_harness_creates_harnesses_dir() {
-        let project_root = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("scaffold_harness_dir");
-        let _ = fs::remove_dir_all(&project_root);
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
 
-        fs::create_dir_all(&project_root).unwrap();
-
-        scaffold_harness(&project_root, "test-harness").unwrap();
+        scaffold_harness(project_root, "test-harness").unwrap();
 
         assert!(project_root.join("harnesses").is_dir());
-
-        let _ = fs::remove_dir_all(&project_root);
     }
 }

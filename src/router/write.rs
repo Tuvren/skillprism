@@ -108,46 +108,32 @@ mod tests {
 
     #[test]
     fn atomic_write_creates_file() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("atomic_write");
-        let _ = fs::remove_dir_all(&dir);
-        fs::create_dir_all(&dir).unwrap();
+        let dir = tempfile::tempdir().unwrap();
 
-        let target = dir.join("output.md");
+        let target = dir.path().join("output.md");
         atomic_write(&target, "Hello, World!").unwrap();
         assert!(target.exists());
         assert_eq!(fs::read_to_string(&target).unwrap(), "Hello, World!");
 
         let tmp_file = target.with_extension("tmp");
         assert!(!tmp_file.exists(), "tmp file should be cleaned up");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn atomic_write_creates_parent_dirs() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("atomic_write_nested");
-        let _ = fs::remove_dir_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
 
-        let target = dir.join("deep/nested/output.md");
+        let target = dir.path().join("deep/nested/output.md");
         atomic_write(&target, "nested").unwrap();
         assert!(target.exists());
         assert_eq!(fs::read_to_string(&target).unwrap(), "nested");
-
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn copy_assets_replicates_directories() {
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("copy_assets");
-        let _ = fs::remove_dir_all(&dir);
+        let dir = tempfile::tempdir().unwrap();
 
-        let src = dir.join("source");
+        let src = dir.path().join("source");
         let refs = src.join("references");
         fs::create_dir_all(&refs).unwrap();
         fs::write(refs.join("guide.md"), "# Guide").unwrap();
@@ -157,7 +143,7 @@ mod tests {
         fs::create_dir_all(&scripts).unwrap();
         fs::write(scripts.join("build.sh"), "#!/bin/bash").unwrap();
 
-        let dst = dir.join("output/skill-name");
+        let dst = dir.path().join("output/skill-name");
         copy_assets(&[src.join("references"), src.join("scripts")], &dst).unwrap();
 
         assert!(dst.join("references").exists());
@@ -165,7 +151,5 @@ mod tests {
         assert!(dst.join("references/config.json").exists());
         assert!(dst.join("scripts").exists());
         assert!(dst.join("scripts/build.sh").exists());
-
-        let _ = fs::remove_dir_all(&dir);
     }
 }

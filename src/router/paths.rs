@@ -227,20 +227,56 @@ fn home_dir() -> Result<PathBuf, RouterError> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::registry::HarnessRegistry;
 
+    #[must_use = "saving guard to a variable is required to keep env var overridden until scope ends"]
+    pub(crate) struct EnvGuard {
+        key: &'static str,
+        previous: Option<std::ffi::OsString>,
+    }
+
+    impl EnvGuard {
+        pub(crate) fn set(key: &'static str, value: &Path) -> Self {
+            let previous = std::env::var_os(key);
+            unsafe {
+                std::env::set_var(key, value);
+            }
+            Self { key, previous }
+        }
+
+        pub(crate) fn remove(key: &'static str) -> Self {
+            let previous = std::env::var_os(key);
+            unsafe {
+                std::env::remove_var(key);
+            }
+            Self { key, previous }
+        }
+    }
+
+    impl Drop for EnvGuard {
+        fn drop(&mut self) {
+            if let Some(ref val) = self.previous {
+                unsafe {
+                    std::env::set_var(self.key, val);
+                }
+            } else {
+                unsafe {
+                    std::env::remove_var(self.key);
+                }
+            }
+        }
+    }
+
     /// Serialises tests that mutate the global `HOME` env var so they don't
     /// race under parallel test execution.
-    static HOME_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
-    fn set_home_for_test() -> PathBuf {
-        let home = std::env::temp_dir().join("skillprism-test-home");
-        unsafe {
-            std::env::set_var("HOME", &home);
-        }
-        home
+    fn set_home_for_test() -> (tempfile::TempDir, EnvGuard) {
+        let tmp = tempfile::tempdir().unwrap();
+        let guard = EnvGuard::set("HOME", tmp.path());
+        (tmp, guard)
     }
 
     fn claude_harness() -> HarnessDefinition {
@@ -257,13 +293,14 @@ mod tests {
 
     #[test]
     fn user_scope_path() {
-        let _lock = HOME_LOCK.lock().unwrap();
-        let home = set_home_for_test();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (tmp, _guard) = set_home_for_test();
+        let home = tmp.path();
         let root = Path::new("/tmp/project");
         let path =
             resolve_skill_path(root, &claude_harness(), "my-agent", TargetScope::User).unwrap();
         assert!(path.ends_with(".claude/skills/my-agent/SKILL.md"));
-        assert!(path.starts_with(&home));
+        assert!(path.starts_with(home));
     }
 
     #[test]
@@ -341,8 +378,8 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_path() {
-        let _lock = HOME_LOCK.lock().unwrap();
-        set_home_for_test();
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
         harness.paths.user_scope_path = "../../escape".to_string();
@@ -377,6 +414,8 @@ mod tests {
 
     #[test]
     fn rejects_traversal_in_user_scope_manifest_path() {
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let (_tmp, _home) = set_home_for_test();
         let root = Path::new("/tmp/project");
         let mut harness = claude_harness();
         harness.paths.manifest_scope_path = Some("../hijack".to_string());
@@ -391,22 +430,12 @@ mod tests {
 
     #[test]
     fn user_scope_reports_missing_home() {
-        let _lock = HOME_LOCK.lock().unwrap();
-        let prev = std::env::var("HOME").ok();
-        unsafe {
-            std::env::remove_var("HOME");
-        }
+        let _lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let _guard = EnvGuard::remove("HOME");
 
         let root = Path::new("/tmp/project");
         let harness = claude_harness();
         let result = resolve_skill_path(root, &harness, "agent", TargetScope::User);
-
-        if let Some(home) = prev {
-            // SAFETY: restoring original value after the test assertion.
-            unsafe {
-                std::env::set_var("HOME", home);
-            }
-        }
 
         match result {
             Err(RouterError::MissingHome) => {}

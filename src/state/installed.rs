@@ -480,23 +480,14 @@ mod tests {
     // need an isolated directory use `StateStore::open_at` instead.
     static STATE_LOCK: Mutex<()> = Mutex::new(());
 
-    fn temp_state_dir(name: &str) -> PathBuf {
-        std::env::temp_dir()
-            .join("skillprism_test")
-            .join("state")
-            .join(name)
-    }
-
-    fn with_temp_store<F>(name: &str, f: F)
+    fn with_temp_store<F>(_name: &str, f: F)
     where
         F: FnOnce(StateStore),
     {
         let _lock = STATE_LOCK.lock().unwrap();
-        let dir = temp_state_dir(name);
-        let _ = fs::remove_dir_all(&dir);
-        let store = StateStore::open_at(&dir).unwrap();
+        let tmp = tempfile::tempdir().unwrap();
+        let store = StateStore::open_at(tmp.path()).unwrap();
         f(store);
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
@@ -644,53 +635,28 @@ mod tests {
 
     #[test]
     fn xdg_config_home_overrides_default() {
-        let _lock = STATE_LOCK.lock().unwrap();
-        let dir = temp_state_dir("xdg_override");
-        let _ = fs::remove_dir_all(&dir);
-        let xdg = dir.join("xdg_config");
-        let prev = std::env::var("XDG_CONFIG_HOME").ok();
-        unsafe {
-            std::env::set_var("XDG_CONFIG_HOME", &xdg);
-        }
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let xdg = tempfile::tempdir().unwrap();
+        let _guard = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", xdg.path());
 
-        assert_eq!(state_dir().unwrap(), xdg.join("skillprism"));
-
-        if let Some(prev) = prev {
-            unsafe { std::env::set_var("XDG_CONFIG_HOME", prev) };
-        } else {
-            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        }
-        let _ = fs::remove_dir_all(&dir);
+        assert_eq!(state_dir().unwrap(), xdg.path().join("skillprism"));
     }
 
     #[test]
     fn falls_back_to_home_when_xdg_unset() {
-        let _lock = STATE_LOCK.lock().unwrap();
-        let dir = temp_state_dir("home_fallback");
-        let _ = fs::remove_dir_all(&dir);
-        let home = dir.join("home");
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let home = dir.path().join("home");
         fs::create_dir_all(&home).unwrap();
 
-        let prev_xdg = std::env::var("XDG_CONFIG_HOME").ok();
-        let prev_home = std::env::var("HOME").ok();
-        unsafe {
-            std::env::remove_var("XDG_CONFIG_HOME");
-            std::env::set_var("HOME", &home);
-        }
+        let _xdg_guard = crate::router::paths::tests::EnvGuard::remove("XDG_CONFIG_HOME");
+        let _home_guard = crate::router::paths::tests::EnvGuard::set("HOME", &home);
 
         assert_eq!(state_dir().unwrap(), home.join(".config/skillprism"));
-
-        if let Some(xdg) = prev_xdg {
-            unsafe { std::env::set_var("XDG_CONFIG_HOME", xdg) };
-        } else {
-            unsafe { std::env::remove_var("XDG_CONFIG_HOME") };
-        }
-        if let Some(h) = prev_home {
-            unsafe { std::env::set_var("HOME", h) };
-        } else {
-            unsafe { std::env::remove_var("HOME") };
-        }
-        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -211,27 +211,15 @@ mod tests {
         name: &str,
         template_content: &str,
         vars: BTreeMap<String, yaml_serde::Value>,
-    ) -> SkillModel {
-        // Unique per invocation: several tests reuse the same skill `name`, so a
-        // name-only path let one test's `remove_dir_all` delete another's
-        // template mid-render under parallel execution (intermittent failure).
-        // Disambiguate by pid + an atomic counter so no two calls share a dir.
-        use std::sync::atomic::{AtomicU64, Ordering};
-        static COUNTER: AtomicU64 = AtomicU64::new(0);
-        let unique = COUNTER.fetch_add(1, Ordering::Relaxed);
-        let dir = std::env::temp_dir()
-            .join("skillprism_test")
-            .join("engine")
-            .join(format!("{name}-{}-{unique}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let tmpl_path = dir.join("SKILL.md.j2");
+    ) -> (tempfile::TempDir, SkillModel) {
+        let dir = tempfile::tempdir().unwrap();
+        let tmpl_path = dir.path().join("SKILL.md.j2");
         std::fs::write(&tmpl_path, template_content).unwrap();
 
         let mut skill = test_skill(name, vec![]);
         skill.template_path = tmpl_path;
         skill.variables = vars;
-        skill
+        (dir, skill)
     }
 
     fn render_pair(
@@ -240,7 +228,7 @@ mod tests {
         harness_name: &str,
     ) -> Result<HarnessOutput, EngineError> {
         let registry = HarnessRegistry::with_builtins();
-        let skill = create_skill_with_template(skill_name, template, BTreeMap::new());
+        let (_dir, skill) = create_skill_with_template(skill_name, template, BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, harness_name, &registry).unwrap();
         Engine::render(&pair)
     }
@@ -259,7 +247,7 @@ mod tests {
             yaml_serde::Value::String("dark".into()),
         );
         let registry = HarnessRegistry::with_builtins();
-        let skill = create_skill_with_template("styled", "{{ theme }}", vars);
+        let (_dir, skill) = create_skill_with_template("styled", "{{ theme }}", vars);
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = Engine::render(&pair).unwrap();
         assert_eq!(output.skill_content, "dark");
@@ -274,7 +262,8 @@ mod tests {
     #[test]
     fn renders_manifest_entry_for_harness_with_manifest() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let (_dir, skill) =
+            create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let entry = Engine::render_manifest_entry(&pair).unwrap();
         assert!(entry.is_some());
@@ -285,7 +274,8 @@ mod tests {
     #[test]
     fn render_manifest_entry_none_for_harness_without_manifest() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let (_dir, skill) =
+            create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
         let entry = Engine::render_manifest_entry(&pair).unwrap();
         assert!(entry.is_none());
@@ -294,7 +284,8 @@ mod tests {
     #[test]
     fn render_manifest_entry_error_for_invalid_template() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let (_dir, skill) =
+            create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         // Corrupt the manifest template to make rendering fail
         let mut pair = pair;
@@ -327,7 +318,7 @@ mod tests {
     #[test]
     fn render_syntax_error_reported() {
         let registry = HarnessRegistry::with_builtins();
-        let skill = create_skill_with_template("broken", "{{ broken", BTreeMap::new());
+        let (_dir, skill) = create_skill_with_template("broken", "{{ broken", BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let result = Engine::render(&pair);
         assert!(result.is_err());
