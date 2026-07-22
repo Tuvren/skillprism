@@ -88,6 +88,11 @@ pub enum InstallError {
     #[diagnostic(transparent)]
     State(#[from] crate::state::StateError),
 
+    /// Router error.
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Router(#[from] crate::router::RouterError),
+
     /// No skills were found in the source.
     #[error("no skillprism-format or plain-format skills found in {source_input}")]
     #[diagnostic(help(
@@ -673,7 +678,7 @@ fn install_plain_skill(
             skip_all,
             overwrite_all,
             &mut skipped,
-        ) {
+        )? {
             let template_bytes = fs::read(&template)?;
             crate::router::atomic_write_bytes(&skill_path_buf, &template_bytes)?;
             files.push(InstalledFile {

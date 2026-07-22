@@ -108,6 +108,11 @@ pub enum UpdateError {
     #[diagnostic(transparent)]
     State(#[from] crate::state::StateError),
 
+    /// Router error.
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Router(#[from] crate::router::RouterError),
+
     /// Rendering error.
     #[error("{0}")]
     #[diagnostic(help(
@@ -212,6 +217,8 @@ pub fn run_update(
         }
     });
 
+    let mut skip_all = false;
+    let mut overwrite_all = false;
     let mut clone_cache = CloneCache::new();
     for skill in &candidates {
         let mutated = update_skill(
@@ -220,6 +227,8 @@ pub fn run_update(
             harness_filter.as_deref(),
             diff,
             force,
+            &mut skip_all,
+            &mut overwrite_all,
             &mut clone_cache,
         )?;
         // Persist after each skill that ran its full update path (incremental
@@ -268,13 +277,15 @@ fn report_update_result(diff: bool, changed: bool, name: &str) {
 
 // reason: linear per-skill update pipeline (ref check → fetch → per-harness
 // render/compare) kept as one readable unit.
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn update_skill(
     old: &InstalledSkill,
     store: &mut StateStore,
     harness_filter: Option<&[String]>,
     diff: bool,
     force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
     clone_cache: &mut CloneCache,
 ) -> Result<bool, miette::Report> {
     if old.source_type == SourceType::Local {
@@ -414,6 +425,8 @@ fn update_skill(
             project_root.as_deref(),
             diff,
             force,
+            skip_all,
+            overwrite_all,
         )?,
         SkillFormat::Plain => update_plain_skill(
             old,
@@ -427,6 +440,8 @@ fn update_skill(
             project_root.as_deref(),
             diff,
             force,
+            skip_all,
+            overwrite_all,
         )?,
     };
 
@@ -453,6 +468,8 @@ fn update_skillprism_skill(
     project_root: Option<&Path>,
     diff: bool,
     force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<InstalledSkill, miette::Report> {
     let (skill, _temp_project) =
         load_skill_into_temp_project(skill_dir, harnesses).map_err(UpdateError::from)?;
@@ -463,8 +480,6 @@ fn update_skillprism_skill(
         .map(|f| (f.path.as_str(), f.hash.as_str()))
         .collect();
     let mut changed = false;
-    let mut skip_all = false;
-    let mut overwrite_all = false;
 
     let target = install_scope_to_target(old.scope);
     // For user-scope skills there is no project root; `resolve_skill_path`
@@ -525,8 +540,8 @@ fn update_skillprism_skill(
             &mut changed,
             diff,
             force,
-            &mut skip_all,
-            &mut overwrite_all,
+            skip_all,
+            overwrite_all,
         )?;
 
         // Known gap (tracked follow-up): re-render/re-record every sidecar the
@@ -556,8 +571,8 @@ fn update_skillprism_skill(
                 &mut changed,
                 diff,
                 force,
-                &mut skip_all,
-                &mut overwrite_all,
+                skip_all,
+                overwrite_all,
             )?;
         }
 
@@ -571,8 +586,8 @@ fn update_skillprism_skill(
                     &mut changed,
                     diff,
                     force,
-                    &mut skip_all,
-                    &mut overwrite_all,
+                    skip_all,
+                    overwrite_all,
                 )?;
             }
         }
@@ -617,6 +632,8 @@ fn update_plain_skill(
     project_root: Option<&Path>,
     diff: bool,
     force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<InstalledSkill, miette::Report> {
     let template = find_template_path(skill_dir)
         .map_err(UpdateError::from)?
@@ -632,8 +649,6 @@ fn update_plain_skill(
         .map(|f| (f.path.as_str(), f.hash.as_str()))
         .collect();
     let mut changed = false;
-    let mut skip_all = false;
-    let mut overwrite_all = false;
 
     let target = install_scope_to_target(old.scope);
     // For user-scope skills there is no project root; `resolve_skill_path`
@@ -688,10 +703,10 @@ fn update_plain_skill(
             } else if resolve_overwrite(
                 &skill_path_buf,
                 force,
-                &mut skip_all,
-                &mut overwrite_all,
+                skip_all,
+                overwrite_all,
                 &mut Vec::new(),
-            ) {
+            )? {
                 crate::router::atomic_write_bytes(&skill_path_buf, &content).map_err(|e| {
                     miette::Report::new(UpdateError::Write {
                         detail: e.to_string(),
@@ -728,8 +743,8 @@ fn update_plain_skill(
                     &mut changed,
                     diff,
                     force,
-                    &mut skip_all,
-                    &mut overwrite_all,
+                    skip_all,
+                    overwrite_all,
                 )?;
             }
         }
@@ -846,7 +861,7 @@ fn update_asset_dir(
         }
     } else {
         let mut skipped = Vec::new();
-        copied = resolve_overwrite(&dst_dir, force, skip_all, overwrite_all, &mut skipped);
+        copied = resolve_overwrite(&dst_dir, force, skip_all, overwrite_all, &mut skipped)?;
         if copied {
             copy_dir(src_dir, &dst_dir, src_dir)?;
             for path_str in &removed {
@@ -898,7 +913,7 @@ fn write_file_with_overwrite(
     overwrite_all: &mut bool,
 ) -> Result<bool, miette::Report> {
     let mut skipped = Vec::new();
-    if resolve_overwrite(path, force, skip_all, overwrite_all, &mut skipped) {
+    if resolve_overwrite(path, force, skip_all, overwrite_all, &mut skipped)? {
         crate::router::atomic_write(path, content).map_err(|e| {
             miette::Report::new(UpdateError::Write {
                 detail: e.to_string(),

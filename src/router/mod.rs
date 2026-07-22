@@ -77,6 +77,15 @@ pub enum RouterError {
         colliding_skills: String,
     },
 
+    /// Destination file exists and prompt cannot be displayed in a non-interactive environment.
+    #[error(
+        "Destination file `{path}` exists and prompt cannot be displayed in a non-interactive environment"
+    )]
+    #[diagnostic(help(
+        "Re-run with `--force` to overwrite existing files in non-interactive environments."
+    ))]
+    NonInteractiveOverwrite { path: String },
+
     /// `$HOME` is not set; cannot resolve user-scope paths.
     #[error("$HOME is not set; cannot resolve user-scope path")]
     #[diagnostic(help(
@@ -109,6 +118,7 @@ pub struct ManifestEntry {
 pub struct Router;
 
 /// Result of writing a skill's output files.
+#[derive(Debug)]
 pub struct WriteResult {
     /// Files that were successfully written.
     pub written: WrittenFiles,
@@ -207,7 +217,8 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if overwrite::resolve_overwrite(&skill_path, force, skip_all, overwrite_all, &mut skipped) {
+        if overwrite::resolve_overwrite(&skill_path, force, skip_all, overwrite_all, &mut skipped)?
+        {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
                     skill: skill_name.clone(),
@@ -283,7 +294,7 @@ impl Router {
         let grouped = manifest::group_manifest_entries(entries);
 
         for (path, group) in &grouped {
-            if !overwrite::resolve_overwrite(path, force, skip_all, overwrite_all, skipped) {
+            if !overwrite::resolve_overwrite(path, force, skip_all, overwrite_all, skipped)? {
                 continue;
             }
             let aggregated = manifest::aggregate_json_entries(group);
@@ -397,8 +408,13 @@ impl Router {
                 harness_id,
             )?;
 
-            if !overwrite::resolve_overwrite(&sidecar_path, force, skip_all, overwrite_all, skipped)
-            {
+            if !overwrite::resolve_overwrite(
+                &sidecar_path,
+                force,
+                skip_all,
+                overwrite_all,
+                skipped,
+            )? {
                 continue;
             }
 
@@ -416,6 +432,7 @@ impl Router {
 }
 
 /// Paths of files written during a build operation.
+#[derive(Debug)]
 pub struct WrittenFiles {
     /// Path to the rendered skill file.
     pub skill_path: std::path::PathBuf,
@@ -836,7 +853,7 @@ mod tests {
     }
 
     #[test]
-    fn existing_file_skipped_in_non_interactive_mode() {
+    fn existing_file_returns_error_in_non_interactive_mode() {
         let tmp_dir = tempfile::tempdir().unwrap();
         let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
@@ -855,7 +872,7 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result = Router::write(
+        let err = Router::write(
             &pair,
             &output,
             dir,
@@ -864,9 +881,12 @@ mod tests {
             &mut false,
             &mut false,
         )
-        .unwrap();
-        assert_eq!(result.skipped.len(), 1);
-        assert_eq!(written_content(&result.written.skill_path), "old");
+        .unwrap_err();
+        assert!(matches!(err, RouterError::NonInteractiveOverwrite { .. }));
+        assert_eq!(
+            written_content(&dir.join(".claude/skills/my-agent/SKILL.md")),
+            "old"
+        );
     }
 
     #[test]
