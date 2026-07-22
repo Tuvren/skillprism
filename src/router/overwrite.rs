@@ -22,6 +22,7 @@ use std::path::Path;
 pub(super) enum OverwriteChoice {
     Yes,
     No,
+    OverwriteAll,
     SkipAll,
     Abort,
 }
@@ -44,7 +45,7 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
 
         loop {
             eprint!(
-                "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
+                "File `{}` already exists. Overwrite? [y]es / [n]o / [o]verwrite all / [s]kip all / [a]bort: ",
                 path.display()
             );
             let _ = io::stderr().flush();
@@ -59,56 +60,158 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
             match input.trim().to_lowercase().as_str() {
                 "y" | "yes" => return Some(OverwriteChoice::Yes),
                 "n" | "no" => return Some(OverwriteChoice::No),
+                "o" | "overwrite" | "overwrite-all" | "overwriteall" | "all" => {
+                    return Some(OverwriteChoice::OverwriteAll);
+                }
                 "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
                 "a" | "abort" => return Some(OverwriteChoice::Abort),
                 _ => {
-                    eprintln!("Please answer y/n/s/a.");
+                    eprintln!("Please answer y/n/o/s/a.");
                 }
             }
         }
     }
 }
 
+use super::RouterError;
+
 /// Unified overwrite decision combining the force/skip-all guard and interactive prompt.
 ///
-/// Returns `true` if the caller should write the file, `false` if it should skip.
-/// Handles `skip_all` progression and abort exit internally.
+/// Returns `Ok(true)` if the caller should write the file, `Ok(false)` if it should skip.
+/// Returns `Err(RouterError::NonInteractiveOverwrite)` if file exists in non-TTY mode without force.
 pub fn resolve_overwrite(
     path: &Path,
     force: bool,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
     skipped: &mut Vec<String>,
-) -> bool {
-    if force || !path.exists() {
-        return true;
+) -> Result<bool, RouterError> {
+    if force || *overwrite_all || !path.exists() {
+        return Ok(true);
     }
     if *skip_all {
         skipped.push(path.to_string_lossy().to_string());
-        return false;
+        return Ok(false);
     }
     match prompt_overwrite(path) {
-        Some(OverwriteChoice::Yes) => true,
-        Some(OverwriteChoice::No) | None => {
+        Some(OverwriteChoice::Yes) => Ok(true),
+        Some(OverwriteChoice::OverwriteAll) => {
+            *overwrite_all = true;
+            Ok(true)
+        }
+        Some(OverwriteChoice::No) => {
             skipped.push(path.to_string_lossy().to_string());
-            false
+            Ok(false)
         }
         Some(OverwriteChoice::SkipAll) => {
             *skip_all = true;
             skipped.push(path.to_string_lossy().to_string());
-            false
+            Ok(false)
         }
-        Some(OverwriteChoice::Abort) => {
-            // Shared by build/add/update — keep the message operation-neutral.
-            //
-            // Known tradeoff: `process::exit` skips RAII unwinding, so an
-            // interactive abort mid-`add`/`update` can leave the temporary git
-            // clone/render directory behind (the OS temp reaper eventually
-            // reclaims it). `build` has no temp dir, so it is unaffected.
-            // Converting abort into an unwinding error across the shared
-            // Router/Install error surfaces is a tracked follow-up; the narrow,
-            // interactive-only trigger does not justify that churn here.
-            eprintln!("Aborting.");
-            std::process::exit(1);
-        }
+        Some(OverwriteChoice::Abort) => Err(RouterError::Aborted),
+        None => Err(RouterError::NonInteractiveOverwrite {
+            path: path.to_string_lossy().to_string(),
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn force_and_nonexistent_files_overwrite_without_prompt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+
+        let mut skip_all = false;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        assert!(
+            resolve_overwrite(
+                &file,
+                false,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped
+            )
+            .unwrap()
+        );
+
+        fs::write(&file, "content").unwrap();
+        assert!(
+            resolve_overwrite(&file, true, &mut skip_all, &mut overwrite_all, &mut skipped)
+                .unwrap()
+        );
+    }
+
+    #[test]
+    fn overwrite_all_state_bypasses_future_prompts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+        fs::write(&file, "content").unwrap();
+
+        let mut skip_all = false;
+        let mut overwrite_all = true;
+        let mut skipped = Vec::new();
+
+        assert!(
+            resolve_overwrite(
+                &file,
+                false,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped
+            )
+            .unwrap()
+        );
+        assert!(skipped.is_empty());
+    }
+
+    #[test]
+    fn skip_all_state_skips_future_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+        fs::write(&file, "content").unwrap();
+
+        let mut skip_all = true;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        assert!(
+            !resolve_overwrite(
+                &file,
+                false,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped
+            )
+            .unwrap()
+        );
+        assert_eq!(skipped.len(), 1);
+    }
+
+    #[test]
+    fn non_interactive_returns_error_for_existing_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+        fs::write(&file, "content").unwrap();
+
+        let mut skip_all = false;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        let err = resolve_overwrite(
+            &file,
+            false,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut skipped,
+        )
+        .unwrap_err();
+
+        assert!(matches!(err, RouterError::NonInteractiveOverwrite { .. }));
     }
 }

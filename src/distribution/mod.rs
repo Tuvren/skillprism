@@ -15,7 +15,7 @@
 //! Distribution CLI commands: add, list, remove, update.
 
 use std::fmt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::state::{InstallScope, InstalledSkill};
 use crate::types::ProjectError;
@@ -55,16 +55,23 @@ pub fn scope_harness_matches(
     skill: &InstalledSkill,
     target: Option<InstallScopeArg>,
     harnesses: Option<&String>,
+    active_project_root: Option<&Path>,
 ) -> bool {
-    target.is_none_or(|t| InstallScope::from(t) == skill.scope)
-        && harnesses.is_none_or(|h| {
-            let wanted = parse_harness_list(h);
-            wanted.is_empty()
-                || skill
-                    .harnesses
-                    .iter()
-                    .any(|installed| wanted.contains(installed))
-        })
+    let scope_matches = target.is_none_or(|t| InstallScope::from(t) == skill.scope);
+    if !scope_matches {
+        return false;
+    }
+    if !skill.matches_project_root(active_project_root) {
+        return false;
+    }
+    harnesses.is_none_or(|h| {
+        let wanted = parse_harness_list(h);
+        wanted.is_empty()
+            || skill
+                .harnesses
+                .iter()
+                .any(|installed| wanted.contains(installed))
+    })
 }
 
 /// Locates the nearest project root by walking up from the current directory
@@ -74,7 +81,13 @@ pub fn find_project_root() -> Result<PathBuf, ProjectError> {
         path: ".".to_string(),
         source: e,
     })?;
-    let mut dir = cwd.as_path();
+    find_project_root_from(&cwd)
+}
+
+/// Locates the nearest project root by walking up from `start` directory
+/// looking for `skillprism.yaml`.
+pub fn find_project_root_from(start: &std::path::Path) -> Result<PathBuf, ProjectError> {
+    let mut dir = start;
     loop {
         if dir.join("skillprism.yaml").exists() {
             return Ok(dir.to_path_buf());
@@ -83,7 +96,7 @@ pub fn find_project_root() -> Result<PathBuf, ProjectError> {
             dir = parent;
         } else {
             return Err(ProjectError::ConfigNotFound {
-                path: cwd.join("skillprism.yaml").to_string_lossy().to_string(),
+                path: start.join("skillprism.yaml").to_string_lossy().to_string(),
             });
         }
     }

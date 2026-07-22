@@ -77,6 +77,20 @@ pub enum RouterError {
         colliding_skills: String,
     },
 
+    /// Destination file exists and prompt cannot be displayed in a non-interactive environment.
+    #[error(
+        "Destination file `{path}` exists and prompt cannot be displayed in a non-interactive environment"
+    )]
+    #[diagnostic(help(
+        "Re-run with `--force` to overwrite existing files in non-interactive environments."
+    ))]
+    NonInteractiveOverwrite { path: String },
+
+    /// Operation was aborted by the user during prompt confirmation.
+    #[error("Operation aborted by user")]
+    #[diagnostic(help("Re-run the command when you are ready to proceed."))]
+    Aborted,
+
     /// `$HOME` is not set; cannot resolve user-scope paths.
     #[error("$HOME is not set; cannot resolve user-scope path")]
     #[diagnostic(help(
@@ -109,6 +123,7 @@ pub struct ManifestEntry {
 pub struct Router;
 
 /// Result of writing a skill's output files.
+#[derive(Debug)]
 pub struct WriteResult {
     /// Files that were successfully written.
     pub written: WrittenFiles,
@@ -194,6 +209,7 @@ impl Router {
         target: TargetScope,
         force: bool,
         skip_all: &mut bool,
+        overwrite_all: &mut bool,
     ) -> Result<WriteResult, RouterError> {
         let skill_name = &pair.skill.name;
         let harness_id = &pair.harness.id;
@@ -206,7 +222,8 @@ impl Router {
 
         let mut skipped = Vec::new();
 
-        if overwrite::resolve_overwrite(&skill_path, force, skip_all, &mut skipped) {
+        if overwrite::resolve_overwrite(&skill_path, force, skip_all, overwrite_all, &mut skipped)?
+        {
             atomic_write(&skill_path, &output.skill_content).map_err(|e| {
                 RouterError::WriteError {
                     skill: skill_name.clone(),
@@ -222,7 +239,15 @@ impl Router {
         let sidecar_paths = if skill_was_skipped {
             Vec::new()
         } else {
-            Self::write_sidecars(pair, output, &skill_dir, force, skip_all, &mut skipped)?
+            Self::write_sidecars(
+                pair,
+                output,
+                &skill_dir,
+                force,
+                skip_all,
+                overwrite_all,
+                &mut skipped,
+            )?
         };
 
         for dir in &pair.skill.asset_dirs {
@@ -266,6 +291,7 @@ impl Router {
         entries: &[ManifestEntry],
         force: bool,
         skip_all: &mut bool,
+        overwrite_all: &mut bool,
         skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
@@ -273,7 +299,7 @@ impl Router {
         let grouped = manifest::group_manifest_entries(entries);
 
         for (path, group) in &grouped {
-            if !overwrite::resolve_overwrite(path, force, skip_all, skipped) {
+            if !overwrite::resolve_overwrite(path, force, skip_all, overwrite_all, skipped)? {
                 continue;
             }
             let aggregated = manifest::aggregate_json_entries(group);
@@ -371,6 +397,7 @@ impl Router {
         skill_dir: &Path,
         force: bool,
         skip_all: &mut bool,
+        overwrite_all: &mut bool,
         skipped: &mut Vec<String>,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let skill_name = &pair.skill.name;
@@ -386,7 +413,13 @@ impl Router {
                 harness_id,
             )?;
 
-            if !overwrite::resolve_overwrite(&sidecar_path, force, skip_all, skipped) {
+            if !overwrite::resolve_overwrite(
+                &sidecar_path,
+                force,
+                skip_all,
+                overwrite_all,
+                skipped,
+            )? {
                 continue;
             }
 
@@ -404,6 +437,7 @@ impl Router {
 }
 
 /// Paths of files written during a build operation.
+#[derive(Debug)]
 pub struct WrittenFiles {
     /// Path to the rendered skill file.
     pub skill_path: std::path::PathBuf,
@@ -455,8 +489,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert_eq!(
             result.written.skill_path,
             dir.join(".claude/skills/my-agent/SKILL.md")
@@ -483,8 +525,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert!(
             result.written.skill_path.exists(),
             "directory should be created"
@@ -513,8 +563,16 @@ mod tests {
             }],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert!(result.written.sidecar_paths[0].exists());
         assert_eq!(
             written_content(&result.written.sidecar_paths[0]),
@@ -539,9 +597,14 @@ mod tests {
             },
         ];
 
-        let written =
-            Router::write_aggregated_manifests(&entries, false, &mut false, &mut Vec::new())
-                .unwrap();
+        let written = Router::write_aggregated_manifests(
+            &entries,
+            false,
+            &mut false,
+            &mut false,
+            &mut Vec::new(),
+        )
+        .unwrap();
         assert_eq!(written.len(), 1);
         assert!(manifest_path.exists());
 
@@ -573,7 +636,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
+        Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
 
         let dest_refs = dir.join(".claude/skills/test-skill/references/guide.md");
         assert!(dest_refs.exists());
@@ -702,8 +774,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
     }
@@ -726,8 +806,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, true, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            true,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert!(result.skipped.is_empty());
         assert!(result.written.skill_path.exists());
         assert_eq!(written_content(&result.written.skill_path), "rendered");
@@ -739,7 +827,8 @@ mod tests {
         let _dir = tmp_dir.path();
 
         let written =
-            Router::write_aggregated_manifests(&[], false, &mut false, &mut Vec::new()).unwrap();
+            Router::write_aggregated_manifests(&[], false, &mut false, &mut false, &mut Vec::new())
+                .unwrap();
         assert!(written.is_empty());
     }
 
@@ -769,7 +858,7 @@ mod tests {
     }
 
     #[test]
-    fn existing_file_skipped_in_non_interactive_mode() {
+    fn existing_file_returns_error_in_non_interactive_mode() {
         let tmp_dir = tempfile::tempdir().unwrap();
         let dir = tmp_dir.path();
         fs::create_dir_all(dir.join("skills/my-agent")).unwrap();
@@ -788,10 +877,21 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, false, &mut false).unwrap();
-        assert_eq!(result.skipped.len(), 1);
-        assert_eq!(written_content(&result.written.skill_path), "old");
+        let err = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            false,
+            &mut false,
+            &mut false,
+        )
+        .unwrap_err();
+        assert!(matches!(err, RouterError::NonInteractiveOverwrite { .. }));
+        assert_eq!(
+            written_content(&dir.join(".claude/skills/my-agent/SKILL.md")),
+            "old"
+        );
     }
 
     #[test]
@@ -815,6 +915,7 @@ mod tests {
         };
 
         let mut skip_all = true;
+        let mut overwrite_all = false;
         let result = Router::write(
             &pair,
             &output,
@@ -822,6 +923,7 @@ mod tests {
             TargetScope::Project,
             false,
             &mut skip_all,
+            &mut overwrite_all,
         )
         .unwrap();
         assert!(skip_all);
@@ -849,8 +951,16 @@ mod tests {
             sidecars: vec![],
         };
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, true, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            true,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert!(result.skipped.is_empty());
         assert_eq!(written_content(&result.written.skill_path), "overwritten");
     }
@@ -959,6 +1069,7 @@ mod tests {
         fs::write(&sidecar_output, "old").unwrap();
 
         let mut skip_all = true;
+        let mut overwrite_all = false;
         let result = Router::write(
             &pair,
             &output,
@@ -966,6 +1077,7 @@ mod tests {
             TargetScope::Project,
             false,
             &mut skip_all,
+            &mut overwrite_all,
         )
         .unwrap();
         assert!(
@@ -1016,8 +1128,16 @@ mod tests {
         let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
         fs::write(&sidecar_output, "old").unwrap();
 
-        let result =
-            Router::write(&pair, &output, dir, TargetScope::Project, true, &mut false).unwrap();
+        let result = Router::write(
+            &pair,
+            &output,
+            dir,
+            TargetScope::Project,
+            true,
+            &mut false,
+            &mut false,
+        )
+        .unwrap();
         assert!(
             result.skipped.is_empty(),
             "no files should be skipped with --force"

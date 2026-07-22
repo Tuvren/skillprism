@@ -15,7 +15,7 @@
 //! `skillprism remove` command implementation.
 
 use std::borrow::Cow;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 
 use miette::IntoDiagnostic;
@@ -64,7 +64,15 @@ pub fn run_remove(
 
     let mut store =
         StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    let removals = select_removals(store.skills(), &scopes, skills, all, &harness_filter);
+    let active_project_root = super::find_project_root().ok();
+    let removals = select_removals(
+        store.skills(),
+        &scopes,
+        skills,
+        all,
+        &harness_filter,
+        active_project_root.as_deref(),
+    );
 
     if removals.is_empty() {
         let requested = if skills.is_empty() {
@@ -77,7 +85,11 @@ pub fn run_remove(
             let other_scopes: Vec<InstallScope> = store
                 .skills()
                 .iter()
-                .filter(|s| skills.contains(&s.name) && !scopes.contains(&s.scope))
+                .filter(|s| {
+                    skills.contains(&s.name)
+                        && (!scopes.contains(&s.scope)
+                            || !s.matches_project_root(active_project_root.as_deref()))
+                })
                 .map(|s| s.scope)
                 .collect::<std::collections::BTreeSet<_>>()
                 .into_iter()
@@ -158,10 +170,12 @@ fn select_removals(
     names: &[String],
     all: bool,
     harness_filter: &[String],
+    active_project_root: Option<&Path>,
 ) -> Vec<RemovalAction> {
     skills
         .iter()
         .filter(|s| scopes.contains(&s.scope))
+        .filter(|s| s.matches_project_root(active_project_root))
         .filter(|s| all || names.contains(&s.name))
         .map(|s| {
             let to_remove: Vec<_> = if harness_filter.is_empty() {
@@ -198,6 +212,11 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
     eprintln!("The following skills will be removed:");
     for line in affected {
         eprintln!("  {line}");
+    }
+    if !io::stdin().is_terminal() {
+        return Err(CommandError::Usage(miette::miette!(
+            "Cannot prompt for confirmation in a non-interactive environment. Pass --force to remove skills."
+        )));
     }
     eprint!("Are you sure? [y/N] ");
     io::stderr()
@@ -268,7 +287,7 @@ fn apply_removals_to_state(
 ) -> Result<(), CommandError> {
     for (skill, harnesses_to_remove) in removals {
         if harnesses_to_remove.len() >= skill.harnesses.len() {
-            store.remove(&skill.name, skill.scope);
+            store.remove(&skill.name, skill.scope, skill.project_root.as_deref());
             continue;
         }
 
@@ -341,7 +360,7 @@ mod tests {
             sample_skill("alpha", InstallScope::Project, &["claude"]),
             sample_skill("beta", InstallScope::User, &["opencode"]),
         ];
-        let removals = select_removals(&skills, &[InstallScope::Project], &[], true, &[]);
+        let removals = select_removals(&skills, &[InstallScope::Project], &[], true, &[], None);
         assert_eq!(removals.len(), 1);
         assert_eq!(removals[0].0.name, "alpha");
         assert_eq!(removals[0].1, vec!["claude"]);
@@ -360,6 +379,7 @@ mod tests {
             &["alpha".to_string()],
             false,
             &["claude".to_string()],
+            None,
         );
         assert_eq!(removals.len(), 1);
         assert_eq!(removals[0].1, vec!["claude"]);
@@ -374,8 +394,34 @@ mod tests {
             &["alpha".to_string()],
             false,
             &["opencode".to_string()],
+            None,
         );
         assert!(removals.is_empty());
+    }
+
+    #[test]
+    fn select_filters_by_active_project_root() {
+        let mut skill_a = sample_skill("shared", InstallScope::Project, &["claude"]);
+        skill_a.project_root = Some("/path/to/project_a".to_string());
+
+        let mut skill_b = sample_skill("shared", InstallScope::Project, &["claude"]);
+        skill_b.project_root = Some("/path/to/project_b".to_string());
+
+        let skills = vec![skill_a, skill_b];
+        let root_a = Path::new("/path/to/project_a");
+        let removals = select_removals(
+            &skills,
+            &[InstallScope::Project],
+            &[],
+            true,
+            &[],
+            Some(root_a),
+        );
+        assert_eq!(removals.len(), 1);
+        assert_eq!(
+            removals[0].0.project_root.as_deref(),
+            Some("/path/to/project_a")
+        );
     }
 
     #[test]

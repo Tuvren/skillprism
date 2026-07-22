@@ -364,6 +364,7 @@ fn run_build(
     let mut result = BuildResult::default();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
     let mut skip_all = false;
+    let mut overwrite_all = false;
 
     for pair in &outcome.valid {
         let t_render = Instant::now();
@@ -394,9 +395,16 @@ fn run_build(
             }
         } else {
             let t_write = Instant::now();
-            let write_result =
-                Router::write(pair, &output, &project_root, target, force, &mut skip_all)
-                    .into_diagnostic()?;
+            let write_result = Router::write(
+                pair,
+                &output,
+                &project_root,
+                target,
+                force,
+                &mut skip_all,
+                &mut overwrite_all,
+            )
+            .into_diagnostic()?;
             let write_time = fmt_duration(t_write.elapsed());
             let skill_skipped = write_result.skipped.contains(
                 &write_result
@@ -424,7 +432,14 @@ fn run_build(
         );
     }
 
-    handle_manifests(diff, &manifest_entries, force, &mut skip_all, &mut result)?;
+    handle_manifests(
+        diff,
+        &manifest_entries,
+        force,
+        &mut skip_all,
+        &mut overwrite_all,
+        &mut result,
+    )?;
 
     if diff {
         println!(
@@ -492,6 +507,7 @@ fn handle_manifests(
     manifest_entries: &[ManifestEntry],
     force: bool,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
     result: &mut BuildResult,
 ) -> Result<(), miette::Report> {
     if diff {
@@ -504,6 +520,7 @@ fn handle_manifests(
             manifest_entries,
             force,
             skip_all,
+            overwrite_all,
             &mut manifest_skipped,
         )
         .into_diagnostic()?;

@@ -80,16 +80,28 @@ pub fn build_context(pair: &ResolvedPair) -> BTreeMap<String, minijinja::Value> 
         optional_value(skill.disallowed_tools.as_ref()),
     );
     ctx.insert(
+        "model".to_string(),
+        optional_value(skill.model_override.as_ref()),
+    );
+    ctx.insert(
         "model_override".to_string(),
         optional_value(skill.model_override.as_ref()),
     );
     ctx.insert("effort".to_string(), optional_value(skill.effort.as_ref()));
+    ctx.insert(
+        "context".to_string(),
+        minijinja::Value::from_serialize(if skill.context_fork { "fork" } else { "inline" }),
+    );
     ctx.insert(
         "context_fork".to_string(),
         minijinja::Value::from_serialize(skill.context_fork),
     );
     ctx.insert("agent".to_string(), optional_value(skill.agent.as_ref()));
     ctx.insert("hooks".to_string(), optional_value(skill.hooks.as_ref()));
+    ctx.insert(
+        "paths".to_string(),
+        optional_value(skill.activation_paths.as_ref()),
+    );
     ctx.insert(
         "activation_paths".to_string(),
         optional_value(skill.activation_paths.as_ref()),
