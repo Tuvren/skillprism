@@ -62,11 +62,11 @@ pub fn scope_harness_matches(
         return false;
     }
     if skill.scope == InstallScope::Project {
-        if let (Some(active), Some(s_root)) = (
-            active_project_root.and_then(|r| r.to_str()),
-            &skill.project_root,
-        ) {
-            if active != s_root {
+        if let Some(s_root) = &skill.project_root {
+            if active_project_root
+                .and_then(|r| r.to_str())
+                .is_none_or(|active| active != s_root)
+            {
                 return false;
             }
         }

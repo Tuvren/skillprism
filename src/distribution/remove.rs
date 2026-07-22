@@ -173,13 +173,11 @@ fn select_removals(
         .filter(|s| scopes.contains(&s.scope))
         .filter(|s| match s.scope {
             InstallScope::User => true,
-            InstallScope::Project => match (
-                active_project_root.and_then(|r| r.to_str()),
-                &s.project_root,
-            ) {
-                (Some(active), Some(s_root)) => active == s_root,
-                _ => true,
-            },
+            InstallScope::Project => s.project_root.as_ref().is_none_or(|s_root| {
+                active_project_root
+                    .and_then(|r| r.to_str())
+                    .is_some_and(|active| active == s_root)
+            }),
         })
         .filter(|s| all || names.contains(&s.name))
         .map(|s| {
