@@ -191,33 +191,61 @@ impl InstalledState {
         self.skills.iter().find(|s| s.name == name)
     }
 
-    /// Removes the record for the named skill in the given scope, returning
-    /// whether it existed.
+    /// Checks if two skills share the same identity key.
     ///
-    /// Records are keyed by `(name, scope)`: the same skill name can be
-    /// installed independently to project and user scope, so removal must be
-    /// scope-qualified to avoid dropping the wrong record.
-    pub fn remove(&mut self, name: &str, scope: InstallScope) -> bool {
+    /// User-scoped skills are keyed by `(name, scope)`.
+    /// Project-scoped skills are keyed by `(name, scope, project_root)` when both
+    /// specify a project root, falling back to `(name, scope)` if root is unspecified.
+    fn is_same_identity(a: &InstalledSkill, b: &InstalledSkill) -> bool {
+        if a.name != b.name || a.scope != b.scope {
+            return false;
+        }
+        match a.scope {
+            InstallScope::User => true,
+            InstallScope::Project => match (&a.project_root, &b.project_root) {
+                (Some(r1), Some(r2)) => r1 == r2,
+                _ => true,
+            },
+        }
+    }
+
+    /// Removes the record for the named skill in the given scope and optional project root,
+    /// returning whether it existed.
+    pub fn remove(&mut self, name: &str, scope: InstallScope, project_root: Option<&str>) -> bool {
         let len = self.skills.len();
-        self.skills
-            .retain(|s| !(s.name == name && s.scope == scope));
+        self.skills.retain(|s| {
+            if s.name != name || s.scope != scope {
+                return true;
+            }
+            match scope {
+                InstallScope::User => false,
+                InstallScope::Project => match (&s.project_root, project_root) {
+                    (Some(s_root), Some(p_root)) => s_root != p_root,
+                    _ => false,
+                },
+            }
+        });
         self.skills.len() != len
     }
 
     /// Inserts a new record or replaces an existing one with the same
-    /// `(name, scope)`, then re-sorts by `(name, scope)`.
+    /// `(name, scope, project_root)`, then re-sorts by `(name, scope, project_root)`.
     pub fn upsert(&mut self, skill: InstalledSkill) {
         if let Some(pos) = self
             .skills
             .iter()
-            .position(|s| s.name == skill.name && s.scope == skill.scope)
+            .position(|s| Self::is_same_identity(s, &skill))
         {
             self.skills[pos] = skill;
         } else {
             self.skills.push(skill);
         }
-        self.skills
-            .sort_by(|a, b| a.name.cmp(&b.name).then(a.scope.cmp(&b.scope)));
+        self.skills.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then(a.scope.cmp(&b.scope))
+                .then(a.project_root.cmp(&b.project_root))
+        });
     }
 }
 
@@ -287,10 +315,10 @@ impl StateStore {
         self.state.upsert(skill);
     }
 
-    /// Removes a skill record in memory (keyed by `(name, scope)`), returning
+    /// Removes a skill record in memory (keyed by `(name, scope, project_root)`), returning
     /// whether it existed.
-    pub fn remove(&mut self, name: &str, scope: InstallScope) -> bool {
-        self.state.remove(name, scope)
+    pub fn remove(&mut self, name: &str, scope: InstallScope, project_root: Option<&str>) -> bool {
+        self.state.remove(name, scope, project_root)
     }
 
     /// Persists the current in-memory state atomically.
@@ -575,8 +603,8 @@ mod tests {
             store.upsert(dummy_skill("drop"));
             store.save().unwrap();
 
-            assert!(store.remove("drop", InstallScope::Project));
-            assert!(!store.remove("missing", InstallScope::Project));
+            assert!(store.remove("drop", InstallScope::Project, None));
+            assert!(!store.remove("missing", InstallScope::Project, None));
             assert!(store.get("keep").is_some());
             assert!(store.get("drop").is_none());
         });
@@ -596,9 +624,35 @@ mod tests {
             assert_eq!(store.skills().len(), 2);
 
             // Removing one scope leaves the other intact.
-            assert!(store.remove("shared", InstallScope::Project));
+            assert!(store.remove("shared", InstallScope::Project, None));
             assert_eq!(store.skills().len(), 1);
             assert_eq!(store.skills()[0].scope, InstallScope::User);
+        });
+    }
+
+    #[test]
+    fn same_name_distinct_project_roots_are_independent_records() {
+        with_temp_store("dual_project_roots", |mut store| {
+            let mut proj_a = dummy_skill("shared");
+            proj_a.scope = InstallScope::Project;
+            proj_a.project_root = Some("/path/to/project_a".to_string());
+
+            let mut proj_b = dummy_skill("shared");
+            proj_b.scope = InstallScope::Project;
+            proj_b.project_root = Some("/path/to/project_b".to_string());
+
+            store.upsert(proj_a);
+            store.upsert(proj_b);
+            // Both project records coexist without overwriting each other.
+            assert_eq!(store.skills().len(), 2);
+
+            // Removing project_a record leaves project_b intact.
+            assert!(store.remove("shared", InstallScope::Project, Some("/path/to/project_a")));
+            assert_eq!(store.skills().len(), 1);
+            assert_eq!(
+                store.skills()[0].project_root.as_deref(),
+                Some("/path/to/project_b")
+            );
         });
     }
 

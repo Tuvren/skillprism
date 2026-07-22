@@ -15,7 +15,7 @@
 //! `skillprism remove` command implementation.
 
 use std::borrow::Cow;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::path::Path;
 
 use miette::IntoDiagnostic;
@@ -199,6 +199,11 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
     for line in affected {
         eprintln!("  {line}");
     }
+    if !io::stdin().is_terminal() {
+        return Err(CommandError::Usage(miette::miette!(
+            "Cannot prompt for confirmation in a non-interactive environment. Pass --force to remove skills."
+        )));
+    }
     eprint!("Are you sure? [y/N] ");
     io::stderr()
         .flush()
@@ -268,7 +273,7 @@ fn apply_removals_to_state(
 ) -> Result<(), CommandError> {
     for (skill, harnesses_to_remove) in removals {
         if harnesses_to_remove.len() >= skill.harnesses.len() {
-            store.remove(&skill.name, skill.scope);
+            store.remove(&skill.name, skill.scope, skill.project_root.as_deref());
             continue;
         }
 

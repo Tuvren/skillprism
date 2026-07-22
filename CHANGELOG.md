@@ -2,14 +2,14 @@
 
 ## Unreleased
 
-- **Distribution commands** — New `add`, `list` (`ls`), `remove` (`rm`), and `update` (`up`) subcommands for installing skills from remote Git repositories and local paths, managing their lifecycle, and keeping them up to date. Each installed skill is auto-detected as skillprism-format (rendered through MiniJinja per harness) or plain-format (copied as-is). Update performs lightweight `git ls-remote` up-to-date checks and per-file SHA-256 content comparison. State is tracked in `~/.config/skillprism/installed.yaml`.
-- **Spec-compliant scaffolds** — `init skill` and `init project` now emit `SKILL.md` with the YAML frontmatter (`name` + `description`) the [Agent Skills spec](https://agentskills.io/specification) requires. Previously the scaffold produced frontmatter-less skills that no client could discover.
-- **Spec validation** — `validate` now enforces Agent Skills spec constraints: skill name format (`^[a-z0-9]+(-[a-z0-9]+)*$`), name matches directory, non-empty description, per-harness length caps, and compatibility 1–500 chars. Values over the spec's portable cap but within a harness's own cap (e.g. 1025–1536 chars for Claude) are warnings, not errors. Previously `name_max_length` and `description_max_length` were parsed but never enforced.
-- **Removed unused `frontmatter_mode` capability** — The harness capability `frontmatter_mode` ("strict"/"lenient"/"extended") was parsed but never used. skillprism now always emits spec-compliant `name` + `description` frontmatter, so the field has been removed from built-in harnesses, custom harness scaffolds, and docs.
-- **Removed dead `init skill --harnesses` flag** — The `-H`/`--harnesses` flag on `init skill` was accepted but silently ignored (the parameter was unused). Harness scoping is project-wide in `skillprism.yaml`; per-skill scoping isn't a concept. The flag has been removed.
-- **Scaffold polish** — Scaffolded skills default to a minimal, spec-compliant template with `variables:` and `harnesses:` shown as commented optional examples instead of active defaults. `init project` now generates a `.gitignore` (for harness output dirs) and a short project `README.md`. Placeholder descriptions guide authors to include trigger keywords.
-- **CLI output polish** — `validate` now lists each skill×harness pair and any portability warnings. `build` prints "No skills to build" when zero pairs resolve instead of silent success.
-- **README fixes** — Corrected the CLI reference (was `--targets`, now `--harnesses`; added `init harness`, `completions`, `--verbose`, `--dry-run`), the clippy command (was `-W`, now `-D warnings`), and `prek` → `pre-commit`. Replaced internal `.constitution/` schema references with links to the public docs.
+## v0.1.3 — 2026-07-22
+
+- **Multi-project state store isolation** — Fixed identity collision in `~/.config/skillprism/installed.yaml` where project-scoped skills were keyed strictly by `(name, scope)`. Skills are now keyed by `(name, scope, project_root)` so the same skill installed across multiple project directories coexists without overwriting state or cross-contaminating `update` calls.
+- **Non-interactive / CI safety** — `build` and `remove` now handle non-TTY environments cleanly: `resolve_overwrite` exits with code 2 when existing files would be overwritten without `--force`, preventing silent build skips in CI. `remove` checks `is_terminal()` before prompting for confirmation.
+- **Overwrite prompt option** — Added `[o]verwrite all` option to interactive overwrite prompts during build/install operations.
+- **Template context aliases** — Exposed `model`, `context`, and `paths` directly in MiniJinja template context alongside `model_override`, `context_fork`, and `activation_paths`, eliminating variable name friction.
+- **Explicit project root searching** — Added `find_project_root_from` helper allowing root discovery from explicit starting directories.
+
 
 ## v0.1.0 — Release Readiness
 

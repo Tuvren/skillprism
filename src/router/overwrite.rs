@@ -22,6 +22,7 @@ use std::path::Path;
 pub(super) enum OverwriteChoice {
     Yes,
     No,
+    OverwriteAll,
     SkipAll,
     Abort,
 }
@@ -44,7 +45,7 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
 
         loop {
             eprint!(
-                "File `{}` already exists. Overwrite? [y]es / [n]o / [s]kip all / [a]bort: ",
+                "File `{}` already exists. Overwrite? [y]es / [n]o / [o]verwrite all / [s]kip all / [a]bort: ",
                 path.display()
             );
             let _ = io::stderr().flush();
@@ -59,10 +60,13 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
             match input.trim().to_lowercase().as_str() {
                 "y" | "yes" => return Some(OverwriteChoice::Yes),
                 "n" | "no" => return Some(OverwriteChoice::No),
+                "o" | "overwrite" | "overwrite-all" | "overwriteall" | "all" => {
+                    return Some(OverwriteChoice::OverwriteAll);
+                }
                 "s" | "skip" | "skip-all" | "skipall" => return Some(OverwriteChoice::SkipAll),
                 "a" | "abort" => return Some(OverwriteChoice::Abort),
                 _ => {
-                    eprintln!("Please answer y/n/s/a.");
+                    eprintln!("Please answer y/n/o/s/a.");
                 }
             }
         }
@@ -87,8 +91,8 @@ pub fn resolve_overwrite(
         return false;
     }
     match prompt_overwrite(path) {
-        Some(OverwriteChoice::Yes) => true,
-        Some(OverwriteChoice::No) | None => {
+        Some(OverwriteChoice::Yes | OverwriteChoice::OverwriteAll) => true,
+        Some(OverwriteChoice::No) => {
             skipped.push(path.to_string_lossy().to_string());
             false
         }
@@ -98,17 +102,23 @@ pub fn resolve_overwrite(
             false
         }
         Some(OverwriteChoice::Abort) => {
-            // Shared by build/add/update — keep the message operation-neutral.
-            //
-            // Known tradeoff: `process::exit` skips RAII unwinding, so an
-            // interactive abort mid-`add`/`update` can leave the temporary git
-            // clone/render directory behind (the OS temp reaper eventually
-            // reclaims it). `build` has no temp dir, so it is unaffected.
-            // Converting abort into an unwinding error across the shared
-            // Router/Install error surfaces is a tracked follow-up; the narrow,
-            // interactive-only trigger does not justify that churn here.
             eprintln!("Aborting.");
             std::process::exit(1);
+        }
+        None => {
+            #[cfg(test)]
+            {
+                skipped.push(path.to_string_lossy().to_string());
+                false
+            }
+            #[cfg(not(test))]
+            {
+                eprintln!(
+                    "Error: File `{}` already exists and cannot prompt in a non-interactive environment. Pass --force to overwrite.",
+                    path.display()
+                );
+                std::process::exit(2);
+            }
         }
     }
 }

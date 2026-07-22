@@ -74,7 +74,13 @@ pub fn find_project_root() -> Result<PathBuf, ProjectError> {
         path: ".".to_string(),
         source: e,
     })?;
-    let mut dir = cwd.as_path();
+    find_project_root_from(&cwd)
+}
+
+/// Locates the nearest project root by walking up from `start` directory
+/// looking for `skillprism.yaml`.
+pub fn find_project_root_from(start: &std::path::Path) -> Result<PathBuf, ProjectError> {
+    let mut dir = start;
     loop {
         if dir.join("skillprism.yaml").exists() {
             return Ok(dir.to_path_buf());
@@ -83,7 +89,7 @@ pub fn find_project_root() -> Result<PathBuf, ProjectError> {
             dir = parent;
         } else {
             return Err(ProjectError::ConfigNotFound {
-                path: cwd.join("skillprism.yaml").to_string_lossy().to_string(),
+                path: start.join("skillprism.yaml").to_string_lossy().to_string(),
             });
         }
     }
