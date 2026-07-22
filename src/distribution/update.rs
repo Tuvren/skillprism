@@ -244,9 +244,12 @@ fn filter_candidates(
     target: Option<InstallScopeArg>,
     harnesses: Option<&String>,
 ) -> Vec<InstalledSkill> {
+    let active_project_root = super::find_project_root().ok();
     skills
         .into_iter()
-        .filter(|s| super::scope_harness_matches(s, target, harnesses))
+        .filter(|s| {
+            super::scope_harness_matches(s, target, harnesses, active_project_root.as_deref())
+        })
         .collect()
 }
 

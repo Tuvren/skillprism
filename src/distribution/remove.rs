@@ -64,7 +64,15 @@ pub fn run_remove(
 
     let mut store =
         StateStore::open().map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    let removals = select_removals(store.skills(), &scopes, skills, all, &harness_filter);
+    let active_project_root = super::find_project_root().ok();
+    let removals = select_removals(
+        store.skills(),
+        &scopes,
+        skills,
+        all,
+        &harness_filter,
+        active_project_root.as_deref(),
+    );
 
     if removals.is_empty() {
         let requested = if skills.is_empty() {
@@ -158,10 +166,21 @@ fn select_removals(
     names: &[String],
     all: bool,
     harness_filter: &[String],
+    active_project_root: Option<&Path>,
 ) -> Vec<RemovalAction> {
     skills
         .iter()
         .filter(|s| scopes.contains(&s.scope))
+        .filter(|s| match s.scope {
+            InstallScope::User => true,
+            InstallScope::Project => match (
+                active_project_root.and_then(|r| r.to_str()),
+                &s.project_root,
+            ) {
+                (Some(active), Some(s_root)) => active == s_root,
+                _ => true,
+            },
+        })
         .filter(|s| all || names.contains(&s.name))
         .map(|s| {
             let to_remove: Vec<_> = if harness_filter.is_empty() {
@@ -346,7 +365,7 @@ mod tests {
             sample_skill("alpha", InstallScope::Project, &["claude"]),
             sample_skill("beta", InstallScope::User, &["opencode"]),
         ];
-        let removals = select_removals(&skills, &[InstallScope::Project], &[], true, &[]);
+        let removals = select_removals(&skills, &[InstallScope::Project], &[], true, &[], None);
         assert_eq!(removals.len(), 1);
         assert_eq!(removals[0].0.name, "alpha");
         assert_eq!(removals[0].1, vec!["claude"]);
@@ -365,6 +384,7 @@ mod tests {
             &["alpha".to_string()],
             false,
             &["claude".to_string()],
+            None,
         );
         assert_eq!(removals.len(), 1);
         assert_eq!(removals[0].1, vec!["claude"]);
@@ -379,8 +399,34 @@ mod tests {
             &["alpha".to_string()],
             false,
             &["opencode".to_string()],
+            None,
         );
         assert!(removals.is_empty());
+    }
+
+    #[test]
+    fn select_filters_by_active_project_root() {
+        let mut skill_a = sample_skill("shared", InstallScope::Project, &["claude"]);
+        skill_a.project_root = Some("/path/to/project_a".to_string());
+
+        let mut skill_b = sample_skill("shared", InstallScope::Project, &["claude"]);
+        skill_b.project_root = Some("/path/to/project_b".to_string());
+
+        let skills = vec![skill_a, skill_b];
+        let root_a = Path::new("/path/to/project_a");
+        let removals = select_removals(
+            &skills,
+            &[InstallScope::Project],
+            &[],
+            true,
+            &[],
+            Some(root_a),
+        );
+        assert_eq!(removals.len(), 1);
+        assert_eq!(
+            removals[0].0.project_root.as_deref(),
+            Some("/path/to/project_a")
+        );
     }
 
     #[test]
