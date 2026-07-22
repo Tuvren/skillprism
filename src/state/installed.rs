@@ -202,10 +202,7 @@ impl InstalledState {
         }
         match a.scope {
             InstallScope::User => true,
-            InstallScope::Project => match (&a.project_root, &b.project_root) {
-                (Some(r1), Some(r2)) => r1 == r2,
-                _ => true,
-            },
+            InstallScope::Project => a.project_root == b.project_root,
         }
     }
 
@@ -219,10 +216,7 @@ impl InstalledState {
             }
             match scope {
                 InstallScope::User => false,
-                InstallScope::Project => match (&s.project_root, project_root) {
-                    (Some(s_root), Some(p_root)) => s_root != p_root,
-                    _ => false,
-                },
+                InstallScope::Project => s.project_root.as_deref() != project_root,
             }
         });
         self.skills.len() != len
@@ -340,11 +334,14 @@ impl StateStore {
             });
         }
 
-        // Sort by (name, scope) to match `upsert`, so a load-only cycle yields
+        // Sort by (name, scope, project_root) to match `upsert`, so a load-only cycle yields
         // the same order as an in-process mutation (stable deterministic diffs).
-        state
-            .skills
-            .sort_by(|a, b| a.name.cmp(&b.name).then(a.scope.cmp(&b.scope)));
+        state.skills.sort_by(|a, b| {
+            a.name
+                .cmp(&b.name)
+                .then(a.scope.cmp(&b.scope))
+                .then(a.project_root.cmp(&b.project_root))
+        });
         Ok(state)
     }
 
@@ -652,6 +649,31 @@ mod tests {
             assert_eq!(
                 store.skills()[0].project_root.as_deref(),
                 Some("/path/to/project_b")
+            );
+        });
+    }
+
+    #[test]
+    fn project_root_none_and_some_are_independent_records() {
+        with_temp_store("none_and_some_roots", |mut store| {
+            let mut proj_none = dummy_skill("shared");
+            proj_none.scope = InstallScope::Project;
+            proj_none.project_root = None;
+
+            let mut proj_some = dummy_skill("shared");
+            proj_some.scope = InstallScope::Project;
+            proj_some.project_root = Some("/path/to/project_a".to_string());
+
+            store.upsert(proj_none);
+            store.upsert(proj_some);
+            assert_eq!(store.skills().len(), 2);
+
+            // Removing with None leaves Some intact
+            assert!(store.remove("shared", InstallScope::Project, None));
+            assert_eq!(store.skills().len(), 1);
+            assert_eq!(
+                store.skills()[0].project_root.as_deref(),
+                Some("/path/to/project_a")
             );
         });
     }
