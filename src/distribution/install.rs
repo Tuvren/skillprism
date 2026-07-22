@@ -317,6 +317,7 @@ fn install_discovered_skills(
 
     let mut results = Vec::new();
     let mut skip_all = false;
+    let mut overwrite_all = false;
 
     for skill_dir in filtered {
         // A plain skill whose SKILL.md sits at the fetched repo root has, as its
@@ -349,6 +350,7 @@ fn install_discovered_skills(
                 resolved_ref.clone(),
                 skill_path,
                 &mut skip_all,
+                &mut overwrite_all,
             )?,
             SkillFormat::Plain => install_plain_skill(
                 ctx,
@@ -360,6 +362,7 @@ fn install_discovered_skills(
                 skill_path,
                 name_override.as_deref(),
                 &mut skip_all,
+                &mut overwrite_all,
             )?,
         };
         on_installed(&record)?;
@@ -539,6 +542,7 @@ fn install_skillprism_skill(
     resolved_ref: Option<String>,
     skill_path: Option<&String>,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
     let (skill, _temp_project) = load_skill_into_temp_project(skill_dir, &ctx.harnesses)?;
     let registry = build_registry_for_harnesses(&ctx.harnesses);
@@ -568,8 +572,16 @@ fn install_skillprism_skill(
             .project_root
             .as_deref()
             .unwrap_or_else(|| Path::new("."));
-        let result = Router::write(pair, &output, project_root, target, ctx.force, skip_all)
-            .map_err(|e| InstallError::Write(miette::Report::new(e)))?;
+        let result = Router::write(
+            pair,
+            &output,
+            project_root,
+            target,
+            ctx.force,
+            skip_all,
+            overwrite_all,
+        )
+        .map_err(|e| InstallError::Write(miette::Report::new(e)))?;
 
         files.push(InstalledFile {
             path: result.written.skill_path.to_string_lossy().to_string(),
@@ -617,6 +629,7 @@ fn install_plain_skill(
     skill_path: Option<&String>,
     name_override: Option<&str>,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
     let skill_name = name_override.map_or_else(|| skill_dir_name(skill_dir), str::to_string);
     let template = crate::loader::find_template_path(skill_dir)
@@ -654,7 +667,13 @@ fn install_plain_skill(
             crate::loader::discover_asset_dirs(skill_dir).map_err(InstallError::Project)?;
         let mut skipped = Vec::new();
 
-        if crate::router::resolve_overwrite(&skill_path_buf, ctx.force, skip_all, &mut skipped) {
+        if crate::router::resolve_overwrite(
+            &skill_path_buf,
+            ctx.force,
+            skip_all,
+            overwrite_all,
+            &mut skipped,
+        ) {
             let template_bytes = fs::read(&template)?;
             crate::router::atomic_write_bytes(&skill_path_buf, &template_bytes)?;
             files.push(InstalledFile {

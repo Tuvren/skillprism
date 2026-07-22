@@ -461,6 +461,7 @@ fn update_skillprism_skill(
         .collect();
     let mut changed = false;
     let mut skip_all = false;
+    let mut overwrite_all = false;
 
     let target = install_scope_to_target(old.scope);
     // For user-scope skills there is no project root; `resolve_skill_path`
@@ -522,6 +523,7 @@ fn update_skillprism_skill(
             diff,
             force,
             &mut skip_all,
+            &mut overwrite_all,
         )?;
 
         // Known gap (tracked follow-up): re-render/re-record every sidecar the
@@ -552,6 +554,7 @@ fn update_skillprism_skill(
                 diff,
                 force,
                 &mut skip_all,
+                &mut overwrite_all,
             )?;
         }
 
@@ -566,6 +569,7 @@ fn update_skillprism_skill(
                     diff,
                     force,
                     &mut skip_all,
+                    &mut overwrite_all,
                 )?;
             }
         }
@@ -626,6 +630,7 @@ fn update_plain_skill(
         .collect();
     let mut changed = false;
     let mut skip_all = false;
+    let mut overwrite_all = false;
 
     let target = install_scope_to_target(old.scope);
     // For user-scope skills there is no project root; `resolve_skill_path`
@@ -677,7 +682,13 @@ fn update_plain_skill(
                     &path_str,
                 );
                 print_diff_output(&diff_output);
-            } else if resolve_overwrite(&skill_path_buf, force, &mut skip_all, &mut Vec::new()) {
+            } else if resolve_overwrite(
+                &skill_path_buf,
+                force,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut Vec::new(),
+            ) {
                 crate::router::atomic_write_bytes(&skill_path_buf, &content).map_err(|e| {
                     miette::Report::new(UpdateError::Write {
                         detail: e.to_string(),
@@ -715,6 +726,7 @@ fn update_plain_skill(
                     diff,
                     force,
                     &mut skip_all,
+                    &mut overwrite_all,
                 )?;
             }
         }
@@ -756,6 +768,7 @@ fn update_asset_dir(
     diff: bool,
     force: bool,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<(), UpdateError> {
     let dir_name = src_dir.file_name().ok_or_else(|| {
         UpdateError::Install(InstallError::Project(ProjectError::ConfigRead {
@@ -830,7 +843,7 @@ fn update_asset_dir(
         }
     } else {
         let mut skipped = Vec::new();
-        copied = resolve_overwrite(&dst_dir, force, skip_all, &mut skipped);
+        copied = resolve_overwrite(&dst_dir, force, skip_all, overwrite_all, &mut skipped);
         if copied {
             copy_dir(src_dir, &dst_dir, src_dir)?;
             for path_str in &removed {
@@ -879,9 +892,10 @@ fn write_file_with_overwrite(
     content: &str,
     force: bool,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<bool, miette::Report> {
     let mut skipped = Vec::new();
-    if resolve_overwrite(path, force, skip_all, &mut skipped) {
+    if resolve_overwrite(path, force, skip_all, overwrite_all, &mut skipped) {
         crate::router::atomic_write(path, content).map_err(|e| {
             miette::Report::new(UpdateError::Write {
                 detail: e.to_string(),
@@ -945,6 +959,7 @@ fn update_file_record(
     diff: bool,
     force: bool,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
 ) -> Result<(), miette::Report> {
     let hash = format!("sha256:{}", sha256_bytes(content.as_bytes()));
     let path_str = path.to_string_lossy().to_string();
@@ -956,7 +971,7 @@ fn update_file_record(
         if diff {
             print_file_diff(path, content, &path_str);
         } else {
-            written = write_file_with_overwrite(path, content, force, skip_all)?;
+            written = write_file_with_overwrite(path, content, force, skip_all, overwrite_all)?;
         }
         if written {
             *changed = true;
@@ -1025,6 +1040,7 @@ mod tests {
         let mut new_files = Vec::new();
         let mut changed = false;
         let mut skip_all = false;
+        let mut overwrite_all = false;
 
         update_file_record(
             &path,
@@ -1035,6 +1051,7 @@ mod tests {
             false,
             true,
             &mut skip_all,
+            &mut overwrite_all,
         )
         .unwrap();
 
@@ -1058,6 +1075,7 @@ mod tests {
         let mut new_files = Vec::new();
         let mut changed = false;
         let mut skip_all = true; // simulate decline without prompting
+        let mut overwrite_all = false;
 
         update_file_record(
             &path,
@@ -1068,6 +1086,7 @@ mod tests {
             false,
             false, // force false so resolve_overwrite checks skip_all
             &mut skip_all,
+            &mut overwrite_all,
         )
         .unwrap();
 
@@ -1090,6 +1109,7 @@ mod tests {
         let mut new_files = Vec::new();
         let mut changed = false;
         let mut skip_all = false;
+        let mut overwrite_all = false;
 
         update_asset_dir(
             &src_dir,
@@ -1100,6 +1120,7 @@ mod tests {
             false,
             true,
             &mut skip_all,
+            &mut overwrite_all,
         )
         .unwrap();
 
@@ -1137,6 +1158,7 @@ mod tests {
         let mut new_files = Vec::new();
         let mut changed = false;
         let mut skip_all = false;
+        let mut overwrite_all = false;
 
         update_asset_dir(
             &src_dir,
@@ -1147,6 +1169,7 @@ mod tests {
             false,
             true,
             &mut skip_all,
+            &mut overwrite_all,
         )
         .unwrap();
 

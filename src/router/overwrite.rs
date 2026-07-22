@@ -76,14 +76,15 @@ pub(super) fn prompt_overwrite(path: &Path) -> Option<OverwriteChoice> {
 /// Unified overwrite decision combining the force/skip-all guard and interactive prompt.
 ///
 /// Returns `true` if the caller should write the file, `false` if it should skip.
-/// Handles `skip_all` progression and abort exit internally.
+/// Handles `skip_all` and `overwrite_all` progression and abort exit internally.
 pub fn resolve_overwrite(
     path: &Path,
     force: bool,
     skip_all: &mut bool,
+    overwrite_all: &mut bool,
     skipped: &mut Vec<String>,
 ) -> bool {
-    if force || !path.exists() {
+    if force || *overwrite_all || !path.exists() {
         return true;
     }
     if *skip_all {
@@ -91,7 +92,11 @@ pub fn resolve_overwrite(
         return false;
     }
     match prompt_overwrite(path) {
-        Some(OverwriteChoice::Yes | OverwriteChoice::OverwriteAll) => true,
+        Some(OverwriteChoice::Yes) => true,
+        Some(OverwriteChoice::OverwriteAll) => {
+            *overwrite_all = true;
+            true
+        }
         Some(OverwriteChoice::No) => {
             skipped.push(path.to_string_lossy().to_string());
             false
@@ -120,5 +125,78 @@ pub fn resolve_overwrite(
                 std::process::exit(2);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn force_and_nonexistent_files_overwrite_without_prompt() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+
+        let mut skip_all = false;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        assert!(resolve_overwrite(
+            &file,
+            false,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut skipped
+        ));
+
+        fs::write(&file, "content").unwrap();
+        assert!(resolve_overwrite(
+            &file,
+            true,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut skipped
+        ));
+    }
+
+    #[test]
+    fn overwrite_all_state_bypasses_future_prompts() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+        fs::write(&file, "content").unwrap();
+
+        let mut skip_all = false;
+        let mut overwrite_all = true;
+        let mut skipped = Vec::new();
+
+        assert!(resolve_overwrite(
+            &file,
+            false,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut skipped
+        ));
+        assert!(skipped.is_empty());
+    }
+
+    #[test]
+    fn skip_all_state_skips_future_files() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("test.txt");
+        fs::write(&file, "content").unwrap();
+
+        let mut skip_all = true;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        assert!(!resolve_overwrite(
+            &file,
+            false,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut skipped
+        ));
+        assert_eq!(skipped.len(), 1);
     }
 }
