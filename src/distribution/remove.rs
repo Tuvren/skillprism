@@ -85,7 +85,11 @@ pub fn run_remove(
             let other_scopes: Vec<InstallScope> = store
                 .skills()
                 .iter()
-                .filter(|s| skills.contains(&s.name) && !scopes.contains(&s.scope))
+                .filter(|s| {
+                    skills.contains(&s.name)
+                        && (!scopes.contains(&s.scope)
+                            || !s.matches_project_root(active_project_root.as_deref()))
+                })
                 .map(|s| s.scope)
                 .collect::<std::collections::BTreeSet<_>>()
                 .into_iter()
@@ -171,14 +175,7 @@ fn select_removals(
     skills
         .iter()
         .filter(|s| scopes.contains(&s.scope))
-        .filter(|s| match s.scope {
-            InstallScope::User => true,
-            InstallScope::Project => s.project_root.as_ref().is_none_or(|s_root| {
-                active_project_root
-                    .and_then(|r| r.to_str())
-                    .is_some_and(|active| active == s_root)
-            }),
-        })
+        .filter(|s| s.matches_project_root(active_project_root))
         .filter(|s| all || names.contains(&s.name))
         .map(|s| {
             let to_remove: Vec<_> = if harness_filter.is_empty() {

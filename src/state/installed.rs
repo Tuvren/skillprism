@@ -176,6 +176,22 @@ pub struct InstalledState {
     pub skills: Vec<InstalledSkill>,
 }
 
+impl InstalledSkill {
+    /// Returns whether this skill record matches the given active project root.
+    ///
+    /// User-scoped skills always match. Project-scoped skills match if their
+    /// recorded `project_root` equals `active_project_root` (or if un-anchored).
+    pub fn matches_project_root(&self, active_project_root: Option<&std::path::Path>) -> bool {
+        if self.scope != InstallScope::Project {
+            return true;
+        }
+        let Some(s_root) = &self.project_root else {
+            return true;
+        };
+        active_project_root.and_then(|r| r.to_str()) == Some(s_root.as_str())
+    }
+}
+
 impl InstalledState {
     /// Returns an empty state document at the current schema version.
     pub const fn empty() -> Self {

@@ -108,10 +108,7 @@ pub fn resolve_overwrite(
             skipped.push(path.to_string_lossy().to_string());
             Ok(false)
         }
-        Some(OverwriteChoice::Abort) => {
-            eprintln!("Aborting.");
-            std::process::exit(1);
-        }
+        Some(OverwriteChoice::Abort) => Err(RouterError::Aborted),
         None => Err(RouterError::NonInteractiveOverwrite {
             path: path.to_string_lossy().to_string(),
         }),

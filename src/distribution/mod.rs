@@ -61,12 +61,8 @@ pub fn scope_harness_matches(
     if !scope_matches {
         return false;
     }
-    if skill.scope == InstallScope::Project {
-        if let Some(s_root) = &skill.project_root {
-            if active_project_root.and_then(|r| r.to_str()) != Some(s_root.as_str()) {
-                return false;
-            }
-        }
+    if !skill.matches_project_root(active_project_root) {
+        return false;
     }
     harnesses.is_none_or(|h| {
         let wanted = parse_harness_list(h);

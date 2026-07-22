@@ -86,6 +86,11 @@ pub enum RouterError {
     ))]
     NonInteractiveOverwrite { path: String },
 
+    /// Operation was aborted by the user during prompt confirmation.
+    #[error("Operation aborted by user")]
+    #[diagnostic(help("Re-run the command when you are ready to proceed."))]
+    Aborted,
+
     /// `$HOME` is not set; cannot resolve user-scope paths.
     #[error("$HOME is not set; cannot resolve user-scope path")]
     #[diagnostic(help(
