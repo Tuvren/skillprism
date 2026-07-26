@@ -282,7 +282,48 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
     }
 }
 
-#[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
+fn select_build_harnesses(
+    configured: &[String],
+    requested: &[String],
+    registry: &HarnessRegistry,
+) -> Result<Vec<String>, miette::Report> {
+    if requested.is_empty() {
+        let mut unique_harnesses = Vec::new();
+        for h in configured {
+            let trimmed = h.trim().to_string();
+            if !trimmed.is_empty() && !unique_harnesses.contains(&trimmed) {
+                unique_harnesses.push(trimmed);
+            }
+        }
+        Ok(unique_harnesses)
+    } else {
+        let mut selected = Vec::new();
+        for h in requested {
+            let h_trimmed = h.trim();
+            if h_trimmed.is_empty() {
+                continue;
+            }
+            if let Err(e) = registry.resolve(h_trimmed) {
+                return Err(miette::Report::new(e));
+            }
+            if !selected.iter().any(|s| s == h_trimmed) {
+                selected.push(h_trimmed.to_string());
+            }
+        }
+        if selected.is_empty() {
+            return Err(miette::miette!(
+                "No valid harness specified in --harness flag"
+            ));
+        }
+        Ok(selected)
+    }
+}
+
+#[allow(
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    clippy::cognitive_complexity
+)]
 // reason: build pipeline orchestration — each step is justified; refactor deferred to Epic G.
 fn run_build(
     harness: Vec<String>,
@@ -307,36 +348,7 @@ fn run_build(
         );
     }
 
-    if harness.is_empty() {
-        let mut unique_harnesses = Vec::new();
-        for h in model.config.harnesses {
-            let trimmed = h.trim().to_string();
-            if !trimmed.is_empty() && !unique_harnesses.contains(&trimmed) {
-                unique_harnesses.push(trimmed);
-            }
-        }
-        model.config.harnesses = unique_harnesses;
-    } else {
-        let mut selected = Vec::new();
-        for h in &harness {
-            let h_trimmed = h.trim();
-            if h_trimmed.is_empty() {
-                continue;
-            }
-            if let Err(e) = registry.resolve(h_trimmed) {
-                return Err(miette::Report::new(e));
-            }
-            if !selected.iter().any(|s| s == h_trimmed) {
-                selected.push(h_trimmed.to_string());
-            }
-        }
-        if selected.is_empty() {
-            return Err(miette::miette!(
-                "No valid harness specified in --harness flag"
-            ));
-        }
-        model.config.harnesses = selected;
-    }
+    model.config.harnesses = select_build_harnesses(&model.config.harnesses, &harness, &registry)?;
 
     let target = crate::router::TargetScope::Dist;
 
