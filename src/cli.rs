@@ -302,14 +302,23 @@ fn run_build(
         );
     }
 
-    if !harness.is_empty() {
+    if harness.is_empty() {
+        let mut unique_harnesses = Vec::new();
+        for h in model.config.harnesses {
+            if !unique_harnesses.contains(&h) {
+                unique_harnesses.push(h);
+            }
+        }
+        model.config.harnesses = unique_harnesses;
+    } else {
         let mut selected = Vec::new();
         for h in &harness {
-            if let Err(e) = registry.resolve(h) {
+            let h_trimmed = h.trim();
+            if let Err(e) = registry.resolve(h_trimmed) {
                 return Err(miette::Report::new(e));
             }
-            if !selected.contains(h) {
-                selected.push(h.clone());
+            if !selected.iter().any(|s| s == h_trimmed) {
+                selected.push(h_trimmed.to_string());
             }
         }
         model.config.harnesses = selected;
@@ -596,7 +605,12 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
     } else {
         std::env::current_dir().into_diagnostic()?.join(start)
     };
-    let root = crate::distribution::find_project_root_from(&start).into_diagnostic()?;
+    let start_dir = if start.is_file() {
+        start.parent().unwrap_or(&start).to_path_buf()
+    } else {
+        start
+    };
+    let root = crate::distribution::find_project_root_from(&start_dir).into_diagnostic()?;
 
     let (model, registry) = load_project(&root)?;
     let pairs = resolve_pairs(&model, &registry)?;

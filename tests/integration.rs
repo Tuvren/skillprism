@@ -246,3 +246,39 @@ fn build_harness_flag_filters_and_deduplicates() {
     assert!(project_dir.join("dist/claude/beta/SKILL.md").exists());
     assert!(!project_dir.join("dist/opencode").exists());
 }
+
+#[test]
+fn build_harness_unknown_harness_fails() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg("nonexistent_harness")
+        .assert();
+    assert.failure().stderr(predicate::str::contains(
+        "Unknown harness: nonexistent_harness",
+    ));
+}
+
+#[test]
+fn build_harness_trims_whitespace() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg(" claude , opencode ")
+        .arg("--force")
+        .assert();
+    assert.success();
+
+    assert!(project_dir.join("dist/claude/alpha/SKILL.md").exists());
+    assert!(project_dir.join("dist/opencode/alpha/SKILL.md").exists());
+}
