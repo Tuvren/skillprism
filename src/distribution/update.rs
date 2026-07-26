@@ -23,7 +23,7 @@ use crate::registry::HarnessRegistry;
 use crate::resolver::HarnessResolver;
 use crate::router::{TargetScope, resolve_overwrite, resolve_sidecar_path, resolve_skill_path};
 use crate::state::{
-    InstallScope, InstalledFile, InstalledSkill, SkillFormat, SourceType, StateStore, now_rfc3339,
+    InstalledFile, InstalledSkill, SkillFormat, SourceType, StateStore, now_rfc3339,
 };
 use crate::types::ProjectError;
 
@@ -403,14 +403,11 @@ fn update_skill(
         eprintln!("No matching harnesses to update for {}", old.name);
         return Ok(false);
     }
-    let project_root: Option<PathBuf> = match old.scope {
-        InstallScope::Project => old
-            .project_root
-            .clone()
-            .map(PathBuf::from)
-            .or_else(|| super::find_project_root().ok()),
-        InstallScope::User => None,
-    };
+    let project_root: Option<PathBuf> = old
+        .project_root
+        .as_ref()
+        .map(PathBuf::from)
+        .or_else(|| super::find_project_root().ok());
 
     let new_record = match format {
         SkillFormat::Skillprism => update_skillprism_skill(

@@ -129,8 +129,7 @@ impl HarnessRegistry {
             .chain(self.user_overrides.keys())
             .cloned()
             .collect();
-        ids.sort();
-        ids.dedup();
+        ids.sort_unstable();
         ids
     }
 }

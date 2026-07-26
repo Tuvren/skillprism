@@ -571,4 +571,50 @@ paths:
         !installed_skillprism.exists(),
         "skillprism-skill should be removed from custom-harness skills_dir"
     );
+
+    // 5. User-scope install using custom-harness while in project directory
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--target")
+        .arg("user")
+        .arg("--harnesses")
+        .arg("custom-harness")
+        .arg("--force")
+        .assert()
+        .success();
+
+    let user_plain = env
+        .state_config
+        .join("home/.custom/skills/plain-skill/SKILL.md");
+    assert!(
+        user_plain.exists(),
+        "plain-skill should be installed into user-scope custom-harness skills_dir"
+    );
+
+    // Update user-scoped custom harness skill
+    env.bin()
+        .arg("update")
+        .arg("--target")
+        .arg("user")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(user_plain.exists());
+
+    // Remove user-scoped custom harness skill
+    env.bin()
+        .arg("remove")
+        .arg("--all")
+        .arg("--target")
+        .arg("user")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(
+        !user_plain.exists(),
+        "user-scoped plain-skill should be removed from custom-harness skills_dir"
+    );
 }

@@ -283,14 +283,11 @@ fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, Command
 }
 
 fn project_root_for_registry(skill: &InstalledSkill) -> Option<PathBuf> {
-    match skill.scope {
-        InstallScope::Project => skill
-            .project_root
-            .as_ref()
-            .map(PathBuf::from)
-            .or_else(|| find_project_root().ok()),
-        InstallScope::User => None,
-    }
+    skill
+        .project_root
+        .as_ref()
+        .map(PathBuf::from)
+        .or_else(|| find_project_root().ok())
 }
 
 fn apply_removals_to_state(
