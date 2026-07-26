@@ -21,13 +21,32 @@ use std::path::Path;
 /// with deletable placeholder content (references/, scripts/, assets/).
 pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
     let config_path = project_root.join("skillprism.yaml");
-    let rel_skills_dir = fs::read_to_string(&config_path).map_or_else(
-        |_| std::path::PathBuf::from("skills"),
-        |content| {
-            yaml_serde::from_str::<crate::types::ProjectConfig>(&content)
-                .map_or_else(|_| std::path::PathBuf::from("skills"), |c| c.skills_dir)
-        },
-    );
+    let rel_skills_dir = if config_path.exists() {
+        let content = fs::read_to_string(&config_path)?;
+        let config: crate::types::ProjectConfig = yaml_serde::from_str(&content).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed to parse {}: {e}", config_path.display()),
+            )
+        })?;
+        config.skills_dir
+    } else {
+        std::path::PathBuf::from("skills")
+    };
+
+    if rel_skills_dir.is_absolute()
+        || rel_skills_dir
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "skills_dir `{}` must be a relative path without '..' components",
+                rel_skills_dir.display()
+            ),
+        ));
+    }
 
     let target_dir = project_root.join(rel_skills_dir).join(name);
     fs::create_dir_all(&target_dir)?;
@@ -138,6 +157,38 @@ mod tests {
         let skill_dir = project_root.join("custom_skills/custom-dir-skill");
         assert!(skill_dir.join("skill.yaml").exists());
         assert!(skill_dir.join("SKILL.md").exists());
+    }
+
+    #[test]
+    fn scaffold_skill_rejects_unsafe_skills_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
+
+        fs::write(
+            project_root.join("skillprism.yaml"),
+            "skills_dir: ../outside\nharnesses:\n  - claude\n",
+        )
+        .unwrap();
+
+        let res = scaffold_skill(project_root, "bad-skill");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn scaffold_skill_fails_on_malformed_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
+
+        fs::write(
+            project_root.join("skillprism.yaml"),
+            "skills_dir: [invalid\n",
+        )
+        .unwrap();
+
+        let res = scaffold_skill(project_root, "bad-skill");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidData);
     }
 
     #[test]

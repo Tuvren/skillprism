@@ -694,6 +694,17 @@ fn parse_harness_list(opt: Option<String>) -> Vec<String> {
     .unwrap_or_default()
 }
 
+fn is_interactive_terminal() -> bool {
+    #[cfg(test)]
+    {
+        false
+    }
+    #[cfg(not(test))]
+    {
+        std::io::stdin().is_terminal()
+    }
+}
+
 fn run_init(kind: InitKind) -> Result<(), CommandError> {
     match kind {
         InitKind::Project {
@@ -705,7 +716,7 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
             let mut selected = parse_harness_list(harnesses);
 
             if selected.is_empty() {
-                if std::io::stdin().is_terminal() && !cfg!(test) {
+                if is_interactive_terminal() {
                     let registry = HarnessRegistry::with_builtins();
                     let available_ids = registry.all_ids();
                     let selections = dialoguer::MultiSelect::new()
