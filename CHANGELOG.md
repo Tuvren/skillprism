@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Breaking (0.2.0): Build is compile-only (`dist/`)** — `skillprism build` now writes exclusively to `dist/<harness-id>/<skill-name>/` and never installs directly into live agent directories (`.claude/skills/`, `~/.claude/skills/`, etc.). Removed `--target` flag from `build`; use `skillprism add` to install skills into live harness paths. Added `--harness` (`-H`) flag to `build` for multi-select harness filtering.
+- **Root discovery in `validate`** — `skillprism validate` now walks up parent directories to discover `skillprism.yaml` at the project root, matching `build`.
+
 ## v0.1.3 — 2026-07-22
 
 - **Multi-project state store isolation** — Fixed identity collision in `~/.config/skillprism/installed.yaml` where project-scoped skills were keyed strictly by `(name, scope)`. Skills are now keyed by `(name, scope, project_root)` so the same skill installed across multiple project directories coexists without overwriting state or cross-contaminating `update` calls.

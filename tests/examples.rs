@@ -38,9 +38,9 @@ use tempfile::TempDir;
 
 const SKILLS: [&str; 3] = ["mcp-builder", "webapp-testing", "quickstart"];
 const HARNESSES: [(&str, &str); 3] = [
-    ("claude", ".claude/skills"),
-    ("opencode", ".opencode/skills"),
-    ("codex", ".agents/skills"), // project scope — NOT .codex/skills (that's user-scope only)
+    ("claude", "dist/claude"),
+    ("opencode", "dist/opencode"),
+    ("codex", "dist/codex"),
 ];
 
 fn project_root() -> PathBuf {
@@ -115,9 +115,9 @@ fn examples_build_succeeds_and_skips_incompatible_pairs() {
     // mcp-builder requires `allowed-tools`, which only claude supports among the three
     // targeted harnesses — it should resolve there and be skipped (not abort the
     // build) for opencode/codex.
-    assert!(skill_output_path(project_dir, ".claude/skills", "mcp-builder").exists());
-    assert!(!skill_output_path(project_dir, ".opencode/skills", "mcp-builder").exists());
-    assert!(!skill_output_path(project_dir, ".agents/skills", "mcp-builder").exists());
+    assert!(skill_output_path(project_dir, "dist/claude", "mcp-builder").exists());
+    assert!(!skill_output_path(project_dir, "dist/opencode", "mcp-builder").exists());
+    assert!(!skill_output_path(project_dir, "dist/codex", "mcp-builder").exists());
 
     assert!(
         stderr.contains("[resolve] skipped")
@@ -143,9 +143,9 @@ fn examples_subagent_guide_varies_by_harness() {
     // every harness defines for itself (src/builtin_harnesses/*.yaml). webapp-testing
     // resolves everywhere, so its rendered output can be checked against all three.
     let webapp_expectations = [
-        (".claude/skills", "Claude Code mechanisms"),
-        (".opencode/skills", "composable subagents"),
-        (".agents/skills", "separate agent orchestration context"),
+        ("dist/claude", "Claude Code mechanisms"),
+        ("dist/opencode", "composable subagents"),
+        ("dist/codex", "separate agent orchestration context"),
     ];
     for (scope_dir, subagent_phrase) in webapp_expectations {
         let content =
@@ -160,12 +160,8 @@ fn examples_subagent_guide_varies_by_harness() {
     // mcp-builder only resolves for claude in this project (see
     // examples_build_succeeds_and_skips_incompatible_pairs) — its rendered output must
     // carry claude's subagent_guide text, not opencode's or codex's.
-    let claude_mcp = fs::read_to_string(skill_output_path(
-        project_dir,
-        ".claude/skills",
-        "mcp-builder",
-    ))
-    .unwrap();
+    let claude_mcp =
+        fs::read_to_string(skill_output_path(project_dir, "dist/claude", "mcp-builder")).unwrap();
     assert!(
         claude_mcp.contains("## Subagent Instructions")
             && claude_mcp.contains("Claude Code mechanisms")
@@ -220,7 +216,7 @@ fn examples_asset_copy_matches_skillprism_convention() {
     // mcp-builder only resolves for claude — check its asset copy there. Its real
     // asset directory also keeps its upstream name, `reference/` (singular), which
     // previously was silently dropped (the original bug this fix addresses).
-    let mcp_dir = project_dir.join(".claude/skills/mcp-builder");
+    let mcp_dir = project_dir.join("dist/claude/mcp-builder");
 
     let copied_reqs = mcp_dir.join("scripts/requirements.txt");
     let source_reqs = examples_src_dir().join("skills/mcp-builder/scripts/requirements.txt");
@@ -249,7 +245,7 @@ fn examples_manifests_reflect_resolved_pairs_only() {
     let project_dir = tmp.path();
 
     // claude resolves both skills — its manifest references both.
-    let claude_manifest = project_dir.join(".claude/plugin.json");
+    let claude_manifest = project_dir.join("dist/claude/.claude/plugin.json");
     assert!(claude_manifest.exists());
     let claude_content = fs::read_to_string(&claude_manifest).unwrap();
     assert!(claude_content.trim_start().starts_with('['));
@@ -260,7 +256,7 @@ fn examples_manifests_reflect_resolved_pairs_only() {
 
     // codex only resolves webapp-testing (mcp-builder was skipped there) — its
     // manifest must reference webapp-testing and must NOT reference mcp-builder.
-    let codex_manifest = project_dir.join(".agents/marketplace.json");
+    let codex_manifest = project_dir.join("dist/codex/.agents/marketplace.json");
     assert!(codex_manifest.exists());
     let codex_content = fs::read_to_string(&codex_manifest).unwrap();
     assert!(codex_content.contains("webapp-testing"));
@@ -271,7 +267,11 @@ fn examples_manifests_reflect_resolved_pairs_only() {
     );
 
     // opencode has no manifest defined (requires_manifest: false) — must not be written.
-    assert!(!project_dir.join(".opencode/plugin.json").exists());
+    assert!(
+        !project_dir
+            .join("dist/opencode/.opencode/plugin.json")
+            .exists()
+    );
 }
 
 #[test]
@@ -286,12 +286,8 @@ fn examples_skill_metadata_fields_render_correctly() {
     // like `version` and `metadata.*` are packaging/attribution metadata that reach the
     // context too (see context::tests::context_includes_every_skill_metadata_field) but
     // aren't meant to be echoed into every rendered body just to prove it.
-    let claude_mcp = fs::read_to_string(skill_output_path(
-        project_dir,
-        ".claude/skills",
-        "mcp-builder",
-    ))
-    .unwrap();
+    let claude_mcp =
+        fs::read_to_string(skill_output_path(project_dir, "dist/claude", "mcp-builder")).unwrap();
     assert!(claude_mcp.contains("license: Apache-2.0"));
     assert!(claude_mcp.contains("allowed-tools: Read, Write, Bash, WebFetch, WebSearch"));
     assert!(claude_mcp.contains(r#"Trigger phrases: "build an MCP server for X""#));
@@ -312,21 +308,13 @@ fn examples_quickstart_demonstrates_harness_variable_override() {
 
     // skill.yaml's top-level `variables.greeting` default applies to claude and codex;
     // `harnesses.opencode.variables.greeting` overrides it for opencode only.
-    let claude = fs::read_to_string(skill_output_path(
-        project_dir,
-        ".claude/skills",
-        "quickstart",
-    ))
-    .unwrap();
-    let codex = fs::read_to_string(skill_output_path(
-        project_dir,
-        ".agents/skills",
-        "quickstart",
-    ))
-    .unwrap();
+    let claude =
+        fs::read_to_string(skill_output_path(project_dir, "dist/claude", "quickstart")).unwrap();
+    let codex =
+        fs::read_to_string(skill_output_path(project_dir, "dist/codex", "quickstart")).unwrap();
     let opencode = fs::read_to_string(skill_output_path(
         project_dir,
-        ".opencode/skills",
+        "dist/opencode",
         "quickstart",
     ))
     .unwrap();
@@ -349,24 +337,16 @@ fn examples_quickstart_demonstrates_harness_macro_override() {
     // Codex's own builtin `subagent_guide` macro for this skill only — claude and
     // opencode still render their harness's unmodified builtin text (same text
     // `examples_subagent_guide_varies_by_harness` checks for webapp-testing/mcp-builder).
-    let claude = fs::read_to_string(skill_output_path(
-        project_dir,
-        ".claude/skills",
-        "quickstart",
-    ))
-    .unwrap();
+    let claude =
+        fs::read_to_string(skill_output_path(project_dir, "dist/claude", "quickstart")).unwrap();
     let opencode = fs::read_to_string(skill_output_path(
         project_dir,
-        ".opencode/skills",
+        "dist/opencode",
         "quickstart",
     ))
     .unwrap();
-    let codex = fs::read_to_string(skill_output_path(
-        project_dir,
-        ".agents/skills",
-        "quickstart",
-    ))
-    .unwrap();
+    let codex =
+        fs::read_to_string(skill_output_path(project_dir, "dist/codex", "quickstart")).unwrap();
 
     assert!(claude.contains("Claude Code mechanisms"));
     assert!(opencode.contains("composable subagents"));

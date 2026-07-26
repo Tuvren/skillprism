@@ -22,12 +22,11 @@ use miette::Diagnostic;
 use sha2::Digest;
 use thiserror::Error;
 
-use crate::cli::TargetScope;
 use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
 use crate::resolver::{HarnessResolver, ResolveError, ResolvedPair};
-use crate::router::Router;
+use crate::router::{Router, TargetScope};
 use crate::state::{
     InstallScope, InstalledFile, InstalledSkill, SkillFormat, SourceType, now_rfc3339,
 };

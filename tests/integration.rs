@@ -74,7 +74,7 @@ fn full_build_pipeline() {
     // 2 skills × 2 harnesses = 4 output files
     for skill in &["alpha", "beta"] {
         for harness in &["claude", "opencode"] {
-            let output_path = project_dir.join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_dir.join(format!("dist/{harness}/{skill}/SKILL.md"));
             assert!(
                 output_path.exists(),
                 "expected output at {}",
@@ -84,8 +84,7 @@ fn full_build_pipeline() {
     }
 
     // Verify rendered content for alpha × claude
-    let alpha_claude =
-        fs::read_to_string(project_dir.join(".claude/skills/alpha/SKILL.md")).unwrap();
+    let alpha_claude = fs::read_to_string(project_dir.join("dist/claude/alpha/SKILL.md")).unwrap();
     // The Agent Skills spec requires YAML frontmatter (name + description) — without
     // it no client can discover the skill. The fixture templates must emit it.
     assert!(
@@ -102,7 +101,7 @@ fn full_build_pipeline() {
 
     // Verify rendered content for beta × opencode
     let beta_opencode =
-        fs::read_to_string(project_dir.join(".opencode/skills/beta/SKILL.md")).unwrap();
+        fs::read_to_string(project_dir.join("dist/opencode/beta/SKILL.md")).unwrap();
     assert!(
         beta_opencode.starts_with("---\n"),
         "rendered SKILL.md must start with YAML frontmatter"
@@ -114,7 +113,7 @@ fn full_build_pipeline() {
     assert!(beta_opencode.contains("Message:"));
 
     // Verify manifest files exist for claude (has plugin.json) with correct content
-    let manifest_path = project_dir.join(".claude/plugin.json");
+    let manifest_path = project_dir.join("dist/claude/.claude/plugin.json");
     assert!(manifest_path.exists(), "claude manifest should exist");
     let manifest_content = fs::read_to_string(manifest_path).unwrap();
     assert!(
@@ -191,11 +190,7 @@ fn build_diff_does_not_write() {
     assert.success();
 
     assert!(
-        !project_dir.join(".claude").exists(),
-        "diff mode must not write output files"
-    );
-    assert!(
-        !project_dir.join(".opencode").exists(),
+        !project_dir.join("dist").exists(),
         "diff mode must not write output files"
     );
 
@@ -225,7 +220,7 @@ fn build_diff_does_not_write() {
     // Verify no files were modified (diff is read-only)
     for skill in &["alpha", "beta"] {
         for harness in &["claude", "opencode"] {
-            let output_path = project_dir.join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_dir.join(format!("dist/{harness}/{skill}/SKILL.md"));
             assert!(output_path.exists(), "file should still exist after --diff");
         }
     }

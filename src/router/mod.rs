@@ -24,7 +24,6 @@ use std::path::{Path, PathBuf};
 use miette::Diagnostic;
 use thiserror::Error;
 
-use crate::cli::TargetScope;
 use crate::engine::HarnessOutput;
 use crate::resolver::ResolvedPair;
 
