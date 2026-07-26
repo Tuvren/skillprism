@@ -709,6 +709,7 @@ fn parse_harness_list(opt: Option<String>) -> Vec<String> {
     .unwrap_or_default()
 }
 
+#[allow(clippy::missing_const_for_fn)] // reason: non-test branch performs dynamic I/O terminal checks
 fn is_interactive_terminal() -> bool {
     #[cfg(test)]
     {
@@ -1064,7 +1065,7 @@ mod tests {
             CommandError::Usage(report) => {
                 assert!(report.to_string().contains("`-H`"));
             }
-            e => panic!("expected CommandError::Usage, got {e:?}"),
+            CommandError::Runtime(e) => panic!("expected CommandError::Usage, got {e:?}"),
         }
     }
 
