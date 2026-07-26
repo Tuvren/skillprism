@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::{IsTerminal, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -701,6 +701,7 @@ fn is_interactive_terminal() -> bool {
     }
     #[cfg(not(test))]
     {
+        use std::io::IsTerminal;
         std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
     }
 }
