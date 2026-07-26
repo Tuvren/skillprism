@@ -22,6 +22,7 @@ use serde::Deserialize;
 
 /// Complete definition of a harness including its capabilities, paths, and templates.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HarnessDefinition {
     /// Unique identifier for the harness (e.g. "claude", "opencode").
     pub id: String,
@@ -36,10 +37,6 @@ pub struct HarnessDefinition {
     /// Named macros available to templates as `harness.<name>`.
     #[serde(default)]
     pub macros: BTreeMap<String, MacroDef>,
-    /// Custom functions exposed to templates.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub functions: BTreeMap<String, FunctionDef>,
     /// Sidecar file definitions produced alongside skills.
     #[serde(default)]
     pub sidecars: Vec<SidecarDef>,
@@ -47,13 +44,11 @@ pub struct HarnessDefinition {
     pub manifest: Option<ManifestDef>,
     /// Pattern for referencing skills in this harness (e.g. "/{name}").
     pub skill_ref_pattern: Option<String>,
-    /// Configuration for where the harness discovers skills.
-    #[allow(dead_code)]
-    pub discovery: Option<DiscoveryConfig>,
 }
 
 /// Feature flags and constraints for a harness.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HarnessCapabilities {
     /// Whether the harness supports sub-agent invocation.
     pub supports_subagent: bool,
@@ -78,9 +73,6 @@ pub struct HarnessCapabilities {
     /// Whether `user-invocable` is supported in skill config.
     #[serde(default)]
     pub supports_user_invocable_flag: bool,
-    /// Path to an extra metadata file for the harness.
-    #[allow(dead_code)]
-    pub extra_metadata_path: Option<String>,
 }
 
 const fn default_name_max() -> usize {
@@ -93,6 +85,7 @@ const fn default_desc_max() -> usize {
 
 /// File system paths where skills and manifests are written.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct HarnessPaths {
     /// Directory for project-scoped skill output (e.g. ".claude/skills").
     pub project_scope_path: String,
@@ -106,38 +99,22 @@ pub struct HarnessPaths {
     pub manifest_filename: Option<String>,
 }
 
-/// A harness macro definition: either inline text or a function with arguments.
+/// A harness macro definition: either inline text or a function body.
 #[derive(Debug, Clone, Deserialize)]
 #[serde(untagged)]
 pub enum MacroDef {
     /// An inline string macro.
     Inline(String),
-    /// A function-like macro with optional argument list.
+    /// A function-like macro with body content.
     Function {
         /// The macro body.
         content: String,
-        /// Optional parameter names.
-        #[allow(dead_code)]
-        arguments: Option<Vec<String>>,
     },
-}
-
-/// Definition of a custom template function exposed by a harness.
-#[derive(Debug, Clone, Deserialize)]
-pub struct FunctionDef {
-    /// Human-readable description of the function.
-    #[allow(dead_code)]
-    pub description: String,
-    /// Optional description of the return value.
-    #[allow(dead_code)]
-    pub returns: Option<String>,
-    /// Optional inline template for the function body.
-    #[allow(dead_code)]
-    pub template: Option<String>,
 }
 
 /// Definition of a sidecar file produced alongside the main skill.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct SidecarDef {
     /// Filename for the sidecar output.
     pub filename: String,
@@ -149,27 +126,8 @@ pub struct SidecarDef {
 
 /// Definition of a manifest file produced for the harness.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ManifestDef {
-    /// Format of the manifest (e.g. "json").
-    #[allow(dead_code)]
-    pub format: String,
     /// Jinja2 template for the manifest content.
     pub template: String,
-}
-
-/// Configuration for where a harness discovers skill definitions.
-#[derive(Debug, Clone, Deserialize)]
-pub struct DiscoveryConfig {
-    /// Discover skills from the project directory.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub project: bool,
-    /// Discover skills from the user's home directory.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub user: bool,
-    /// Discover skills from plugin directories.
-    #[serde(default)]
-    #[allow(dead_code)]
-    pub plugin: bool,
 }

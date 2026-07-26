@@ -63,16 +63,16 @@ Port: {{ port }}
 {{ greeting }}
 ```
 
-Use `variables:` when a value is constant across every harness. If a variable genuinely needs a *different* value depending on which harness is being built, use the `harnesses:` block (see [Templating](../templating)).
+Use `variables:` when a value is constant across every harness. If a variable genuinely needs a *different* value depending on which harness is being built, use the `overrides:` block (see [Templating](../templating)).
 
-## harnesses block
+## overrides block
 
 Per-harness overrides for variables and macros:
 
 ```yaml
 variables:
   port: 5173
-harnesses:
+overrides:
   opencode:
     variables:
       port: 4173      # only opencode's render sees this value

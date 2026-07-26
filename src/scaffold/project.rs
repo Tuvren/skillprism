@@ -28,7 +28,7 @@ pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Res
     fs::write(
         dir.join("skillprism.yaml"),
         format!(
-            "name: {name}\nharnesses:\n{harness_list}\nskills_dir: skills\n",
+            "harnesses:\n{harness_list}\nskills_dir: skills\n",
             harness_list = yaml_lines.join("\n")
         ),
     )?;
@@ -73,7 +73,8 @@ mod tests {
         assert!(dir.join("README.md").exists());
 
         let content = fs::read_to_string(dir.join("skillprism.yaml")).unwrap();
-        assert!(content.contains("test-project"));
+        let model = crate::loader::ProjectLoader::load(dir).unwrap();
+        assert_eq!(model.skills.len(), 1);
         let lines: Vec<&str> = content.lines().collect();
         assert!(lines.contains(&"  - claude"));
         assert!(lines.contains(&"  - opencode"));

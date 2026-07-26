@@ -10,7 +10,6 @@ capabilities:
   supports_allowed_tools: false
   supports_disable_model_invocation: false
   supports_user_invocable_flag: false
-  extra_metadata_path: agents/openai.yaml
 paths:
   project_scope_path: .agents/skills
   user_scope_path: .codex/skills
@@ -18,12 +17,7 @@ paths:
   manifest_scope_path: .agents
   manifest_filename: marketplace.json
 skill_ref_pattern: /{name}
-discovery:
-  project: true
-  user: true
-  plugin: true
 manifest:
-  format: json
   template: |
     {
       "name": "{{ skill_name }}",

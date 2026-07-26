@@ -288,7 +288,7 @@ fn distribution_add_root_plain_skill_names_from_repo_slug() {
     let project = tempfile::TempDir::with_prefix("skillprism_rootname_project_").unwrap();
     fs::write(
         project.path().join("skillprism.yaml"),
-        "name: rootname-test\nharnesses:\n  - claude\nskills_dir: skills\n",
+        "harnesses:\n  - claude\nskills_dir: skills\n",
     )
     .unwrap();
     let source = tempfile::TempDir::with_prefix("skillprism_rootskill_").unwrap();
@@ -367,7 +367,7 @@ fn distribution_update_applies_source_changes() {
     let project = tempfile::TempDir::with_prefix("skillprism_update_project_").unwrap();
     fs::write(
         project.path().join("skillprism.yaml"),
-        "name: update-test\nharnesses:\n  - claude\n  - opencode\nskills_dir: skills\n",
+        "harnesses:\n  - claude\n  - opencode\nskills_dir: skills\n",
     )
     .unwrap();
     let source = copy_fixture("dist-update");

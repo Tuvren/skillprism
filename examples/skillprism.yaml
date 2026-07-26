@@ -1,4 +1,3 @@
-name: skillprism-examples
 harnesses:
   - claude
   - opencode

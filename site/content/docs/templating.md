@@ -95,13 +95,13 @@ Don't reach for conditionals just because they exist — most skills render iden
 
 ## Per-harness overrides
 
-The `harnesses:` block in `skill.yaml` overrides variables and macros per harness:
+The `overrides:` block in `skill.yaml` overrides variables and macros per harness:
 
 ```yaml
 # skill.yaml
 variables:
   greeting: Hello from skillprism
-harnesses:
+overrides:
   opencode:
     variables:
       greeting: Hello from skillprism, rendered specifically for OpenCode
@@ -110,8 +110,8 @@ harnesses:
       subagent_guide: "## Subagent Instructions\n\nThis skill overrides Codex's own subagent_guide macro for itself only."
 ```
 
-- **`harnesses.<id>.variables`** — merged with top-level `variables`, harness wins. Only that harness's render sees the override.
-- **`harnesses.<id>.macros`** — overrides a harness's builtin macro for this skill only. Other skills built for the same harness still get the harness's unmodified builtin.
+- **`overrides.<id>.variables`** — merged with top-level `variables`, harness wins. Only that harness's render sees the override.
+- **`overrides.<id>.macros`** — overrides a harness's builtin macro for this skill only. Other skills built for the same harness still get the harness's unmodified builtin.
 
 ## Helper functions
 
@@ -125,4 +125,4 @@ skillprism registers one custom helper:
 
 - **Validation checks all branches:** `{% if %}` references are checked statically, including both branches. A macro override referenced anywhere in the template must be defined for *every* harness in `skillprism.yaml`'s `harnesses:` list — not just the one it's meaningfully different for — even if you only ever read it behind a guard.
 - **Variable name collisions:** A `variables:` entry with the same name as a built-in (`version`, `license`, etc.) silently overwrites it. `skillprism validate` catches this as a `ReservedVariableName` error.
-- **Don't over-use `harnesses:` and `variables:`:** Most skills render identically everywhere and don't need per-harness overrides at all. The scaffold defaults to showing them as commented optional examples for this reason.
+- **Don't over-use `overrides:` and `variables:`:** Most skills render identically everywhere and don't need per-harness overrides at all. The scaffold defaults to showing them as commented optional examples for this reason.

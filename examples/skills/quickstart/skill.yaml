@@ -6,7 +6,7 @@ description: >-
   Meant to be read end-to-end as a tour of the format, not used for real work.
 variables:
   greeting: Hello from skillprism
-harnesses:
+overrides:
   opencode:
     variables:
       greeting: Hello from skillprism, rendered specifically for OpenCode

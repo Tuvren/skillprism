@@ -24,6 +24,12 @@ hugo --gc --minify -s site                        # build the website to site/pu
 Clippy is deny-level (`#![deny(clippy::all, clippy::pedantic, clippy::nursery)]` in `main.rs`).
 Rust toolchain is pinned to 1.85 (edition 2024) in `rust-toolchain.toml`.
 
+## Code Quality & Strict Linting Rules
+
+1. **Zero Warnings Policy**: All code must compile with zero warnings under `cargo clippy -- -D warnings` (`#![deny(clippy::all, clippy::pedantic, clippy::nursery)]` is enabled in `main.rs`).
+2. **Formatting**: All files must strictly pass `cargo fmt --check`.
+3. **Pre-Commit Verification**: Run `cargo test`, `cargo clippy -- -D warnings`, and `cargo fmt --check` before completing any changes or committing work.
+
 ## License Header
 
 Every source file must start with the Apache 2.0 header:

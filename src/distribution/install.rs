@@ -257,7 +257,7 @@ pub fn install_source(
         &source_url,
         source_type,
         effective_ref.as_ref(),
-        resolved_ref,
+        resolved_ref.as_deref(),
         skill_path.as_ref(),
         &mut on_installed,
     );
@@ -269,11 +269,6 @@ pub fn install_source(
     result
 }
 
-// reason: linear install pipeline (discover → per-skill render → record) kept as
-// one readable unit; it threads the source-provenance fields (url, type, ref,
-// resolved_ref, skill_path) plus render context. Bundling those into a
-// `SourceMeta` struct is a tracked maintainability follow-up.
-#[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
 #[allow(clippy::too_many_arguments)]
 fn install_discovered_skills(
     ctx: &InstallContext,
@@ -281,7 +276,7 @@ fn install_discovered_skills(
     source_url: &str,
     source_type: SourceType,
     r#ref: Option<&String>,
-    resolved_ref: Option<String>,
+    resolved_ref: Option<&str>,
     skill_path: Option<&String>,
     on_installed: &mut impl FnMut(&InstalledSkill) -> Result<(), InstallError>,
 ) -> Result<Vec<InstallResult>, InstallError> {
@@ -292,25 +287,7 @@ fn install_discovered_skills(
         });
     }
 
-    let filter = ctx
-        .skill_filter
-        .clone()
-        .or_else(|| skill_filter_from_parsed(&ctx.parsed));
-    let filtered = if let Some(filter) = filter {
-        let matched: Vec<_> = skill_dirs
-            .into_iter()
-            .filter(|d| skill_dir_name(d) == filter)
-            .collect();
-        if matched.is_empty() {
-            return Err(InstallError::SkillNotFound {
-                source_input: ctx.source_input.clone(),
-                skill: filter,
-            });
-        }
-        matched
-    } else {
-        skill_dirs
-    };
+    let filtered = filter_discovered_skills(ctx, skill_dirs)?;
 
     let count = filtered.len();
     eprintln!(
@@ -324,13 +301,6 @@ fn install_discovered_skills(
     let mut overwrite_all = false;
 
     for skill_dir in filtered {
-        // A plain skill whose SKILL.md sits at the fetched repo root has, as its
-        // on-disk directory, the opaque temp clone dir (`skillprism-clone-…`).
-        // Naming it from that basename would record a garbage, non-deterministic
-        // name, so derive it from the repo slug instead. This applies only to
-        // remote sources with no subpath (a local path's or a subpath dir's
-        // basename is already meaningful; skillprism skills take their name from
-        // `skill.yaml` regardless).
         let name_override = if skill_dir.as_path() == source_path
             && source_type != SourceType::Local
             && !source_has_subpath(&ctx.parsed)
@@ -351,7 +321,7 @@ fn install_discovered_skills(
                 source_url,
                 source_type,
                 r#ref,
-                resolved_ref.clone(),
+                resolved_ref.map(ToString::to_string),
                 skill_path,
                 &mut skip_all,
                 &mut overwrite_all,
@@ -362,7 +332,7 @@ fn install_discovered_skills(
                 source_url,
                 source_type,
                 r#ref,
-                resolved_ref.clone(),
+                resolved_ref.map(ToString::to_string),
                 skill_path,
                 name_override.as_deref(),
                 &mut skip_all,
@@ -374,6 +344,31 @@ fn install_discovered_skills(
     }
 
     Ok(results)
+}
+
+fn filter_discovered_skills(
+    ctx: &InstallContext,
+    skill_dirs: Vec<PathBuf>,
+) -> Result<Vec<PathBuf>, InstallError> {
+    let filter = ctx
+        .skill_filter
+        .clone()
+        .or_else(|| skill_filter_from_parsed(&ctx.parsed));
+    if let Some(filter) = filter {
+        let matched: Vec<_> = skill_dirs
+            .into_iter()
+            .filter(|d| skill_dir_name(d) == filter)
+            .collect();
+        if matched.is_empty() {
+            return Err(InstallError::SkillNotFound {
+                source_input: ctx.source_input.clone(),
+                skill: filter,
+            });
+        }
+        Ok(matched)
+    } else {
+        Ok(skill_dirs)
+    }
 }
 
 fn install_from_well_known(

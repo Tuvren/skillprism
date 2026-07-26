@@ -17,12 +17,7 @@ paths:
   manifest_scope_path: .claude
   manifest_filename: plugin.json
 skill_ref_pattern: /{name}
-discovery:
-  project: true
-  user: true
-  plugin: false
 manifest:
-  format: json
   template: |
     {
       "name": "{{ skill_name }}",

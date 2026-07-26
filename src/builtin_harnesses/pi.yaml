@@ -15,10 +15,6 @@ paths:
   user_scope_path: .pi/agent/skills
   skill_filename: SKILL.md
 skill_ref_pattern: /{name}
-discovery:
-  project: true
-  user: true
-  plugin: false
 macros:
   subagent_guide:
     content: "Pi does not support subagent skills."

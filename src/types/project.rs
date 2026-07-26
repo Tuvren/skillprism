@@ -19,6 +19,7 @@ use serde::Deserialize;
 
 /// Top-level project configuration deserialized from skillprism.yaml.
 #[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct ProjectConfig {
     /// Harness IDs this project targets (e.g. `claude`, `opencode`).
     #[serde(default)]
@@ -27,23 +28,10 @@ pub struct ProjectConfig {
     /// Directory containing skill definitions, relative to project root.
     #[serde(default = "default_skills_dir")]
     pub skills_dir: PathBuf,
-
-    /// Directory containing user harness overrides.
-    #[serde(default = "default_harnesses_dir")]
-    #[allow(dead_code)]
-    pub harnesses_dir: PathBuf,
-
-    /// Optional project name.
-    #[allow(dead_code)]
-    pub name: Option<String>,
 }
 
 fn default_skills_dir() -> PathBuf {
     PathBuf::from("skills")
-}
-
-fn default_harnesses_dir() -> PathBuf {
-    PathBuf::from("harnesses")
 }
 
 impl Default for ProjectConfig {
@@ -51,8 +39,6 @@ impl Default for ProjectConfig {
         Self {
             harnesses: Vec::new(),
             skills_dir: default_skills_dir(),
-            harnesses_dir: default_harnesses_dir(),
-            name: None,
         }
     }
 }
@@ -140,20 +126,6 @@ pub struct HarnessOverride {
     /// Macro overrides scoped to this skill only — harness wins over that harness's
     /// own builtin macro of the same name, if any.
     pub macros: BTreeMap<String, String>,
-}
-
-/// A group of skills sharing local variables and nested sub-groups.
-#[derive(Debug, Clone)]
-#[allow(dead_code)]
-pub struct SkillGroup {
-    /// Variables inherited by all skills in this group.
-    pub local_variables: BTreeMap<String, yaml_serde::Value>,
-    /// Path to the group's skill.yaml config, if any.
-    pub config_path: Option<PathBuf>,
-    /// Nested sub-groups within this group.
-    pub groups: Vec<Self>,
-    /// Skills directly contained in this group.
-    pub skills: Vec<SkillModel>,
 }
 
 /// Names of `SkillModel` metadata fields exposed as built-in template variables,
