@@ -64,14 +64,14 @@ values are available inside a template's `{{ }}`:
   ```yaml
   variables:
     port: 5173
-  harnesses:
+  overrides:
     claude:
       variables:
         port: 4173      # only claude's render sees this value
       macros:
         extra_note: "Claude-specific note, exposed as {{ harness.extra_note }}"
   ```
-  Don't reach for `harnesses:` just because it exists — most skills render identically
+  Don't reach for `overrides:` just because it exists — most skills render identically
   everywhere and don't need it at all. One caveat: validation checks every
   `{{ harness.* }}` reference statically, including both branches of `{% if %}` — so a
   macro override referenced anywhere in the template must be defined for *every*

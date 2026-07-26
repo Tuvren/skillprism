@@ -275,39 +275,27 @@ fn report_update_result(diff: bool, changed: bool, name: &str) {
     }
 }
 
-// reason: linear per-skill update pipeline (ref check → fetch → per-harness
-// render/compare) kept as one readable unit.
-#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
-fn update_skill(
-    old: &InstalledSkill,
-    store: &mut StateStore,
-    harness_filter: Option<&[String]>,
-    diff: bool,
-    force: bool,
-    skip_all: &mut bool,
-    overwrite_all: &mut bool,
-    clone_cache: &mut CloneCache,
-) -> Result<bool, miette::Report> {
+fn should_update_skill(old: &InstalledSkill) -> bool {
     if old.source_type == SourceType::Local {
         eprintln!("{} is a local skill, no remote to update", old.name);
-        return Ok(false);
+        return false;
     }
 
     let Some(r#ref) = &old.r#ref else {
         eprintln!("{} has no git ref, cannot check for updates", old.name);
-        return Ok(false);
+        return false;
     };
 
     if network::is_sha_ref(r#ref) {
         eprintln!("{} is pinned to commit {ref}, skipping update", old.name);
-        return Ok(false);
+        return false;
     }
 
     if let Some(resolved) = &old.resolved_ref {
         match network::git_remote_head(&old.source_url, r#ref) {
             Ok(Some(upstream_sha)) if upstream_sha == *resolved => {
                 eprintln!("{} is up to date", old.name);
-                return Ok(false);
+                return false;
             }
             Ok(Some(_)) => {} // different SHA → proceed with update
             Ok(None) => {
@@ -325,6 +313,55 @@ fn update_skill(
         }
     }
 
+    true
+}
+
+fn fetch_update_source(
+    parsed: &ParsedSource,
+    r#ref: &str,
+    source_input: &str,
+    clone_cache: &mut CloneCache,
+) -> Result<(PathBuf, Option<String>), miette::Report> {
+    match parsed {
+        ParsedSource::Local { path } => Ok((path.clone(), None)),
+        ParsedSource::GitHub { url, subpath, .. } | ParsedSource::GitLab { url, subpath, .. } => {
+            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
+            let base = subpath
+                .as_ref()
+                .map_or_else(|| dir.to_path_buf(), |s| dir.join(s));
+            let head = network::git_dir_head(dir).ok();
+            Ok((base, head))
+        }
+        ParsedSource::Git { url, .. } => {
+            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
+            let head = network::git_dir_head(dir).ok();
+            Ok((dir.to_path_buf(), head))
+        }
+        ParsedSource::WellKnown { .. } => {
+            Err(miette::Report::new(UpdateError::WellKnownUnsupported {
+                source_input: source_input.to_string(),
+            }))
+        }
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_skill(
+    old: &InstalledSkill,
+    store: &mut StateStore,
+    harness_filter: Option<&[String]>,
+    diff: bool,
+    force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
+    clone_cache: &mut CloneCache,
+) -> Result<bool, miette::Report> {
+    if !should_update_skill(old) {
+        return Ok(false);
+    }
+
+    let r#ref = old.r#ref.as_ref().unwrap();
+
     let parsed = parse_source(&old.source).map_err(|e| {
         miette::Report::new(UpdateError::SourceParse {
             skill: old.name.clone(),
@@ -336,45 +373,8 @@ fn update_skill(
     let source_type = old.source_type;
     let skill_path = old.skill_path.as_deref().map(Path::new);
 
-    let (source_path, resolved_ref) = match &parsed {
-        ParsedSource::Local { path } => (path.clone(), None),
-        ParsedSource::GitHub {
-            url,
-            r#ref: _,
-            subpath,
-            ..
-        } => {
-            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
-            let base = subpath
-                .as_ref()
-                .map_or_else(|| dir.to_path_buf(), |s| dir.join(s));
-            let head = network::git_dir_head(dir).ok();
-            (base, head)
-        }
-        ParsedSource::GitLab {
-            url,
-            r#ref: _,
-            subpath,
-            ..
-        } => {
-            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
-            let base = subpath
-                .as_ref()
-                .map_or_else(|| dir.to_path_buf(), |s| dir.join(s));
-            let head = network::git_dir_head(dir).ok();
-            (base, head)
-        }
-        ParsedSource::Git { url, r#ref: _ } => {
-            let dir = clone_cache.fetch(url, r#ref).map_err(UpdateError::from)?;
-            let head = network::git_dir_head(dir).ok();
-            (dir.to_path_buf(), head)
-        }
-        ParsedSource::WellKnown { .. } => {
-            return Err(miette::Report::new(UpdateError::WellKnownUnsupported {
-                source_input: old.source.clone(),
-            }));
-        }
-    };
+    let (source_path, resolved_ref) =
+        fetch_update_source(&parsed, r#ref, &old.source, clone_cache)?;
 
     let skill_dirs = discover_skill_dirs(&source_path).map_err(UpdateError::from)?;
 
@@ -450,9 +450,7 @@ fn update_skill(
     Ok(!diff)
 }
 
-// reason: mirrors the install path — threads source-provenance fields through
-// the per-harness render/update loop; `SourceMeta` bundling is a tracked follow-up.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
 fn update_skillprism_skill(
     old: &InstalledSkill,
     skill_dir: &Path,
@@ -479,20 +477,13 @@ fn update_skillprism_skill(
     let mut changed = false;
 
     let target = install_scope_to_target(old.scope);
-    // For user-scope skills there is no project root; `resolve_skill_path`
-    // ignores this argument for `TargetScope::User`, so `"."` is an unused
-    // placeholder rather than a meaningful path.
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
 
-    // Retain per-file records for harnesses that are not being updated; they
-    // will be replaced with fresh records for the filtered harnesses below.
     let updated_prefixes =
         collect_updated_prefixes(harnesses, &registry, project_root, &old.name, target)?;
     let mut new_files: Vec<InstalledFile> = old
         .files
         .iter()
-        // Component-aware prefix match (consistent with remove.rs) so a skill
-        // dir like `.../skills/foo` doesn't spuriously match `.../skills/foo-bar`.
         .filter(|f| {
             !updated_prefixes
                 .iter()
@@ -501,9 +492,6 @@ fn update_skillprism_skill(
         .cloned()
         .collect();
 
-    // Resolve every harness pair and validate before writing anything, so an
-    // undefined variable or reserved-name collision fails the update with no
-    // output written (DIST-I002) — matching install and the `build` command.
     let mut pairs = Vec::new();
     for harness_id in harnesses {
         pairs.push(
@@ -517,78 +505,19 @@ fn update_skillprism_skill(
     }
     let pairs = validate_pairs(&old.name, pairs).map_err(miette::Report::new)?;
 
-    for pair in &pairs {
-        let harness_id = &pair.harness.id;
-        let output = crate::engine::Engine::render(pair)
-            .map_err(|e| miette::Report::new(UpdateError::Render(miette::Report::new(e))))?;
-
-        let skill_path_buf = resolve_skill_path(project_root, &pair.harness, &old.name, target)
-            .map_err(|e| {
-                miette::Report::new(UpdateError::PathResolution {
-                    detail: e.to_string(),
-                })
-            })?;
-
-        update_file_record(
-            &skill_path_buf,
-            &output.skill_content,
-            &old_files,
-            &mut new_files,
-            &mut changed,
-            diff,
-            force,
-            skip_all,
-            overwrite_all,
-        )?;
-
-        // Known gap (tracked follow-up): re-render/re-record every sidecar the
-        // current version produces, but do not prune a sidecar that existed in a
-        // prior version and vanished upstream. Its old `files[]` record is
-        // dropped (filtered by `updated_prefixes`) yet the file stays on disk as
-        // an untracked orphan. Assets are pruned (`update_asset_dir`); sidecars
-        // are not, since they are not confined to a scannable asset directory.
-        for sidecar in &output.sidecars {
-            let sidecar_path = resolve_sidecar_path(
-                skill_path_buf.parent().unwrap(),
-                sidecar.output_dir.as_deref(),
-                &sidecar.filename,
-                &old.name,
-                harness_id,
-            )
-            .map_err(|e| {
-                miette::Report::new(UpdateError::PathResolution {
-                    detail: format!("sidecar for {harness_id}: {e}"),
-                })
-            })?;
-            update_file_record(
-                &sidecar_path,
-                &sidecar.content,
-                &old_files,
-                &mut new_files,
-                &mut changed,
-                diff,
-                force,
-                skip_all,
-                overwrite_all,
-            )?;
-        }
-
-        for asset_dir in &pair.skill.asset_dirs {
-            if asset_dir.exists() {
-                update_asset_dir(
-                    asset_dir,
-                    skill_path_buf.parent().unwrap(),
-                    &old_files,
-                    &mut new_files,
-                    &mut changed,
-                    diff,
-                    force,
-                    skip_all,
-                    overwrite_all,
-                )?;
-            }
-        }
-    }
+    update_skillprism_pairs(
+        &pairs,
+        project_root,
+        target,
+        &old.name,
+        &old_files,
+        &mut new_files,
+        &mut changed,
+        diff,
+        force,
+        skip_all,
+        overwrite_all,
+    )?;
 
     report_update_result(diff, changed, &old.name);
 
@@ -614,9 +543,90 @@ fn update_skillprism_skill(
     })
 }
 
-// reason: mirrors `update_skillprism_skill` — threads source-provenance fields
-// through the per-harness update loop; `SourceMeta` bundling is a tracked follow-up.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
+fn update_skillprism_pairs(
+    pairs: &[crate::resolver::ResolvedPair],
+    project_root: &Path,
+    target: TargetScope,
+    old_name: &str,
+    old_files: &HashMap<&str, &str>,
+    new_files: &mut Vec<InstalledFile>,
+    changed: &mut bool,
+    diff: bool,
+    force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
+) -> Result<(), miette::Report> {
+    for pair in pairs {
+        let harness_id = &pair.harness.id;
+        let output = crate::engine::Engine::render(pair)
+            .map_err(|e| miette::Report::new(UpdateError::Render(miette::Report::new(e))))?;
+
+        let skill_path_buf = resolve_skill_path(project_root, &pair.harness, old_name, target)
+            .map_err(|e| {
+                miette::Report::new(UpdateError::PathResolution {
+                    detail: e.to_string(),
+                })
+            })?;
+
+        update_file_record(
+            &skill_path_buf,
+            &output.skill_content,
+            old_files,
+            new_files,
+            changed,
+            diff,
+            force,
+            skip_all,
+            overwrite_all,
+        )?;
+
+        for sidecar in &output.sidecars {
+            let sidecar_path = resolve_sidecar_path(
+                skill_path_buf.parent().unwrap(),
+                sidecar.output_dir.as_deref(),
+                &sidecar.filename,
+                old_name,
+                harness_id,
+            )
+            .map_err(|e| {
+                miette::Report::new(UpdateError::PathResolution {
+                    detail: format!("sidecar for {harness_id}: {e}"),
+                })
+            })?;
+            update_file_record(
+                &sidecar_path,
+                &sidecar.content,
+                old_files,
+                new_files,
+                changed,
+                diff,
+                force,
+                skip_all,
+                overwrite_all,
+            )?;
+        }
+
+        for asset_dir in &pair.skill.asset_dirs {
+            if asset_dir.exists() {
+                update_asset_dir(
+                    asset_dir,
+                    skill_path_buf.parent().unwrap(),
+                    old_files,
+                    new_files,
+                    changed,
+                    diff,
+                    force,
+                    skip_all,
+                    overwrite_all,
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
 fn update_plain_skill(
     old: &InstalledSkill,
     skill_dir: &Path,
@@ -649,19 +659,13 @@ fn update_plain_skill(
 
     let target = install_scope_to_target(old.scope);
     let registry = build_registry_for_harnesses(project_root).map_err(UpdateError::from)?;
-    // For user-scope skills there is no project root; `resolve_skill_path`
-    // ignores this argument for `TargetScope::User`, so `"."` is an unused
-    // placeholder rather than a meaningful path.
     let project_root_path = project_root.unwrap_or_else(|| Path::new("."));
 
-    // Retain per-file records for harnesses that are not being updated.
     let updated_prefixes =
         collect_updated_prefixes(harnesses, &registry, project_root_path, &old.name, target)?;
     let mut new_files: Vec<InstalledFile> = old
         .files
         .iter()
-        // Component-aware prefix match (consistent with remove.rs) so a skill
-        // dir like `.../skills/foo` doesn't spuriously match `.../skills/foo-bar`.
         .filter(|f| {
             !updated_prefixes
                 .iter()
@@ -670,17 +674,75 @@ fn update_plain_skill(
         .cloned()
         .collect();
 
+    update_plain_pairs(
+        harnesses,
+        &registry,
+        project_root_path,
+        &template,
+        skill_dir,
+        target,
+        &old.name,
+        &old_files,
+        &mut new_files,
+        &mut changed,
+        diff,
+        force,
+        skip_all,
+        overwrite_all,
+    )?;
+
+    report_update_result(diff, changed, &old.name);
+
+    Ok(InstalledSkill {
+        name: old.name.clone(),
+        source: old.source.clone(),
+        source_url: source_url.to_string(),
+        source_type,
+        r#ref: Some(r#ref.to_string()),
+        resolved_ref,
+        skill_path: skill_path.map(|p| p.to_string_lossy().to_string()),
+        project_root: old.project_root.clone(),
+        scope: old.scope,
+        harnesses: old.harnesses.clone(),
+        format: SkillFormat::Plain,
+        installed_at: old.installed_at.clone(),
+        updated_at: if changed {
+            now_rfc3339()
+        } else {
+            old.updated_at.clone()
+        },
+        files: new_files,
+    })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn update_plain_pairs(
+    harnesses: &[String],
+    registry: &HarnessRegistry,
+    project_root_path: &Path,
+    template: &Path,
+    skill_dir: &Path,
+    target: TargetScope,
+    old_name: &str,
+    old_files: &HashMap<&str, &str>,
+    new_files: &mut Vec<InstalledFile>,
+    changed: &mut bool,
+    diff: bool,
+    force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
+) -> Result<(), miette::Report> {
     for harness_id in harnesses {
         let harness = registry.resolve(harness_id).map_err(miette::Report::new)?;
 
-        let skill_path_buf = resolve_skill_path(project_root_path, &harness, &old.name, target)
+        let skill_path_buf = resolve_skill_path(project_root_path, &harness, old_name, target)
             .map_err(|e| {
                 miette::Report::new(UpdateError::PathResolution {
                     detail: e.to_string(),
                 })
             })?;
 
-        let content = fs::read(&template).map_err(UpdateError::from)?;
+        let content = fs::read(template).map_err(UpdateError::from)?;
         let hash = format!("sha256:{}", sha256_bytes(&content));
         let path_str = skill_path_buf.to_string_lossy().to_string();
 
@@ -712,7 +774,7 @@ fn update_plain_skill(
                 written = true;
             }
             if written {
-                changed = true;
+                *changed = true;
             }
         }
 
@@ -735,9 +797,9 @@ fn update_plain_skill(
                 update_asset_dir(
                     asset_dir,
                     skill_dir_out,
-                    &old_files,
-                    &mut new_files,
-                    &mut changed,
+                    old_files,
+                    new_files,
+                    changed,
                     diff,
                     force,
                     skip_all,
@@ -746,34 +808,12 @@ fn update_plain_skill(
             }
         }
     }
-
-    report_update_result(diff, changed, &old.name);
-
-    Ok(InstalledSkill {
-        name: old.name.clone(),
-        source: old.source.clone(),
-        source_url: source_url.to_string(),
-        source_type,
-        r#ref: Some(r#ref.to_string()),
-        resolved_ref,
-        skill_path: skill_path.map(|p| p.to_string_lossy().to_string()),
-        project_root: old.project_root.clone(),
-        scope: old.scope,
-        harnesses: old.harnesses.clone(),
-        format: SkillFormat::Plain,
-        installed_at: old.installed_at.clone(),
-        updated_at: if changed {
-            now_rfc3339()
-        } else {
-            old.updated_at.clone()
-        },
-        files: new_files,
-    })
+    Ok(())
 }
 
 // reason: asset-dir diff/copy needs source+dest dirs, the old-file hash map, the
 // accumulators, and the diff/force/skip flags together in a single pass.
-#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+#[allow(clippy::too_many_arguments)]
 fn update_asset_dir(
     src_dir: &Path,
     dst_base: &Path,
@@ -839,9 +879,38 @@ fn update_asset_dir(
         return Ok(());
     }
 
+    apply_asset_dir_changes(
+        src_dir,
+        &dst_dir,
+        &expected,
+        &removed,
+        old_files,
+        new_files,
+        changed,
+        diff,
+        force,
+        skip_all,
+        overwrite_all,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn apply_asset_dir_changes(
+    src_dir: &Path,
+    dst_dir: &Path,
+    expected: &[(PathBuf, PathBuf, String)],
+    removed: &[String],
+    old_files: &HashMap<&str, &str>,
+    new_files: &mut Vec<InstalledFile>,
+    changed: &mut bool,
+    diff: bool,
+    force: bool,
+    skip_all: &mut bool,
+    overwrite_all: &mut bool,
+) -> Result<(), UpdateError> {
     let mut copied = false;
     if diff {
-        for (_, dst_file, hash) in &expected {
+        for (_, dst_file, hash) in expected {
             let path_str = dst_file.to_string_lossy().to_string();
             let old_hash = old_files.get(path_str.as_str()).copied();
             if old_hash.is_none_or(|h| h != hash.as_str()) {
@@ -853,15 +922,15 @@ fn update_asset_dir(
                 println!("  ({marker} asset) {path_str}");
             }
         }
-        for path_str in &removed {
+        for path_str in removed {
             println!("  (removed asset) {path_str}");
         }
     } else {
         let mut skipped = Vec::new();
-        copied = resolve_overwrite(&dst_dir, force, skip_all, overwrite_all, &mut skipped)?;
+        copied = resolve_overwrite(dst_dir, force, skip_all, overwrite_all, &mut skipped)?;
         if copied {
-            copy_dir(src_dir, &dst_dir, src_dir)?;
-            for path_str in &removed {
+            copy_dir(src_dir, dst_dir, src_dir)?;
+            for path_str in removed {
                 let _ = fs::remove_file(path_str);
             }
         }
@@ -872,7 +941,7 @@ fn update_asset_dir(
         for (_, dst_file, hash) in expected {
             new_files.push(InstalledFile {
                 path: dst_file.to_string_lossy().to_string(),
-                hash,
+                hash: hash.clone(),
             });
         }
     } else {
@@ -889,7 +958,7 @@ fn update_asset_dir(
         }
         // Also preserve records for assets that no longer exist in the source
         // so the state continues to match the on-disk files.
-        for path_str in &removed {
+        for path_str in removed {
             if let Some(old_hash) = old_files.get(path_str.as_str()).copied() {
                 new_files.push(InstalledFile {
                     path: path_str.clone(),

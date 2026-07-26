@@ -216,7 +216,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             harness,
             diff,
             force,
-        } => run_build(harness, diff, force, cli.verbose),
+        } => run_build(&harness, diff, force, cli.verbose),
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => match run_init(kind) {
             Ok(()) => Ok(()),
@@ -325,14 +325,8 @@ fn select_build_harnesses(
     }
 }
 
-#[allow(
-    clippy::too_many_lines,
-    clippy::needless_pass_by_value,
-    clippy::cognitive_complexity
-)]
-// reason: build pipeline orchestration — each step is justified; refactor deferred to Epic G.
 fn run_build(
-    harness: Vec<String>,
+    harness: &[String],
     diff: bool,
     force: bool,
     verbose: bool,
@@ -344,8 +338,22 @@ fn run_build(
         eprintln!("[build] project root: {}", project_root.display());
     }
 
+    let valid_pairs = validate_build_pipeline(&project_root, harness, verbose)?;
+    if valid_pairs.is_empty() {
+        eprintln!("No skills to build.");
+        return Ok(());
+    }
+
+    execute_build_pipeline(&valid_pairs, &project_root, diff, force, verbose)
+}
+
+fn validate_build_pipeline(
+    project_root: &Path,
+    harness: &[String],
+    verbose: bool,
+) -> Result<Vec<crate::resolver::ResolvedPair>, miette::Report> {
     let t0 = Instant::now();
-    let (mut model, registry) = load_project(&project_root)?;
+    let (mut model, registry) = load_project(project_root)?;
     if verbose {
         eprintln!(
             "[{t}] load {} skills",
@@ -354,7 +362,7 @@ fn run_build(
         );
     }
 
-    model.config.harnesses = select_build_harnesses(&model.config.harnesses, &harness, &registry)?;
+    model.config.harnesses = select_build_harnesses(&model.config.harnesses, harness, &registry)?;
 
     let target = crate::router::TargetScope::Dist;
 
@@ -395,31 +403,38 @@ fn run_build(
         );
     }
 
-    if outcome.valid.is_empty() {
-        eprintln!("No skills to build.");
-        return Ok(());
+    if !outcome.valid.is_empty() {
+        if verbose {
+            log_verbose_variables(&outcome.valid);
+        }
+        check_collisions(&outcome.valid, project_root, target)?;
     }
 
-    if verbose {
-        log_verbose_variables(&outcome.valid);
-    }
+    Ok(outcome.valid)
+}
 
-    check_collisions(&outcome.valid, &project_root, target)?;
-
+fn execute_build_pipeline(
+    valid_pairs: &[crate::resolver::ResolvedPair],
+    project_root: &Path,
+    diff: bool,
+    force: bool,
+    verbose: bool,
+) -> Result<(), miette::Report> {
+    let target = crate::router::TargetScope::Dist;
     let t3 = Instant::now();
     let mut result = BuildResult::default();
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
     let mut skip_all = false;
     let mut overwrite_all = false;
 
-    for pair in &outcome.valid {
+    for pair in valid_pairs {
         let t_render = Instant::now();
         let output = Engine::render(pair).into_diagnostic()?;
         let render_time = fmt_duration(t_render.elapsed());
 
         if let Some(entry) = Engine::render_manifest_entry(pair).into_diagnostic()? {
             if let Some(path) =
-                crate::router::resolve_manifest_path(&project_root, &pair.harness, target)
+                crate::router::resolve_manifest_path(project_root, &pair.harness, target)
             {
                 let path = path.into_diagnostic()?;
                 manifest_entries.push(ManifestEntry {
@@ -435,7 +450,7 @@ fn run_build(
         }
 
         if diff {
-            let entries = Router::diff(pair, &output, &project_root, target).into_diagnostic()?;
+            let entries = Router::diff(pair, &output, project_root, target).into_diagnostic()?;
             for entry in &entries {
                 print_diff_entry(entry, &mut result);
             }
@@ -444,7 +459,7 @@ fn run_build(
             let write_result = Router::write(
                 pair,
                 &output,
-                &project_root,
+                project_root,
                 target,
                 force,
                 &mut skip_all,
@@ -473,7 +488,7 @@ fn run_build(
     if verbose {
         eprintln!(
             "[{t}] render + write {} skills",
-            outcome.valid.len(),
+            valid_pairs.len(),
             t = fmt_duration(t3.elapsed())
         );
     }
@@ -694,6 +709,7 @@ fn parse_harness_list(opt: Option<String>) -> Vec<String> {
     .unwrap_or_default()
 }
 
+#[allow(clippy::missing_const_for_fn)] // reason: non-test branch performs dynamic I/O terminal checks
 fn is_interactive_terminal() -> bool {
     #[cfg(test)]
     {
@@ -998,7 +1014,7 @@ mod tests {
 
         let orig_dir = std::env::current_dir().unwrap();
         std::env::set_current_dir(root).unwrap();
-        let res = run_build(vec!["unknown_harness".to_string()], false, false, false);
+        let res = run_build(&["unknown_harness".to_string()], false, false, false);
         std::env::set_current_dir(orig_dir).unwrap();
 
         assert!(res.is_err(), "run_build with unknown harness must fail");
@@ -1049,7 +1065,7 @@ mod tests {
             CommandError::Usage(report) => {
                 assert!(report.to_string().contains("`-H`"));
             }
-            e => panic!("expected CommandError::Usage, got {e:?}"),
+            CommandError::Runtime(e) => panic!("expected CommandError::Usage, got {e:?}"),
         }
     }
 

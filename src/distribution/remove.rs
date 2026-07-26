@@ -32,7 +32,6 @@ use super::install::install_scope_to_target;
 // reason: signature mirrors the clap `remove` command surface (skills, target,
 // harnesses, all, all_scopes, force, verbose); the bool flags map 1:1 to CLI
 // flags, and the body is the linear select → confirm → delete → persist pipeline.
-#[allow(clippy::too_many_lines)]
 #[allow(clippy::fn_params_excessive_bools)]
 pub fn run_remove(
     skills: &[String],
@@ -74,49 +73,9 @@ pub fn run_remove(
     );
 
     if removals.is_empty() {
-        let requested = if skills.is_empty() {
-            "No skills selected for removal. Provide skill names or use --all.".to_string()
-        } else {
-            // A named skill may be installed in a scope the caller did not
-            // select (named removals default to project scope). Point the user
-            // at the scope where it actually lives instead of the misleading
-            // "not installed".
-            let other_scopes: Vec<InstallScope> = store
-                .skills()
-                .iter()
-                .filter(|s| {
-                    skills.contains(&s.name)
-                        && (!scopes.contains(&s.scope)
-                            || !s.matches_project_root(active_project_root.as_deref()))
-                })
-                .map(|s| s.scope)
-                .collect::<std::collections::BTreeSet<_>>()
-                .into_iter()
-                .collect();
-            let subject = if skills.len() == 1 {
-                format!("Skill '{}'", skills[0])
-            } else {
-                format!("Skills [{}]", skills.join(", "))
-            };
-            if other_scopes.is_empty() {
-                format!("{subject} is not installed")
-            } else {
-                let hint = other_scopes
-                    .iter()
-                    .map(|s| format!("--target {}", s.as_str()))
-                    .collect::<Vec<_>>()
-                    .join(" or ");
-                let where_scopes = other_scopes
-                    .iter()
-                    .map(|s| s.as_str())
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                format!(
-                    "{subject} is not installed in the selected scope(s), but is installed in the {where_scopes} scope. Re-run with {hint} or --all-scopes to remove it."
-                )
-            }
-        };
-        return Err(CommandError::Runtime(miette::miette!(requested)));
+        let msg =
+            format_empty_removals_message(&store, skills, &scopes, active_project_root.as_deref());
+        return Err(CommandError::Runtime(miette::miette!(msg)));
     }
 
     let affected = describe_affected(&removals);
@@ -151,6 +110,51 @@ fn determine_scopes(target: Option<InstallScopeArg>, all_scopes: bool) -> Vec<In
     match target {
         Some(InstallScopeArg::User) => vec![InstallScope::User],
         Some(InstallScopeArg::Project) | None => vec![InstallScope::Project],
+    }
+}
+
+fn format_empty_removals_message(
+    store: &StateStore,
+    skills: &[String],
+    scopes: &[InstallScope],
+    active_project_root: Option<&Path>,
+) -> String {
+    if skills.is_empty() {
+        "No skills selected for removal. Provide skill names or use --all.".to_string()
+    } else {
+        let other_scopes: Vec<InstallScope> = store
+            .skills()
+            .iter()
+            .filter(|s| {
+                skills.contains(&s.name)
+                    && (!scopes.contains(&s.scope) || !s.matches_project_root(active_project_root))
+            })
+            .map(|s| s.scope)
+            .collect::<std::collections::BTreeSet<_>>()
+            .into_iter()
+            .collect();
+        let subject = if skills.len() == 1 {
+            format!("Skill '{}'", skills[0])
+        } else {
+            format!("Skills [{}]", skills.join(", "))
+        };
+        if other_scopes.is_empty() {
+            format!("{subject} is not installed")
+        } else {
+            let hint = other_scopes
+                .iter()
+                .map(|s| format!("--target {}", s.as_str()))
+                .collect::<Vec<_>>()
+                .join(" or ");
+            let where_scopes = other_scopes
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!(
+                "{subject} is not installed in the selected scope(s), but is installed in the {where_scopes} scope. Re-run with {hint} or --all-scopes to remove it."
+            )
+        }
     }
 }
 

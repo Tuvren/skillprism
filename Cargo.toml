@@ -7,7 +7,6 @@ description = "Distribution CLI with per-harness templating for agent skills"
 license = "Apache-2.0"
 repository = "https://github.com/tuvren/skillprism"
 homepage = "https://github.com/tuvren/skillprism"
-documentation = "https://docs.rs/skillprism"
 readme = "README.md"
 categories = ["development-tools", "command-line-utilities"]
 keywords = ["agent", "claude", "codex", "skills", "template"]
@@ -26,10 +25,6 @@ sha2 = "0.10"
 similar = { version = "2.7", features = ["text"] }
 thiserror = "2"
 yaml_serde = "0.10"
-
-[package.metadata.docs.rs]
-all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [dev-dependencies]
 assert_cmd = "2"

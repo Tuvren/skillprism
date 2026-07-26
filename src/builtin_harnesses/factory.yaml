@@ -15,10 +15,6 @@ paths:
   user_scope_path: .factory/skills
   skill_filename: SKILL.md
 skill_ref_pattern: /{name}
-discovery:
-  project: true
-  user: true
-  plugin: false
 macros:
   subagent_guide:
     content: "## Subagent Instructions\n\nFactory agents run as isolated containers with configurable resources."

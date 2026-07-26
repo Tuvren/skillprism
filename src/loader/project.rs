@@ -153,7 +153,6 @@ impl ProjectLoader {
         })
     }
 
-    #[allow(clippy::too_many_lines)]
     fn load_skill(
         dir: &Path,
         template_path: &Path,
@@ -195,81 +194,87 @@ impl ProjectLoader {
         };
 
         if config_path.exists() {
-            let content =
-                std::fs::read_to_string(&config_path).map_err(|e| ProjectError::ConfigRead {
-                    path: config_path.to_string_lossy().to_string(),
-                    source: e,
-                })?;
-
-            let raw_value: yaml_serde::Value = yaml_serde::from_str(&content).map_err(|e| {
-                let loc = e.location().map_or(0, |l| l.line());
-                ProjectError::YamlParse {
-                    path: config_path.to_string_lossy().to_string(),
-                    line: loc,
-                    message: e.to_string(),
-                }
-            })?;
-
-            validate_skillprism_manifest_version(&raw_value, &config_path)?;
-
-            let skill_config: SkillYamlRaw = yaml_serde::from_value(raw_value).map_err(|e| {
-                let loc = e.location().map_or(0, |l| l.line());
-                ProjectError::YamlParse {
-                    path: config_path.to_string_lossy().to_string(),
-                    line: loc,
-                    message: e.to_string(),
-                }
-            })?;
-
-            if let Some(name) = skill_config.name {
-                skill.name = name;
-            }
-            skill.description = skill_config.description.unwrap_or_default();
-            skill.version = skill_config.version;
-            skill.license = skill_config.license;
-            skill.compatibility = skill_config.compatibility;
-            skill.metadata = skill_config.metadata.unwrap_or_default();
-            skill.allowed_tools = skill_config.allowed_tools;
-            skill.when_to_use = skill_config.when_to_use;
-            skill.argument_hint = skill_config.argument_hint;
-            skill.arguments = skill_config.arguments;
-            skill.disable_model_invocation = skill_config.disable_model_invocation;
-            skill.user_invocable = skill_config.user_invocable;
-            skill.disallowed_tools = skill_config.disallowed_tools;
-            skill.model_override = skill_config.model;
-            skill.effort = skill_config.effort;
-            skill.context_fork = skill_config.context.is_some_and(|c| c == "fork");
-            skill.agent = skill_config.agent;
-            skill.hooks = skill_config.hooks;
-            skill.activation_paths = skill_config.paths;
-            skill.shell = skill_config.shell;
-            skill.required_capabilities = skill_config.required_capabilities.unwrap_or_default();
-
-            if let Some(vars) = skill_config.variables {
-                for (k, v) in vars {
-                    skill.variables.insert(k, v);
-                }
-            }
-
-            if let Some(harnesses) = skill_config.harnesses {
-                skill.harness_overrides = harnesses
-                    .into_iter()
-                    .map(|(harness_id, raw)| {
-                        (
-                            harness_id,
-                            HarnessOverride {
-                                variables: raw.variables,
-                                macros: raw.macros,
-                            },
-                        )
-                    })
-                    .collect();
-            }
+            Self::apply_skill_config(&config_path, &mut skill)?;
         }
 
         skill.asset_dirs = Self::discover_asset_dirs(dir)?;
 
         Ok(skill)
+    }
+
+    fn apply_skill_config(config_path: &Path, skill: &mut SkillModel) -> Result<(), ProjectError> {
+        let content =
+            std::fs::read_to_string(config_path).map_err(|e| ProjectError::ConfigRead {
+                path: config_path.to_string_lossy().to_string(),
+                source: e,
+            })?;
+
+        let raw_value: yaml_serde::Value = yaml_serde::from_str(&content).map_err(|e| {
+            let loc = e.location().map_or(0, |l| l.line());
+            ProjectError::YamlParse {
+                path: config_path.to_string_lossy().to_string(),
+                line: loc,
+                message: e.to_string(),
+            }
+        })?;
+
+        validate_skillprism_manifest_version(&raw_value, config_path)?;
+
+        let skill_config: SkillYamlRaw = yaml_serde::from_value(raw_value).map_err(|e| {
+            let loc = e.location().map_or(0, |l| l.line());
+            ProjectError::YamlParse {
+                path: config_path.to_string_lossy().to_string(),
+                line: loc,
+                message: e.to_string(),
+            }
+        })?;
+
+        if let Some(name) = skill_config.name {
+            skill.name = name;
+        }
+        skill.description = skill_config.description.unwrap_or_default();
+        skill.version = skill_config.version;
+        skill.license = skill_config.license;
+        skill.compatibility = skill_config.compatibility;
+        skill.metadata = skill_config.metadata.unwrap_or_default();
+        skill.allowed_tools = skill_config.allowed_tools;
+        skill.when_to_use = skill_config.when_to_use;
+        skill.argument_hint = skill_config.argument_hint;
+        skill.arguments = skill_config.arguments;
+        skill.disable_model_invocation = skill_config.disable_model_invocation;
+        skill.user_invocable = skill_config.user_invocable;
+        skill.disallowed_tools = skill_config.disallowed_tools;
+        skill.model_override = skill_config.model;
+        skill.effort = skill_config.effort;
+        skill.context_fork = skill_config.context.is_some_and(|c| c == "fork");
+        skill.agent = skill_config.agent;
+        skill.hooks = skill_config.hooks;
+        skill.activation_paths = skill_config.paths;
+        skill.shell = skill_config.shell;
+        skill.required_capabilities = skill_config.required_capabilities.unwrap_or_default();
+
+        if let Some(vars) = skill_config.variables {
+            for (k, v) in vars {
+                skill.variables.insert(k, v);
+            }
+        }
+
+        if let Some(overrides) = skill_config.overrides {
+            skill.harness_overrides = overrides
+                .into_iter()
+                .map(|(harness_id, raw)| {
+                    (
+                        harness_id,
+                        HarnessOverride {
+                            variables: raw.variables,
+                            macros: raw.macros,
+                        },
+                    )
+                })
+                .collect();
+        }
+
+        Ok(())
     }
 
     /// Every direct subdirectory of a skill's own directory is an asset directory to
@@ -339,6 +344,13 @@ fn validate_skillprism_manifest_version(
 ) -> Result<(), ProjectError> {
     let path_str = path.to_string_lossy().to_string();
     if let yaml_serde::Value::Mapping(map) = raw {
+        if map.contains_key("harnesses") {
+            return Err(ProjectError::YamlParse {
+                path: path_str,
+                line: 1,
+                message: "the `harnesses:` block in skill.yaml has been renamed to `overrides:` in skillprism 0.2.0; please update your skill.yaml to use `overrides:`".to_string(),
+            });
+        }
         let key = yaml_serde::Value::String("skillprism".to_string());
         match map.get(&key) {
             None => Err(ProjectError::YamlParse {
@@ -383,7 +395,10 @@ fn validate_skillprism_manifest_version(
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SkillYamlRaw {
+    #[allow(dead_code)]
+    skillprism: Option<yaml_serde::Value>,
     name: Option<String>,
     description: Option<String>,
     version: Option<String>,
@@ -412,7 +427,7 @@ struct SkillYamlRaw {
     #[serde(rename = "required-capabilities")]
     required_capabilities: Option<Vec<String>>,
     variables: Option<BTreeMap<String, yaml_serde::Value>>,
-    harnesses: Option<BTreeMap<String, HarnessOverrideRaw>>,
+    overrides: Option<BTreeMap<String, HarnessOverrideRaw>>,
 }
 
 #[derive(Debug, Clone, Default, serde::Deserialize)]
@@ -633,7 +648,7 @@ mod tests {
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "skillprism: '1'\nname: my-skill\ndescription: A test skill\nharnesses:\n  claude:\n    variabels:\n      greeting: hi\n",
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\noverrides:\n  claude:\n    variabels:\n      greeting: hi\n",
         )
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
@@ -646,6 +661,30 @@ mod tests {
         match result.unwrap_err() {
             ProjectError::YamlParse { .. } => {}
             e => panic!("expected YamlParse error, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn legacy_harnesses_key_in_skill_yaml_rejected_with_help() {
+        let tmp = setup_test_dir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\nharnesses:\n  claude:\n    variables:\n      greeting: hi\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
+
+        let result = ProjectLoader::load(root);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ProjectError::YamlParse { message, .. } => {
+                assert!(message.contains("renamed to `overrides:`"));
+            }
+            e => panic!("expected YamlParse with migration help, got {e:?}"),
         }
     }
 
@@ -663,7 +702,7 @@ mod tests {
              description: test\n\
              variables:\n  \
              greeting: hello\n\
-             harnesses:\n  \
+             overrides:\n  \
              claude:\n    \
              variables:\n      \
              greeting: hello-claude\n    \
