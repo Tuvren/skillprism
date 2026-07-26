@@ -23,13 +23,7 @@ use std::path::Path;
 pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Result<()> {
     fs::create_dir_all(dir)?;
 
-    let harness_list = if harnesses.is_empty() {
-        vec!["claude".to_string(), "opencode".to_string()]
-    } else {
-        harnesses.to_vec()
-    };
-
-    let yaml_lines: Vec<String> = harness_list.iter().map(|h| format!("  - {h}")).collect();
+    let yaml_lines: Vec<String> = harnesses.iter().map(|h| format!("  - {h}")).collect();
 
     fs::write(
         dir.join("skillprism.yaml"),
@@ -39,21 +33,8 @@ pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Res
         ),
     )?;
 
-    fs::create_dir_all(dir.join("harnesses"))?;
-
-    let sample_dir = dir.join("skills/sample");
-    fs::create_dir_all(&sample_dir)?;
-    fs::write(
-        sample_dir.join("skill.yaml"),
-        "name: sample\ndescription: >-\n  TODO: Describe what this skill does AND when to use it. Include trigger\n  keywords so agents can match this skill to relevant tasks.\n",
-    )?;
-    // The sample skill's SKILL.md starts with the YAML frontmatter the Agent Skills
-    // spec requires (name + description) — without it no client can discover the
-    // skill. skillprism renders it once per harness from the skill.yaml fields above.
-    fs::write(
-        sample_dir.join("SKILL.md"),
-        "---\nname: {{ skill_name }}\ndescription: {{ skill_description }}\n---\n\n# {{ skill_name }}\n\n{{ skill_description }}\n",
-    )?;
+    // Sample skill follows Anthropic skill-creator layout with skillprism: '1'
+    crate::scaffold::skill::scaffold_skill(dir, "sample")?;
 
     // Keep generated harness output out of version control — these directories are
     // written by `skillprism build` and shouldn't be committed alongside source.
@@ -81,10 +62,11 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
 
-        scaffold_project(dir, "test-project", &[]).unwrap();
+        let harnesses = vec!["claude".to_string(), "opencode".to_string()];
+        scaffold_project(dir, "test-project", &harnesses).unwrap();
         assert!(dir.join("skillprism.yaml").exists());
         assert!(dir.join("skills").is_dir());
-        assert!(dir.join("harnesses").is_dir());
+        assert!(!dir.join("harnesses").exists());
         assert!(dir.join("skills/sample/skill.yaml").exists());
         assert!(dir.join("skills/sample/SKILL.md").exists());
         assert!(dir.join(".gitignore").exists());
@@ -117,7 +99,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
 
-        scaffold_project(dir, "test", &[]).unwrap();
+        scaffold_project(dir, "test", &["claude".to_string()]).unwrap();
 
         let template = fs::read_to_string(dir.join("skills/sample/SKILL.md")).unwrap();
         // The spec requires frontmatter — the scaffold must emit it.
@@ -144,9 +126,17 @@ mod tests {
 
         let skill_yaml = fs::read_to_string(dir.join("skills/sample/skill.yaml")).unwrap();
         assert!(
+            skill_yaml.contains("skillprism: '1'"),
+            "skill.yaml must declare skillprism: '1'"
+        );
+        assert!(
             skill_yaml.contains("sample"),
             "skill.yaml must contain the skill name"
         );
+
+        assert!(dir.join("skills/sample/references/example.md").exists());
+        assert!(dir.join("skills/sample/scripts/example.sh").exists());
+        assert!(dir.join("skills/sample/assets/example.txt").exists());
     }
 
     #[test]
@@ -154,7 +144,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let dir = tmp.path();
 
-        scaffold_project(dir, "test", &[]).unwrap();
+        scaffold_project(dir, "test", &["claude".to_string()]).unwrap();
 
         let gitignore = fs::read_to_string(dir.join(".gitignore")).unwrap();
         assert!(gitignore.contains(".claude/"));

@@ -1,3 +1,4 @@
+skillprism: '1'
 name: quickstart
 description: >-
   A minimal, deliberately synthetic skill that exercises every skillprism mechanism in

@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::io::Write;
+use std::io::{IsTerminal, Write};
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
@@ -21,7 +21,7 @@ use clap_mangen::Man;
 
 use miette::IntoDiagnostic;
 
-use crate::distribution::InstallScopeArg;
+use crate::distribution::{CommandError, InstallScopeArg};
 use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
@@ -218,7 +218,13 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
             force,
         } => run_build(harness, diff, force, cli.verbose),
         Command::Validate { path } => run_validate(&path),
-        Command::Init { kind } => run_init(kind),
+        Command::Init { kind } => match run_init(kind) {
+            Ok(()) => Ok(()),
+            Err(e) => {
+                eprintln!("{e:?}");
+                std::process::exit(e.exit_code());
+            }
+        },
         Command::Completions { shell } => run_completions(shell),
         Command::Add {
             source,
@@ -688,7 +694,7 @@ fn parse_harness_list(opt: Option<String>) -> Vec<String> {
     .unwrap_or_default()
 }
 
-fn run_init(kind: InitKind) -> Result<(), miette::Report> {
+fn run_init(kind: InitKind) -> Result<(), CommandError> {
     match kind {
         InitKind::Project {
             name,
@@ -696,20 +702,58 @@ fn run_init(kind: InitKind) -> Result<(), miette::Report> {
             harnesses,
         } => {
             let dir = out.map_or_else(|| PathBuf::from(&name), PathBuf::from);
-            let selected = parse_harness_list(harnesses);
-            crate::scaffold::project::scaffold_project(&dir, &name, &selected).into_diagnostic()?;
+            let mut selected = parse_harness_list(harnesses);
+
+            if selected.is_empty() {
+                if std::io::stdin().is_terminal() && !cfg!(test) {
+                    let registry = HarnessRegistry::with_builtins();
+                    let available_ids = registry.all_ids();
+                    let selections = dialoguer::MultiSelect::new()
+                        .with_prompt("Select target harnesses for this project (space to select, enter to confirm)")
+                        .items(&available_ids)
+                        .interact()
+                        .into_diagnostic()
+                        .map_err(CommandError::Runtime)?;
+
+                    if selections.is_empty() {
+                        return Err(CommandError::Usage(miette::miette!(
+                            "No harnesses selected. At least one target harness must be selected for project initialization."
+                        )));
+                    }
+                    selected = selections
+                        .into_iter()
+                        .map(|i| available_ids[i].clone())
+                        .collect();
+                } else {
+                    return Err(CommandError::Usage(miette::miette!(
+                        "`--harnesses` (`-H`) is required in non-interactive mode. Pass at least one harness name (e.g. `-H claude`)."
+                    )));
+                }
+            }
+
+            crate::scaffold::project::scaffold_project(&dir, &name, &selected)
+                .into_diagnostic()
+                .map_err(CommandError::Runtime)?;
             println!("Created project `{name}` in `{}`", dir.display());
             Ok(())
         }
         InitKind::Skill { name } => {
-            let root = crate::distribution::find_project_root().into_diagnostic()?;
-            crate::scaffold::skill::scaffold_skill(&root, &name).into_diagnostic()?;
+            let root = crate::distribution::find_project_root()
+                .into_diagnostic()
+                .map_err(CommandError::Usage)?;
+            crate::scaffold::skill::scaffold_skill(&root, &name)
+                .into_diagnostic()
+                .map_err(CommandError::Runtime)?;
             println!("Created skill `{name}`");
             Ok(())
         }
         InitKind::Harness { name } => {
-            let root = crate::distribution::find_project_root().into_diagnostic()?;
-            crate::scaffold::harness::scaffold_harness(&root, &name).into_diagnostic()?;
+            let root = crate::distribution::find_project_root()
+                .into_diagnostic()
+                .map_err(CommandError::Usage)?;
+            crate::scaffold::harness::scaffold_harness(&root, &name)
+                .into_diagnostic()
+                .map_err(CommandError::Runtime)?;
             println!("Created harness `{name}`");
             Ok(())
         }
@@ -973,5 +1017,45 @@ mod tests {
             }
             _ => panic!("expected Build command for both"),
         }
+    }
+
+    #[test]
+    fn run_init_project_non_tty_without_harnesses_fails_with_usage_error() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().join("my-project");
+
+        let kind = InitKind::Project {
+            name: "my-project".to_string(),
+            out: Some(dir.to_string_lossy().to_string()),
+            harnesses: None,
+        };
+
+        // Standard cargo test runner execution is non-interactive (non-TTY)
+        let res = run_init(kind);
+        assert!(res.is_err());
+        match res.unwrap_err() {
+            CommandError::Usage(report) => {
+                assert!(report.to_string().contains("`-H`"));
+            }
+            e => panic!("expected CommandError::Usage, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn run_init_project_with_explicit_harnesses_succeeds() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dir = tmp.path().join("my-project");
+
+        let kind = InitKind::Project {
+            name: "my-project".to_string(),
+            out: Some(dir.to_string_lossy().to_string()),
+            harnesses: Some("claude,opencode".to_string()),
+        };
+
+        let res = run_init(kind);
+        assert!(res.is_ok());
+        assert!(dir.join("skillprism.yaml").exists());
+        assert!(!dir.join("harnesses").exists());
+        assert!(dir.join("skills/sample/skill.yaml").exists());
     }
 }
