@@ -7,7 +7,7 @@ weight: 70
 ## Commands
 
 ```
-skillprism build [--target project|user|dist] [--diff|--dry-run] [--force] [-v]
+skillprism build [-H <harnesses>] [--diff|--dry-run] [--force] [-v]
 skillprism validate [path] [-v]
 skillprism init project <name> [--out <dir>] [-H <harnesses>]
 skillprism init skill <name>
@@ -27,26 +27,22 @@ skillprism update [<skills>...] [--target project|user] [-H <harnesses>] [--diff
 
 ## build
 
-Compiles all skills to all configured harnesses and writes the output files.
+Compiles source skills into `dist/<harness>/` for all configured harnesses without modifying live agent directories.
 
 ```bash
 skillprism build
+skillprism build -H claude,opencode
 skillprism build --diff
-skillprism build --target user --force
-skillprism build --target dist -v
+skillprism build --force -v
 ```
 
 | Flag | Description |
 |------|-------------|
-| `--target <scope>` | Output scope: `project` (default), `user` (global `~/.<harness>/skills/`), or `dist` (inspectable `dist/<harness>/` directory) |
+| `-H, --harness <list>` | Target harness ID(s) to render for (comma-separated or repeated). Alias: `--harnesses` |
 | `--diff` / `--dry-run` | Show a colored unified diff of what would be written, without modifying any files |
 | `--force` | Overwrite existing files without confirmation (skip the y/n/s/a prompt) |
 
-### Target scopes
-
-- **`project`** (default): Writes to project-local directories (`.claude/skills/`, `.opencode/skills/`, etc.) — the paths agents discover skills in when working in your repo.
-- **`user`**: Writes to the user's home directory (`~/.claude/skills/`, `~/.config/opencode/skills/`, etc.) — makes skills available globally, not just in one project.
-- **`dist`**: Writes to a `dist/<harness-id>/` directory inside the project — useful for inspecting output, building a distributable archive, or CI artifacts. Doesn't touch live agent directories.
+> **Note:** `build` is compile-only and always outputs into `dist/`. To install skills directly into live agent directories (e.g. `.claude/skills/`), use `skillprism add`.
 
 ## validate
 
@@ -88,7 +84,7 @@ Creates a new project directory with `skillprism.yaml`, a sample skill, `.gitign
 skillprism init skill my-agent
 ```
 
-Scaffolds a new skill into an existing project's `skills/` directory. Creates `skill.yaml` (with spec-compliant metadata), `SKILL.md` (with frontmatter template), and `references/` + `scripts/` asset directories.
+Scaffolds a new skill into an existing project's `skills/` directory. Creates `skill.yaml` (with spec-compliant metadata and `skillprism: '1'`), `SKILL.md` (with frontmatter template), and `references/` + `scripts/` asset directories.
 
 ### init harness
 
@@ -110,7 +106,7 @@ skillprism completions zsh
 
 ## add
 
-Installs skills from a remote Git repository or local path. Each skill is auto-detected as **skillprism-format** (has `skill.yaml` with `skillprism: '1'` — rendered through MiniJinja per harness) or **plain-format** (bare `SKILL.md` — copied as-is). Installed skills are recorded in the state tracking layer at `~/.config/skillprism/installed.yaml`.
+Installs skills from a remote Git repository or local path into live agent directories. Auto-detects **skillprism-format** (has `skill.yaml` with `skillprism: '1'` — rendered per harness) or **plain-format** (bare `SKILL.md` — installed directly). Tracked in `.skillprism/state.json` (project scope) or `~/.config/skillprism/state.json` (user scope).
 
 ```bash
 skillprism add owner/repo
@@ -124,16 +120,14 @@ skillprism add owner/repo --target user -H claude,opencode
 | Argument | Description |
 |----------|-------------|
 | `source` | Source to install from — GitHub shorthand (`owner/repo`), full Git URL, or local path |
-| `--target <scope>` | Install scope: `project` (default) or `user` |
+| `--target <scope>` | Install scope: `project` or `user` (prompts interactively if omitted) |
 | `--skill <name>` | Install only the named skill from a multi-skill source |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to install to (default: all configured) |
 | `--force` | Overwrite existing files without confirmation |
 
-> **Note:** `add` rejects `--target dist` at parse time — distribution sources can only install to `project` or `user` scopes.
+## list (alias: ls)
 
-## list
-
-Lists installed skills with their metadata. Each entry shows the skill name, source, format, installed ref, and which harnesses it was installed to.
+Lists installed skills with their metadata. Each entry shows the skill name, source, format, installed ref, target scope, and which harnesses it was installed to.
 
 ```bash
 skillprism list
@@ -146,9 +140,9 @@ skillprism list -H claude
 | `--target <scope>` | Filter by install scope: `project` or `user` |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to filter by |
 
-## remove
+## remove (alias: rm)
 
-Removes installed skills from the filesystem and state tracking layer.
+Removes installed skills from live harness directories and state tracking.
 
 ```bash
 skillprism remove my-skill
@@ -167,9 +161,9 @@ skillprism remove --all --target project -H claude
 | `--all-scopes` | Allow removing across both project and user scopes |
 | `--force` | Skip confirmation prompts |
 
-## update
+## update (alias: up)
 
-Updates installed skills to their latest source versions. Performs a lightweight up-to-date check via `git ls-remote` (checks the resolved ref SHA without a full clone). Re-renders only files whose content changed (SHA-256 per-file comparison). Output paths without changes are not touched.
+Updates installed skills to their latest source versions. Re-renders only files whose content changed.
 
 ```bash
 skillprism update
@@ -189,4 +183,4 @@ skillprism update --target user
 
 ## Finding the project root
 
-`build` and `init skill` search upward from the current directory for `skillprism.yaml`. You can run them from anywhere inside a skillprism project — they'll find the root automatically.
+Compiler commands (`build` and `init skill`) search upward from the current directory for `skillprism.yaml`. You can run them from anywhere inside a skillprism project — they'll find the root automatically.
