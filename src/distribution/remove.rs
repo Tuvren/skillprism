@@ -16,11 +16,10 @@
 
 use std::borrow::Cow;
 use std::io::{self, IsTerminal, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use miette::IntoDiagnostic;
 
-use crate::registry::HarnessRegistry;
 use crate::router;
 use crate::state::{InstallScope, InstalledSkill, StateStore};
 
@@ -238,7 +237,9 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
 }
 
 fn remove_skill_files(skill: &InstalledSkill, harness_id: &str) -> Result<(), CommandError> {
-    let registry = HarnessRegistry::with_builtins();
+    let registry =
+        super::install::build_registry_for_harnesses(project_root_for_registry(skill).as_deref())
+            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
@@ -281,6 +282,14 @@ fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, Command
     }
 }
 
+fn project_root_for_registry(skill: &InstalledSkill) -> Option<PathBuf> {
+    skill
+        .project_root
+        .as_ref()
+        .map(PathBuf::from)
+        .or_else(|| find_project_root().ok())
+}
+
 fn apply_removals_to_state(
     store: &mut StateStore,
     removals: Vec<RemovalAction>,
@@ -307,7 +316,9 @@ fn remove_harness_files_from_record(
     record: &mut InstalledSkill,
     harness_id: &str,
 ) -> Result<(), CommandError> {
-    let registry = HarnessRegistry::with_builtins();
+    let registry =
+        super::install::build_registry_for_harnesses(project_root_for_registry(record).as_deref())
+            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;

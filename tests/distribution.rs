@@ -479,3 +479,142 @@ fn distribution_update_no_skills_in_state() {
         "update with empty state should report 'No installed skills' on stderr, got: {stderr}"
     );
 }
+
+#[test]
+fn distribution_custom_harness_override_lifecycle() {
+    let env = TestEnv::new("dist-simple");
+
+    // Add a custom harness YAML override to the project
+    let harnesses_dir = env.project_dir().join("harnesses");
+    fs::create_dir_all(&harnesses_dir).unwrap();
+    let custom_harness_yaml = r#"
+id: custom-harness
+name: Custom Harness
+version: 0.1.0
+capabilities:
+  supports_subagent: true
+  requires_sidecar: false
+  requires_manifest: false
+  name_max_length: 64
+  description_max_length: 1536
+  supports_allowed_tools: true
+  supports_disable_model_invocation: true
+  supports_user_invocable_flag: true
+paths:
+  project_scope_path: .custom/skills
+  user_scope_path: .custom/skills
+  skill_filename: SKILL.md
+  manifest_scope_path: .custom
+  manifest_filename: manifest.json
+"#;
+    fs::write(
+        harnesses_dir.join("custom-harness.yaml"),
+        custom_harness_yaml,
+    )
+    .unwrap();
+
+    // 1. Install using custom-harness
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--target")
+        .arg("project")
+        .arg("--harnesses")
+        .arg("custom-harness")
+        .arg("--force")
+        .assert()
+        .success();
+
+    let installed_plain = env
+        .project_dir()
+        .join(".custom/skills/plain-skill/SKILL.md");
+    let installed_skillprism = env
+        .project_dir()
+        .join(".custom/skills/skillprism-skill/SKILL.md");
+
+    assert!(
+        installed_plain.exists(),
+        "plain-skill should be installed into custom-harness skills_dir"
+    );
+    assert!(
+        installed_skillprism.exists(),
+        "skillprism-skill should be installed into custom-harness skills_dir"
+    );
+
+    // 2. List installed skills
+    let list_output = env.bin().arg("list").assert().success();
+    let stdout = String::from_utf8_lossy(&list_output.get_output().stdout);
+    assert!(
+        stdout.contains("custom-harness"),
+        "list output should show custom-harness"
+    );
+
+    // 3. Update installed skills
+    env.bin().arg("update").arg("--force").assert().success();
+
+    assert!(installed_plain.exists());
+    assert!(installed_skillprism.exists());
+
+    // 4. Remove installed skills
+    env.bin()
+        .arg("remove")
+        .arg("--all")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(
+        !installed_plain.exists(),
+        "plain-skill should be removed from custom-harness skills_dir"
+    );
+    assert!(
+        !installed_skillprism.exists(),
+        "skillprism-skill should be removed from custom-harness skills_dir"
+    );
+
+    // 5. User-scope install using custom-harness while in project directory
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--target")
+        .arg("user")
+        .arg("--harnesses")
+        .arg("custom-harness")
+        .arg("--force")
+        .assert()
+        .success();
+
+    let user_plain = env
+        .state_config
+        .join("home/.custom/skills/plain-skill/SKILL.md");
+    assert!(
+        user_plain.exists(),
+        "plain-skill should be installed into user-scope custom-harness skills_dir"
+    );
+
+    // Update user-scoped custom harness skill
+    env.bin()
+        .arg("update")
+        .arg("--target")
+        .arg("user")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(user_plain.exists());
+
+    // Remove user-scoped custom harness skill
+    env.bin()
+        .arg("remove")
+        .arg("--all")
+        .arg("--target")
+        .arg("user")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(
+        !user_plain.exists(),
+        "user-scoped plain-skill should be removed from custom-harness skills_dir"
+    );
+}
