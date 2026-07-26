@@ -473,7 +473,7 @@ fn update_skillprism_skill(
 ) -> Result<InstalledSkill, miette::Report> {
     let (skill, _temp_project) =
         load_skill_into_temp_project(skill_dir, harnesses).map_err(UpdateError::from)?;
-    let registry = build_registry_for_harnesses(harnesses);
+    let registry = build_registry_for_harnesses(project_root).map_err(UpdateError::from)?;
     let old_files: HashMap<&str, &str> = old
         .files
         .iter()
@@ -657,7 +657,7 @@ fn update_plain_skill(
     let project_root = project_root.unwrap_or_else(|| Path::new("."));
 
     // Retain per-file records for harnesses that are not being updated.
-    let registry = HarnessRegistry::with_builtins();
+    let registry = build_registry_for_harnesses(Some(project_root)).map_err(UpdateError::from)?;
     let updated_prefixes =
         collect_updated_prefixes(harnesses, &registry, project_root, &old.name, target)?;
     let mut new_files: Vec<InstalledFile> = old

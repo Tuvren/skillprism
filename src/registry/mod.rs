@@ -120,6 +120,19 @@ impl HarnessRegistry {
         names.sort_unstable();
         names.join(", ")
     }
+
+    /// Returns a sorted list of all available harness IDs (built-ins and user overrides).
+    pub fn all_ids(&self) -> Vec<String> {
+        let mut ids: Vec<String> = self
+            .builtins
+            .keys()
+            .chain(self.user_overrides.keys())
+            .cloned()
+            .collect();
+        ids.sort();
+        ids.dedup();
+        ids
+    }
 }
 
 impl Default for HarnessRegistry {

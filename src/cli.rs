@@ -78,7 +78,7 @@ enum Command {
         #[arg(value_enum)]
         shell: ShellKind,
     },
-    /// Install skills from a remote source or local path
+    /// Install skills into live harness directories from a remote source or local path
     Add {
         /// Source to install from
         source: String,
@@ -99,7 +99,7 @@ enum Command {
         #[arg(long = "force")]
         force: bool,
     },
-    /// List installed skills
+    /// List installed skills in live harness directories
     #[command(visible_alias = "ls")]
     List {
         /// Filter by install scope: project or user
@@ -110,7 +110,7 @@ enum Command {
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
     },
-    /// Remove installed skills
+    /// Remove installed skills from live harness directories
     #[command(visible_alias = "rm")]
     Remove {
         /// Skill names to remove
@@ -137,7 +137,7 @@ enum Command {
         #[arg(long = "force")]
         force: bool,
     },
-    /// Update installed skills to their latest source versions
+    /// Update installed skills in live harness directories to their latest source versions
     #[command(visible_alias = "up")]
     Update {
         /// Skill names to update (default: all)

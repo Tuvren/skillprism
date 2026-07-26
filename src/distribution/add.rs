@@ -17,7 +17,6 @@
 use std::path::Path;
 
 use crate::loader::ProjectLoader;
-use crate::registry::BUILTIN_HARNESS_IDS;
 use crate::state::{InstallScope, StateStore};
 use crate::types::ProjectError;
 use clap::ValueEnum;
@@ -187,11 +186,12 @@ fn determine_harnesses(
         }
     }
 
+    let registry =
+        super::install::build_registry_for_harnesses(project_root).map_err(miette::Report::new)?;
+    let all_available = registry.all_ids();
+
     if force {
-        return Ok(BUILTIN_HARNESS_IDS
-            .iter()
-            .map(ToString::to_string)
-            .collect());
+        return Ok(all_available);
     }
 
     let detected = detect_installed_agents();
@@ -200,7 +200,7 @@ fn determine_harnesses(
     }
 
     let checked_items: Vec<(&str, bool)> =
-        BUILTIN_HARNESS_IDS.iter().map(|h| (*h, false)).collect();
+        all_available.iter().map(|h| (h.as_str(), false)).collect();
 
     let selections = MultiSelect::new()
         .with_prompt("Select harnesses to install to (space to toggle, enter to confirm)")
@@ -214,7 +214,7 @@ fn determine_harnesses(
 
     let selected: Vec<String> = selections
         .into_iter()
-        .map(|i| BUILTIN_HARNESS_IDS[i].to_string())
+        .map(|i| all_available[i].clone())
         .collect();
 
     if selected.is_empty() {
@@ -277,6 +277,7 @@ fn print_install_summary(results: &[super::install::InstallResult], scope: Insta
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::registry::BUILTIN_HARNESS_IDS;
 
     #[test]
     fn explicit_target_bypasses_prompt() {
@@ -315,6 +316,11 @@ mod tests {
     #[test]
     fn force_uses_all_builtin_harnesses_when_no_config() {
         let got = determine_harnesses(None, None, true).unwrap();
-        assert_eq!(got, BUILTIN_HARNESS_IDS.to_vec());
+        let mut expected: Vec<String> = BUILTIN_HARNESS_IDS
+            .iter()
+            .map(|s| (*s).to_string())
+            .collect();
+        expected.sort();
+        assert_eq!(got, expected);
     }
 }

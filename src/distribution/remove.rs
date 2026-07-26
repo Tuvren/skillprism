@@ -20,7 +20,6 @@ use std::path::Path;
 
 use miette::IntoDiagnostic;
 
-use crate::registry::HarnessRegistry;
 use crate::router;
 use crate::state::{InstallScope, InstalledSkill, StateStore};
 
@@ -238,12 +237,13 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
 }
 
 fn remove_skill_files(skill: &InstalledSkill, harness_id: &str) -> Result<(), CommandError> {
-    let registry = HarnessRegistry::with_builtins();
+    let root = resolve_removal_root(skill)?;
+    let registry = super::install::build_registry_for_harnesses(Some(root.as_ref()))
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(skill.scope);
-    let root = resolve_removal_root(skill)?;
 
     let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &skill.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
@@ -307,12 +307,13 @@ fn remove_harness_files_from_record(
     record: &mut InstalledSkill,
     harness_id: &str,
 ) -> Result<(), CommandError> {
-    let registry = HarnessRegistry::with_builtins();
+    let root = resolve_removal_root(record)?;
+    let registry = super::install::build_registry_for_harnesses(Some(root.as_ref()))
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(record.scope);
-    let root = resolve_removal_root(record)?;
 
     let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &record.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;

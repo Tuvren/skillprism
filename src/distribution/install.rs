@@ -549,7 +549,8 @@ fn install_skillprism_skill(
     overwrite_all: &mut bool,
 ) -> Result<InstalledSkill, InstallError> {
     let (skill, _temp_project) = load_skill_into_temp_project(skill_dir, &ctx.harnesses)?;
-    let registry = build_registry_for_harnesses(&ctx.harnesses);
+    let registry =
+        build_registry_for_harnesses(ctx.project_root.as_deref()).map_err(InstallError::Project)?;
 
     // Resolve every harness pair and validate before writing anything, so an
     // undefined variable or reserved-name collision fails the install with no
@@ -642,7 +643,8 @@ fn install_plain_skill(
             source_input: ctx.source_input.clone(),
         })?;
 
-    let registry = build_registry_for_harnesses(&ctx.harnesses);
+    let registry =
+        build_registry_for_harnesses(ctx.project_root.as_deref()).map_err(InstallError::Project)?;
     let mut files = Vec::new();
 
     for harness_id in &ctx.harnesses {
@@ -801,13 +803,15 @@ pub fn validate_pairs(
     })
 }
 
-pub fn build_registry_for_harnesses(_harnesses: &[String]) -> HarnessRegistry {
-    // Harness ids are validated per-skill during rendering via
-    // `HarnessResolver::resolve_skill_harness`, which surfaces a clear error for
-    // unknown ids. This constructor only assembles the built-in registry; the
-    // parameter is retained for call-site symmetry and future upfront
-    // validation.
-    HarnessRegistry::with_builtins()
+pub fn build_registry_for_harnesses(
+    project_root: Option<&Path>,
+) -> Result<HarnessRegistry, ProjectError> {
+    let mut registry = HarnessRegistry::with_builtins();
+    if let Some(root) = project_root {
+        let harnesses_dir = root.join("harnesses");
+        registry.load_user_overrides(&harnesses_dir)?;
+    }
+    Ok(registry)
 }
 
 pub const fn install_scope_to_target(scope: InstallScope) -> TargetScope {
