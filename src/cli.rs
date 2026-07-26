@@ -175,7 +175,7 @@ enum InitKind {
         /// Project name
         name: String,
 
-        /// Output directory (defaults to ./<name>)
+        /// Output directory (defaults to `./<name>`)
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
 
@@ -305,8 +305,9 @@ fn run_build(
     if harness.is_empty() {
         let mut unique_harnesses = Vec::new();
         for h in model.config.harnesses {
-            if !unique_harnesses.contains(&h) {
-                unique_harnesses.push(h);
+            let trimmed = h.trim().to_string();
+            if !trimmed.is_empty() && !unique_harnesses.contains(&trimmed) {
+                unique_harnesses.push(trimmed);
             }
         }
         model.config.harnesses = unique_harnesses;
@@ -314,6 +315,9 @@ fn run_build(
         let mut selected = Vec::new();
         for h in &harness {
             let h_trimmed = h.trim();
+            if h_trimmed.is_empty() {
+                continue;
+            }
             if let Err(e) = registry.resolve(h_trimmed) {
                 return Err(miette::Report::new(e));
             }
