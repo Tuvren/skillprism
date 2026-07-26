@@ -82,7 +82,18 @@ impl ProjectLoader {
                     source: e,
                 })?;
 
-            let skill_config: SkillYamlRaw = yaml_serde::from_str(&content).map_err(|e| {
+            let raw_value: yaml_serde::Value = yaml_serde::from_str(&content).map_err(|e| {
+                let loc = e.location().map_or(0, |l| l.line());
+                ProjectError::YamlParse {
+                    path: config_path.to_string_lossy().to_string(),
+                    line: loc,
+                    message: e.to_string(),
+                }
+            })?;
+
+            validate_skillprism_manifest_version(&raw_value, &config_path)?;
+
+            let skill_config: SkillYamlRaw = yaml_serde::from_value(raw_value).map_err(|e| {
                 let loc = e.location().map_or(0, |l| l.line());
                 ProjectError::YamlParse {
                     path: config_path.to_string_lossy().to_string(),
@@ -142,6 +153,7 @@ impl ProjectLoader {
         })
     }
 
+    #[allow(clippy::too_many_lines)]
     fn load_skill(
         dir: &Path,
         template_path: &Path,
@@ -189,7 +201,18 @@ impl ProjectLoader {
                     source: e,
                 })?;
 
-            let skill_config: SkillYamlRaw = yaml_serde::from_str(&content).map_err(|e| {
+            let raw_value: yaml_serde::Value = yaml_serde::from_str(&content).map_err(|e| {
+                let loc = e.location().map_or(0, |l| l.line());
+                ProjectError::YamlParse {
+                    path: config_path.to_string_lossy().to_string(),
+                    line: loc,
+                    message: e.to_string(),
+                }
+            })?;
+
+            validate_skillprism_manifest_version(&raw_value, &config_path)?;
+
+            let skill_config: SkillYamlRaw = yaml_serde::from_value(raw_value).map_err(|e| {
                 let loc = e.location().map_or(0, |l| l.line());
                 ProjectError::YamlParse {
                     path: config_path.to_string_lossy().to_string(),
@@ -310,6 +333,55 @@ fn merge_variables(
     merged
 }
 
+fn validate_skillprism_manifest_version(
+    raw: &yaml_serde::Value,
+    path: &Path,
+) -> Result<(), ProjectError> {
+    let path_str = path.to_string_lossy().to_string();
+    if let yaml_serde::Value::Mapping(map) = raw {
+        let key = yaml_serde::Value::String("skillprism".to_string());
+        match map.get(&key) {
+            None => Err(ProjectError::YamlParse {
+                path: path_str,
+                line: 1,
+                message: "skill.yaml is present but missing the `skillprism:` field; either add `skillprism: '1'` to declare skillprism-format, or remove skill.yaml to declare plain-format.".to_string(),
+            }),
+            Some(yaml_serde::Value::String(s)) if s == "1" => Ok(()),
+            Some(yaml_serde::Value::Number(n)) if n.as_i64() == Some(1) => Ok(()),
+            Some(yaml_serde::Value::String(s)) if s.is_empty() => Err(ProjectError::YamlParse {
+                path: path_str,
+                line: 1,
+                message: "the `skillprism:` field must not be empty".to_string(),
+            }),
+            Some(yaml_serde::Value::String(other)) => Err(ProjectError::YamlParse {
+                path: path_str,
+                line: 1,
+                message: format!(
+                    "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
+                ),
+            }),
+            Some(yaml_serde::Value::Number(other)) => Err(ProjectError::YamlParse {
+                path: path_str,
+                line: 1,
+                message: format!(
+                    "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
+                ),
+            }),
+            Some(_) => Err(ProjectError::YamlParse {
+                path: path_str,
+                line: 1,
+                message: "the `skillprism:` field must be a quoted string or integer".to_string(),
+            }),
+        }
+    } else {
+        Err(ProjectError::YamlParse {
+            path: path_str,
+            line: 1,
+            message: "skill.yaml must contain a top-level YAML mapping".to_string(),
+        })
+    }
+}
+
 #[derive(Debug, Clone, serde::Deserialize)]
 struct SkillYamlRaw {
     name: Option<String>,
@@ -374,7 +446,7 @@ mod tests {
         .unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "name: my-skill\ndescription: A test skill\n",
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\n",
         )
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
@@ -400,7 +472,7 @@ mod tests {
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "name: my-skill\ndescription: A test skill\n",
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\n",
         )
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
@@ -425,7 +497,7 @@ mod tests {
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "name: my-skill\ndescription: A test skill\n",
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\n",
         )
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md"), "# {{ name }}\n").unwrap();
@@ -447,7 +519,7 @@ mod tests {
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "name: my-skill\ndescription: A test skill\n",
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\n",
         )
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
@@ -511,6 +583,48 @@ mod tests {
     }
 
     #[test]
+    fn missing_skillprism_version_in_skill_yaml_fails() {
+        let tmp = setup_test_dir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "name: my-skill\ndescription: test\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "content\n").unwrap();
+
+        let result = ProjectLoader::load(root);
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            ProjectError::YamlParse { message, .. } => {
+                assert!(message.contains("missing the `skillprism:` field"));
+            }
+            e => panic!("expected YamlParse error for missing skillprism field, got {e:?}"),
+        }
+    }
+
+    #[test]
+    fn integer_skillprism_version_accepted() {
+        let tmp = setup_test_dir();
+        let root = tmp.path();
+        fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+
+        fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
+        fs::write(
+            root.join("skills/my-skill/skill.yaml"),
+            "skillprism: 1\nname: my-skill\ndescription: test\n",
+        )
+        .unwrap();
+        fs::write(root.join("skills/my-skill/SKILL.md.j2"), "content\n").unwrap();
+
+        let model = ProjectLoader::load(root).unwrap();
+        assert_eq!(model.skills.len(), 1);
+    }
+
+    #[test]
     fn typo_in_harness_override_field_rejected() {
         let tmp = setup_test_dir();
         let root = tmp.path();
@@ -519,7 +633,7 @@ mod tests {
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "name: my-skill\ndescription: A test skill\nharnesses:\n  claude:\n    variabels:\n      greeting: hi\n",
+            "skillprism: '1'\nname: my-skill\ndescription: A test skill\nharnesses:\n  claude:\n    variabels:\n      greeting: hi\n",
         )
         .unwrap();
         fs::write(root.join("skills/my-skill/SKILL.md.j2"), "# {{ name }}\n").unwrap();
@@ -544,7 +658,8 @@ mod tests {
         fs::write(root.join("skillprism.yaml"), "harnesses:\n  - claude\n").unwrap();
         fs::write(
             root.join("skills/my-skill/skill.yaml"),
-            "name: my-skill\n\
+            "skillprism: '1'\n\
+             name: my-skill\n\
              description: test\n\
              variables:\n  \
              greeting: hello\n\
@@ -591,13 +706,13 @@ mod tests {
 
         fs::write(
             root.join("skills/group/skill.yaml"),
-            "variables:\n  theme: dark\n  lang: en\n",
+            "skillprism: '1'\nvariables:\n  theme: dark\n  lang: en\n",
         )
         .unwrap();
 
         fs::write(
             root.join("skills/group/child/skill.yaml"),
-            "variables:\n  lang: fr\n",
+            "skillprism: '1'\nvariables:\n  lang: fr\n",
         )
         .unwrap();
         fs::write(root.join("skills/group/child/SKILL.md.j2"), "# test\n").unwrap();

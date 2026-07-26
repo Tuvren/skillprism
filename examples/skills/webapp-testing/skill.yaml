@@ -1,3 +1,4 @@
+skillprism: '1'
 name: webapp-testing
 description: >-
   Toolkit for interacting with and testing local web applications using Playwright.

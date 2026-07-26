@@ -18,15 +18,51 @@ use std::path::Path;
 
 /// Scaffolds a new skill directory with a starter skill.yaml, a spec-compliant
 /// SKILL.md template (YAML frontmatter + body), and standard asset directories
-/// (references/, scripts/).
+/// with deletable placeholder content (references/, scripts/, assets/).
 pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
-    let skill_dir = project_root.join("skills").join(name);
-    fs::create_dir_all(&skill_dir)?;
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("skill name `{name}` must not contain path separators or '..'"),
+        ));
+    }
+
+    let config_path = project_root.join("skillprism.yaml");
+    let rel_skills_dir = if config_path.exists() {
+        let content = fs::read_to_string(&config_path)?;
+        let config: crate::types::ProjectConfig = yaml_serde::from_str(&content).map_err(|e| {
+            io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("Failed to parse {}: {e}", config_path.display()),
+            )
+        })?;
+        config.skills_dir
+    } else {
+        std::path::PathBuf::from("skills")
+    };
+
+    if rel_skills_dir.is_absolute()
+        || rel_skills_dir
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "skills_dir `{}` must be a relative path without '..' components",
+                rel_skills_dir.display()
+            ),
+        ));
+    }
+
+    let target_dir = project_root.join(rel_skills_dir).join(name);
+    fs::create_dir_all(&target_dir)?;
 
     fs::write(
-        skill_dir.join("skill.yaml"),
+        target_dir.join("skill.yaml"),
         format!(
-            "name: {name}\n\
+            "skillprism: '1'\n\
+             name: {name}\n\
              description: >-\n  \
              TODO: Describe what this skill does AND when to use it. Include trigger\n  \
              keywords so agents can match this skill to relevant tasks.\n\
@@ -46,7 +82,7 @@ pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
     // without it no client can discover the skill. skillprism renders it once per
     // harness from the skill.yaml fields above.
     fs::write(
-        skill_dir.join("SKILL.md"),
+        target_dir.join("SKILL.md"),
         "---\n\
          name: {{ skill_name }}\n\
          description: {{ skill_description }}\n\
@@ -55,8 +91,26 @@ pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
          {{ skill_description }}\n",
     )?;
 
-    fs::create_dir_all(skill_dir.join("references"))?;
-    fs::create_dir_all(skill_dir.join("scripts"))?;
+    let refs_dir = target_dir.join("references");
+    fs::create_dir_all(&refs_dir)?;
+    fs::write(
+        refs_dir.join("example.md"),
+        "# Reference Documentation\n\nAdd reference material here (e.g. domain docs, API specs, guidelines).\nLink to this file from SKILL.md.\n\nDelete this placeholder file if unused.\n",
+    )?;
+
+    let scripts_dir = target_dir.join("scripts");
+    fs::create_dir_all(&scripts_dir)?;
+    fs::write(
+        scripts_dir.join("example.sh"),
+        "#!/usr/bin/env bash\n# Executable script placeholder.\n# Place scripts here that handle repetitive or complex tasks.\n# Delete this placeholder file if unused.\n",
+    )?;
+
+    let assets_dir = target_dir.join("assets");
+    fs::create_dir_all(&assets_dir)?;
+    fs::write(
+        assets_dir.join("example.txt"),
+        "# Static Assets\n\nPlace static assets (templates, fonts, images) here.\nDelete this placeholder file if unused.\n",
+    )?;
 
     Ok(())
 }
@@ -86,7 +140,62 @@ mod tests {
         assert!(skill_dir.join("scripts").is_dir());
 
         let yaml = fs::read_to_string(skill_dir.join("skill.yaml")).unwrap();
+        assert!(yaml.contains("skillprism: '1'"));
         assert!(yaml.contains("my-skill"));
+
+        assert!(skill_dir.join("references/example.md").exists());
+        assert!(skill_dir.join("scripts/example.sh").exists());
+        assert!(skill_dir.join("assets/example.txt").exists());
+    }
+
+    #[test]
+    fn scaffold_skill_respects_custom_skills_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
+
+        fs::write(
+            project_root.join("skillprism.yaml"),
+            "skills_dir: custom_skills\nharnesses:\n  - claude\n",
+        )
+        .unwrap();
+
+        scaffold_skill(project_root, "custom-dir-skill").unwrap();
+
+        let skill_dir = project_root.join("custom_skills/custom-dir-skill");
+        assert!(skill_dir.join("skill.yaml").exists());
+        assert!(skill_dir.join("SKILL.md").exists());
+    }
+
+    #[test]
+    fn scaffold_skill_rejects_unsafe_skills_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
+
+        fs::write(
+            project_root.join("skillprism.yaml"),
+            "skills_dir: ../outside\nharnesses:\n  - claude\n",
+        )
+        .unwrap();
+
+        let res = scaffold_skill(project_root, "bad-skill");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidInput);
+    }
+
+    #[test]
+    fn scaffold_skill_fails_on_malformed_config() {
+        let dir = tempfile::tempdir().unwrap();
+        let project_root = dir.path();
+
+        fs::write(
+            project_root.join("skillprism.yaml"),
+            "skills_dir: [invalid\n",
+        )
+        .unwrap();
+
+        let res = scaffold_skill(project_root, "bad-skill");
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().kind(), std::io::ErrorKind::InvalidData);
     }
 
     #[test]

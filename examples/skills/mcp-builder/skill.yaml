@@ -1,3 +1,4 @@
+skillprism: '1'
 name: mcp-builder
 description: >-
   Guide for creating high-quality MCP (Model Context Protocol) servers that enable

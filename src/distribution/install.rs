@@ -514,21 +514,28 @@ pub fn detect_format(skill_dir: &Path) -> Result<SkillFormat, InstallError> {
                     .to_string(),
             })
         },
-        |value| match value.as_str() {
-            None => Err(InstallError::MalformedManifest {
-                path: manifest.to_string_lossy().to_string(),
-                detail: "the `skillprism:` field must be a quoted string".to_string(),
-            }),
-            Some("") => Err(InstallError::MalformedManifest {
+        |value| match value {
+            yaml_serde::Value::String(s) if s == "1" => Ok(SkillFormat::Skillprism),
+            yaml_serde::Value::Number(n) if n.as_i64() == Some(1) => Ok(SkillFormat::Skillprism),
+            yaml_serde::Value::String(s) if s.is_empty() => Err(InstallError::MalformedManifest {
                 path: manifest.to_string_lossy().to_string(),
                 detail: "the `skillprism:` field must not be empty".to_string(),
             }),
-            Some("1") => Ok(SkillFormat::Skillprism),
-            Some(other) => Err(InstallError::MalformedManifest {
+            yaml_serde::Value::String(other) => Err(InstallError::MalformedManifest {
                 path: manifest.to_string_lossy().to_string(),
                 detail: format!(
                     "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
                 ),
+            }),
+            yaml_serde::Value::Number(other) => Err(InstallError::MalformedManifest {
+                path: manifest.to_string_lossy().to_string(),
+                detail: format!(
+                    "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
+                ),
+            }),
+            _ => Err(InstallError::MalformedManifest {
+                path: manifest.to_string_lossy().to_string(),
+                detail: "the `skillprism:` field must be a quoted string or integer".to_string(),
             }),
         },
     )
