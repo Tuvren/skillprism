@@ -282,3 +282,31 @@ fn build_harness_trims_whitespace() {
     assert!(project_dir.join("dist/claude/alpha/SKILL.md").exists());
     assert!(project_dir.join("dist/opencode/alpha/SKILL.md").exists());
 }
+
+#[test]
+fn build_target_flag_rejected() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--target")
+        .arg("project")
+        .assert();
+    assert.failure();
+}
+
+#[test]
+fn validate_nonexistent_path_fails() {
+    let tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(tmp.path())
+        .arg("validate")
+        .arg("nonexistent_directory_xyz")
+        .assert();
+    assert
+        .failure()
+        .stderr(predicate::str::contains("does not exist"));
+}

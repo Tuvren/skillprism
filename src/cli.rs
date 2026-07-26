@@ -325,6 +325,11 @@ fn run_build(
                 selected.push(h_trimmed.to_string());
             }
         }
+        if selected.is_empty() {
+            return Err(miette::miette!(
+                "No valid harness specified in --harness flag"
+            ));
+        }
         model.config.harnesses = selected;
     }
 
@@ -609,6 +614,9 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
     } else {
         std::env::current_dir().into_diagnostic()?.join(start)
     };
+    if !start.exists() {
+        return Err(miette::miette!("Path `{path}` does not exist"));
+    }
     let start_dir = if start.is_file() {
         start.parent().unwrap_or(&start).to_path_buf()
     } else {
