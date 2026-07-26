@@ -16,7 +16,7 @@
 
 use std::borrow::Cow;
 use std::io::{self, IsTerminal, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use miette::IntoDiagnostic;
 
@@ -237,13 +237,14 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
 }
 
 fn remove_skill_files(skill: &InstalledSkill, harness_id: &str) -> Result<(), CommandError> {
-    let root = resolve_removal_root(skill)?;
-    let registry = super::install::build_registry_for_harnesses(Some(root.as_ref()))
-        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let registry =
+        super::install::build_registry_for_harnesses(project_root_for_registry(skill).as_deref())
+            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(skill.scope);
+    let root = resolve_removal_root(skill)?;
 
     let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &skill.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
@@ -281,6 +282,17 @@ fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, Command
     }
 }
 
+fn project_root_for_registry(skill: &InstalledSkill) -> Option<PathBuf> {
+    match skill.scope {
+        InstallScope::Project => skill
+            .project_root
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| find_project_root().ok()),
+        InstallScope::User => None,
+    }
+}
+
 fn apply_removals_to_state(
     store: &mut StateStore,
     removals: Vec<RemovalAction>,
@@ -307,13 +319,14 @@ fn remove_harness_files_from_record(
     record: &mut InstalledSkill,
     harness_id: &str,
 ) -> Result<(), CommandError> {
-    let root = resolve_removal_root(record)?;
-    let registry = super::install::build_registry_for_harnesses(Some(root.as_ref()))
-        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+    let registry =
+        super::install::build_registry_for_harnesses(project_root_for_registry(record).as_deref())
+            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(record.scope);
+    let root = resolve_removal_root(record)?;
 
     let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &record.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;

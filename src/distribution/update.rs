@@ -651,15 +651,15 @@ fn update_plain_skill(
     let mut changed = false;
 
     let target = install_scope_to_target(old.scope);
+    let registry = build_registry_for_harnesses(project_root).map_err(UpdateError::from)?;
     // For user-scope skills there is no project root; `resolve_skill_path`
     // ignores this argument for `TargetScope::User`, so `"."` is an unused
     // placeholder rather than a meaningful path.
-    let project_root = project_root.unwrap_or_else(|| Path::new("."));
+    let project_root_path = project_root.unwrap_or_else(|| Path::new("."));
 
     // Retain per-file records for harnesses that are not being updated.
-    let registry = build_registry_for_harnesses(Some(project_root)).map_err(UpdateError::from)?;
     let updated_prefixes =
-        collect_updated_prefixes(harnesses, &registry, project_root, &old.name, target)?;
+        collect_updated_prefixes(harnesses, &registry, project_root_path, &old.name, target)?;
     let mut new_files: Vec<InstalledFile> = old
         .files
         .iter()
@@ -676,7 +676,7 @@ fn update_plain_skill(
     for harness_id in harnesses {
         let harness = registry.resolve(harness_id).map_err(miette::Report::new)?;
 
-        let skill_path_buf = resolve_skill_path(project_root, &harness, &old.name, target)
+        let skill_path_buf = resolve_skill_path(project_root_path, &harness, &old.name, target)
             .map_err(|e| {
                 miette::Report::new(UpdateError::PathResolution {
                     detail: e.to_string(),
