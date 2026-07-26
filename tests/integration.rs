@@ -225,3 +225,24 @@ fn build_diff_does_not_write() {
         }
     }
 }
+
+#[test]
+fn build_harness_flag_filters_and_deduplicates() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    // Pass --harness claude,claude (duplicate) — should build claude, skip opencode, and not crash on collision
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg("claude,claude")
+        .arg("--force")
+        .assert();
+    assert.success();
+
+    assert!(project_dir.join("dist/claude/alpha/SKILL.md").exists());
+    assert!(project_dir.join("dist/claude/beta/SKILL.md").exists());
+    assert!(!project_dir.join("dist/opencode").exists());
+}

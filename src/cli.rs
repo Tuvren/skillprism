@@ -277,7 +277,7 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+#[allow(clippy::too_many_lines, clippy::needless_pass_by_value)]
 // reason: build pipeline orchestration — each step is justified; refactor deferred to Epic G.
 fn run_build(
     harness: Vec<String>,
@@ -303,12 +303,16 @@ fn run_build(
     }
 
     if !harness.is_empty() {
+        let mut selected = Vec::new();
         for h in &harness {
             if let Err(e) = registry.resolve(h) {
                 return Err(miette::Report::new(e));
             }
+            if !selected.contains(h) {
+                selected.push(h.clone());
+            }
         }
-        model.config.harnesses = harness;
+        model.config.harnesses = selected;
     }
 
     let target = crate::router::TargetScope::Dist;
@@ -594,13 +598,7 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
     };
     let root = crate::distribution::find_project_root_from(&start).into_diagnostic()?;
 
-    let mut registry = HarnessRegistry::with_builtins();
-    let harnesses_dir = root.join("harnesses");
-    registry
-        .load_user_overrides(&harnesses_dir)
-        .into_diagnostic()?;
-
-    let model = ProjectLoader::load(&root).into_diagnostic()?;
+    let (model, registry) = load_project(&root)?;
     let pairs = resolve_pairs(&model, &registry)?;
     let outcome = Validator::validate(pairs);
 
@@ -873,6 +871,26 @@ mod tests {
             }
             _ => panic!("expected Build command"),
         }
+    }
+
+    #[test]
+    fn run_build_unknown_harness_fails() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(
+            root.join("skillprism.yaml"),
+            "name: test-proj\nversion: 0.1.0\nharnesses: [claude]\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+        std::fs::write(root.join("skills/my-skill/SKILL.md"), "# my-skill").unwrap();
+
+        let orig_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(root).unwrap();
+        let res = run_build(vec!["unknown_harness".to_string()], false, false, false);
+        std::env::set_current_dir(orig_dir).unwrap();
+
+        assert!(res.is_err(), "run_build with unknown harness must fail");
     }
 
     #[test]
