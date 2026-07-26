@@ -265,6 +265,28 @@ fn build_harness_unknown_harness_fails() {
 }
 
 #[test]
+fn build_harness_mixed_valid_invalid_fails_without_writing() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg("claude,invalid_harness")
+        .assert();
+    assert
+        .failure()
+        .stderr(predicate::str::contains("Unknown harness: invalid_harness"));
+
+    assert!(
+        !project_dir.join("dist").exists(),
+        "build must not write output files if any harness ID is invalid"
+    );
+}
+
+#[test]
 fn build_harness_trims_whitespace() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();

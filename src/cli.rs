@@ -45,7 +45,12 @@ enum Command {
     /// Compile templates and write harness-specific output files
     Build {
         /// Target harness ID(s) to render for (comma-separated or repeated)
-        #[arg(short = 'H', long = "harness", value_delimiter = ',')]
+        #[arg(
+            short = 'H',
+            long = "harness",
+            visible_alias = "harnesses",
+            value_delimiter = ','
+        )]
         harness: Vec<String>,
 
         /// Show a diff of changes without writing files
@@ -862,6 +867,18 @@ mod tests {
     fn build_harness_multi() {
         let cli =
             Cli::try_parse_from(["skillprism", "build", "--harness", "claude,opencode"]).unwrap();
+        match cli.command {
+            Command::Build { harness, .. } => {
+                assert_eq!(harness, vec!["claude", "opencode"]);
+            }
+            _ => panic!("expected Build command"),
+        }
+    }
+
+    #[test]
+    fn build_harnesses_alias() {
+        let cli =
+            Cli::try_parse_from(["skillprism", "build", "--harnesses", "claude,opencode"]).unwrap();
         match cli.command {
             Command::Build { harness, .. } => {
                 assert_eq!(harness, vec!["claude", "opencode"]);
