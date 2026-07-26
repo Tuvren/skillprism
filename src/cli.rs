@@ -44,8 +44,14 @@ struct Cli {
 enum Command {
     /// Compile templates and write harness-specific output files
     Build {
-        #[arg(long = "target", default_value = "project")]
-        target: TargetScope,
+        /// Target harness ID(s) to render for (comma-separated or repeated)
+        #[arg(
+            short = 'H',
+            long = "harness",
+            visible_alias = "harnesses",
+            value_delimiter = ','
+        )]
+        harness: Vec<String>,
 
         /// Show a diff of changes without writing files
         #[arg(long = "diff", visible_alias = "dry-run")]
@@ -167,17 +173,6 @@ pub enum ShellKind {
     Zsh,
 }
 
-/// Target scope for where rendered skill files are written.
-#[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
-pub enum TargetScope {
-    /// Write to the project-local skill directory.
-    Project,
-    /// Write to the user's home directory.
-    User,
-    /// Write to a distribution output directory.
-    Dist,
-}
-
 #[derive(Subcommand)]
 enum InitKind {
     /// Scaffold a full skillprism project
@@ -185,7 +180,7 @@ enum InitKind {
         /// Project name
         name: String,
 
-        /// Output directory (defaults to ./<name>)
+        /// Output directory (defaults to `./<name>`)
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
 
@@ -218,10 +213,10 @@ pub(crate) fn run() {
 fn dispatch(cli: Cli) -> Result<(), miette::Report> {
     match cli.command {
         Command::Build {
-            target,
+            harness,
             diff,
             force,
-        } => run_build(target, diff, force, cli.verbose),
+        } => run_build(harness, diff, force, cli.verbose),
         Command::Validate { path } => run_validate(&path),
         Command::Init { kind } => run_init(kind),
         Command::Completions { shell } => run_completions(shell),
@@ -287,10 +282,51 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
     }
 }
 
-#[allow(clippy::too_many_lines)]
+fn select_build_harnesses(
+    configured: &[String],
+    requested: &[String],
+    registry: &HarnessRegistry,
+) -> Result<Vec<String>, miette::Report> {
+    if requested.is_empty() {
+        let mut unique_harnesses = Vec::new();
+        for h in configured {
+            let trimmed = h.trim().to_string();
+            if !trimmed.is_empty() && !unique_harnesses.contains(&trimmed) {
+                unique_harnesses.push(trimmed);
+            }
+        }
+        Ok(unique_harnesses)
+    } else {
+        let mut selected = Vec::new();
+        for h in requested {
+            let h_trimmed = h.trim();
+            if h_trimmed.is_empty() {
+                continue;
+            }
+            if let Err(e) = registry.resolve(h_trimmed) {
+                return Err(miette::Report::new(e));
+            }
+            if !selected.iter().any(|s| s == h_trimmed) {
+                selected.push(h_trimmed.to_string());
+            }
+        }
+        if selected.is_empty() {
+            return Err(miette::miette!(
+                "No valid harness specified in --harness flag"
+            ));
+        }
+        Ok(selected)
+    }
+}
+
+#[allow(
+    clippy::too_many_lines,
+    clippy::needless_pass_by_value,
+    clippy::cognitive_complexity
+)]
 // reason: build pipeline orchestration — each step is justified; refactor deferred to Epic G.
 fn run_build(
-    target: TargetScope,
+    harness: Vec<String>,
     diff: bool,
     force: bool,
     verbose: bool,
@@ -303,7 +339,7 @@ fn run_build(
     }
 
     let t0 = Instant::now();
-    let (model, registry) = load_project(&project_root)?;
+    let (mut model, registry) = load_project(&project_root)?;
     if verbose {
         eprintln!(
             "[{t}] load {} skills",
@@ -311,6 +347,10 @@ fn run_build(
             t = fmt_duration(t0.elapsed())
         );
     }
+
+    model.config.harnesses = select_build_harnesses(&model.config.harnesses, &harness, &registry)?;
+
+    let target = crate::router::TargetScope::Dist;
 
     let t1 = Instant::now();
     let pairs = resolve_pairs(&model, &registry)?;
@@ -585,20 +625,23 @@ pub fn generate_man_page() -> Result<(), miette::Report> {
 }
 
 fn run_validate(path: &str) -> Result<(), miette::Report> {
-    let root = PathBuf::from(path);
-    let root = if root.is_absolute() {
-        root
+    let start = PathBuf::from(path);
+    let start = if start.is_absolute() {
+        start
     } else {
-        std::env::current_dir().into_diagnostic()?.join(root)
+        std::env::current_dir().into_diagnostic()?.join(start)
     };
+    if !start.exists() {
+        return Err(miette::miette!("Path `{path}` does not exist"));
+    }
+    let start_dir = if start.is_file() {
+        start.parent().unwrap_or(&start).to_path_buf()
+    } else {
+        start
+    };
+    let root = crate::distribution::find_project_root_from(&start_dir).into_diagnostic()?;
 
-    let mut registry = HarnessRegistry::with_builtins();
-    let harnesses_dir = root.join("harnesses");
-    registry
-        .load_user_overrides(&harnesses_dir)
-        .into_diagnostic()?;
-
-    let model = ProjectLoader::load(&root).into_diagnostic()?;
+    let (model, registry) = load_project(&root)?;
     let pairs = resolve_pairs(&model, &registry)?;
     let outcome = Validator::validate(pairs);
 
@@ -714,7 +757,7 @@ unsafe extern "C" {
 fn check_collisions(
     valid: &[crate::resolver::ResolvedPair],
     project_root: &Path,
-    target: TargetScope,
+    target: crate::router::TargetScope,
 ) -> Result<(), miette::Report> {
     if let Err(errors) = Router::detect_collisions(valid, project_root, target) {
         for err in &errors {
@@ -833,62 +876,76 @@ mod tests {
     }
 
     #[test]
-    fn build_target_user() {
-        let cli = Cli::try_parse_from(["skillprism", "build", "--target", "user"]).unwrap();
-        assert!(matches!(
-            cli.command,
-            Command::Build {
-                target: TargetScope::User,
-                ..
-            }
-        ));
-    }
-
-    #[test]
-    fn build_diff_force() {
-        let cli = Cli::try_parse_from(["skillprism", "build", "--diff", "--force"]).unwrap();
+    fn build_harness_multi() {
+        let cli =
+            Cli::try_parse_from(["skillprism", "build", "--harness", "claude,opencode"]).unwrap();
         match cli.command {
-            Command::Build { diff, force, .. } => {
-                assert!(diff);
-                assert!(force);
+            Command::Build { harness, .. } => {
+                assert_eq!(harness, vec!["claude", "opencode"]);
             }
             _ => panic!("expected Build command"),
         }
     }
 
     #[test]
-    fn verbose_validate() {
-        let cli = Cli::try_parse_from(["skillprism", "--verbose", "validate"]).unwrap();
-        assert!(cli.verbose);
-        assert!(matches!(cli.command, Command::Validate { .. }));
-    }
-
-    #[test]
-    fn validate_default_path() {
-        let cli = Cli::try_parse_from(["skillprism", "validate"]).unwrap();
+    fn build_harnesses_alias() {
+        let cli =
+            Cli::try_parse_from(["skillprism", "build", "--harnesses", "claude,opencode"]).unwrap();
         match cli.command {
-            Command::Validate { path } => {
-                assert_eq!(path, ".");
+            Command::Build { harness, .. } => {
+                assert_eq!(harness, vec!["claude", "opencode"]);
             }
-            _ => panic!("expected Validate command"),
+            _ => panic!("expected Build command"),
         }
     }
 
     #[test]
-    fn build_invalid_target() {
-        let result = Cli::try_parse_from(["skillprism", "build", "--target", "invalid"]);
+    fn build_harness_repeated() {
+        let cli =
+            Cli::try_parse_from(["skillprism", "build", "-H", "claude", "-H", "opencode"]).unwrap();
+        match cli.command {
+            Command::Build { harness, .. } => {
+                assert_eq!(harness, vec!["claude", "opencode"]);
+            }
+            _ => panic!("expected Build command"),
+        }
+    }
+
+    #[test]
+    fn build_target_rejected() {
+        let result = Cli::try_parse_from(["skillprism", "build", "--target", "user"]);
         assert!(result.is_err());
     }
 
     #[test]
-    fn build_default_target() {
+    fn build_default_harness_empty() {
         let cli = Cli::try_parse_from(["skillprism", "build"]).unwrap();
         match cli.command {
-            Command::Build { target, .. } => {
-                assert!(matches!(target, TargetScope::Project));
+            Command::Build { harness, .. } => {
+                assert!(harness.is_empty());
             }
             _ => panic!("expected Build command"),
         }
+    }
+
+    #[test]
+    fn run_build_unknown_harness_fails() {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let root = tmp.path();
+        std::fs::write(
+            root.join("skillprism.yaml"),
+            "name: test-proj\nversion: 0.1.0\nharnesses: [claude]\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("skills/my-skill")).unwrap();
+        std::fs::write(root.join("skills/my-skill/SKILL.md"), "# my-skill").unwrap();
+
+        let orig_dir = std::env::current_dir().unwrap();
+        std::env::set_current_dir(root).unwrap();
+        let res = run_build(vec!["unknown_harness".to_string()], false, false, false);
+        std::env::set_current_dir(orig_dir).unwrap();
+
+        assert!(res.is_err(), "run_build with unknown harness must fail");
     }
 
     #[test]

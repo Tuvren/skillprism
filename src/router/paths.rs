@@ -14,9 +14,19 @@
 
 use std::path::{Component, Path, PathBuf};
 
-use crate::cli::TargetScope;
 use crate::registry::HarnessDefinition;
 use crate::router::RouterError;
+
+/// Target scope for where rendered skill files are written.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TargetScope {
+    /// Write to the project-local skill directory.
+    Project,
+    /// Write to the user's home directory.
+    User,
+    /// Write to a distribution output directory.
+    Dist,
+}
 
 /// Resolves the full path to the rendered skill file for a given scope.
 pub fn resolve_skill_path(

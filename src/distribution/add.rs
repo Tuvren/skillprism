@@ -31,7 +31,7 @@ use super::source::{ParsedSource, mask_credentials, parse_source};
 
 /// Target scope for distribution install commands (`project` or `user`).
 ///
-/// This is distinct from [`crate::cli::TargetScope`] because `dist` is not an
+/// This is distinct from [`crate::router::TargetScope`] because `dist` is not an
 /// install target.
 #[derive(ValueEnum, Clone, Copy, PartialEq, Eq)]
 pub enum InstallScopeArg {

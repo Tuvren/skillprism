@@ -21,7 +21,7 @@ use std::{fs, io};
 use crate::loader::{discover_asset_dirs, find_template_path};
 use crate::registry::HarnessRegistry;
 use crate::resolver::HarnessResolver;
-use crate::router::{resolve_overwrite, resolve_sidecar_path, resolve_skill_path};
+use crate::router::{TargetScope, resolve_overwrite, resolve_sidecar_path, resolve_skill_path};
 use crate::state::{
     InstallScope, InstalledFile, InstalledSkill, SkillFormat, SourceType, StateStore, now_rfc3339,
 };
@@ -929,7 +929,7 @@ fn skill_dir_prefix(
     project_root: &Path,
     harness: &crate::registry::HarnessDefinition,
     skill_name: &str,
-    target: crate::cli::TargetScope,
+    target: TargetScope,
 ) -> Result<String, miette::Report> {
     let skill_path =
         resolve_skill_path(project_root, harness, skill_name, target).map_err(|e| {
@@ -949,7 +949,7 @@ fn collect_updated_prefixes(
     registry: &HarnessRegistry,
     project_root: &Path,
     skill_name: &str,
-    target: crate::cli::TargetScope,
+    target: TargetScope,
 ) -> Result<Vec<String>, miette::Report> {
     harnesses
         .iter()

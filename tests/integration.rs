@@ -74,7 +74,7 @@ fn full_build_pipeline() {
     // 2 skills × 2 harnesses = 4 output files
     for skill in &["alpha", "beta"] {
         for harness in &["claude", "opencode"] {
-            let output_path = project_dir.join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_dir.join(format!("dist/{harness}/{skill}/SKILL.md"));
             assert!(
                 output_path.exists(),
                 "expected output at {}",
@@ -84,8 +84,7 @@ fn full_build_pipeline() {
     }
 
     // Verify rendered content for alpha × claude
-    let alpha_claude =
-        fs::read_to_string(project_dir.join(".claude/skills/alpha/SKILL.md")).unwrap();
+    let alpha_claude = fs::read_to_string(project_dir.join("dist/claude/alpha/SKILL.md")).unwrap();
     // The Agent Skills spec requires YAML frontmatter (name + description) — without
     // it no client can discover the skill. The fixture templates must emit it.
     assert!(
@@ -102,7 +101,7 @@ fn full_build_pipeline() {
 
     // Verify rendered content for beta × opencode
     let beta_opencode =
-        fs::read_to_string(project_dir.join(".opencode/skills/beta/SKILL.md")).unwrap();
+        fs::read_to_string(project_dir.join("dist/opencode/beta/SKILL.md")).unwrap();
     assert!(
         beta_opencode.starts_with("---\n"),
         "rendered SKILL.md must start with YAML frontmatter"
@@ -114,7 +113,7 @@ fn full_build_pipeline() {
     assert!(beta_opencode.contains("Message:"));
 
     // Verify manifest files exist for claude (has plugin.json) with correct content
-    let manifest_path = project_dir.join(".claude/plugin.json");
+    let manifest_path = project_dir.join("dist/claude/.claude/plugin.json");
     assert!(manifest_path.exists(), "claude manifest should exist");
     let manifest_content = fs::read_to_string(manifest_path).unwrap();
     assert!(
@@ -191,11 +190,7 @@ fn build_diff_does_not_write() {
     assert.success();
 
     assert!(
-        !project_dir.join(".claude").exists(),
-        "diff mode must not write output files"
-    );
-    assert!(
-        !project_dir.join(".opencode").exists(),
+        !project_dir.join("dist").exists(),
         "diff mode must not write output files"
     );
 
@@ -225,8 +220,115 @@ fn build_diff_does_not_write() {
     // Verify no files were modified (diff is read-only)
     for skill in &["alpha", "beta"] {
         for harness in &["claude", "opencode"] {
-            let output_path = project_dir.join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_dir.join(format!("dist/{harness}/{skill}/SKILL.md"));
             assert!(output_path.exists(), "file should still exist after --diff");
         }
     }
+}
+
+#[test]
+fn build_harness_flag_filters_and_deduplicates() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    // Pass --harness claude,claude (duplicate) — should build claude, skip opencode, and not crash on collision
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg("claude,claude")
+        .arg("--force")
+        .assert();
+    assert.success();
+
+    assert!(project_dir.join("dist/claude/alpha/SKILL.md").exists());
+    assert!(project_dir.join("dist/claude/beta/SKILL.md").exists());
+    assert!(!project_dir.join("dist/opencode").exists());
+}
+
+#[test]
+fn build_harness_unknown_harness_fails() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg("nonexistent_harness")
+        .assert();
+    assert.failure().stderr(predicate::str::contains(
+        "Unknown harness: nonexistent_harness",
+    ));
+}
+
+#[test]
+fn build_harness_mixed_valid_invalid_fails_without_writing() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg("claude,invalid_harness")
+        .assert();
+    assert
+        .failure()
+        .stderr(predicate::str::contains("Unknown harness: invalid_harness"));
+
+    assert!(
+        !project_dir.join("dist").exists(),
+        "build must not write output files if any harness ID is invalid"
+    );
+}
+
+#[test]
+fn build_harness_trims_whitespace() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--harness")
+        .arg(" claude , opencode ")
+        .arg("--force")
+        .assert();
+    assert.success();
+
+    assert!(project_dir.join("dist/claude/alpha/SKILL.md").exists());
+    assert!(project_dir.join("dist/opencode/alpha/SKILL.md").exists());
+}
+
+#[test]
+fn build_target_flag_rejected() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--target")
+        .arg("project")
+        .assert();
+    assert.failure();
+}
+
+#[test]
+fn validate_nonexistent_path_fails() {
+    let tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    let assert = bin(tmp.path())
+        .arg("validate")
+        .arg("nonexistent_directory_xyz")
+        .assert();
+    assert
+        .failure()
+        .stderr(predicate::str::contains("does not exist"));
 }
