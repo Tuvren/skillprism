@@ -1,15 +1,31 @@
 ---
 title: "skill.yaml reference"
-description: "Every metadata field and what it does"
+description: "Every metadata field and format requirements"
 group: "Authoring"
 weight: 40
 ---
-`skill.yaml` is the metadata half of a skill. Every field is available in `SKILL.md` as a template variable under its own name (with three exceptions noted below).
+`skill.yaml` is the metadata specification for skillprism-format skills. Every field defined in `skill.yaml` is available in `SKILL.md` as a template variable under its own name (with three exceptions noted below).
+
+## Skill Format Detection
+
+skillprism supports two skill formats when building or installing skills:
+
+1. **skillprism-format**: Contains `skill.yaml` (with `skillprism: '1'`) and `SKILL.md` (or `SKILL.md.j2`). Rendered through MiniJinja per harness.
+2. **plain-format**: Bare `SKILL.md` file without `skill.yaml`. Installed directly as-is without templating.
+
+> **Important:** `skill.yaml` requires `skillprism: '1'` at the top level to declare compliance with the skillprism spec.
+
+```yaml
+skillprism: '1'
+name: dice-roller
+description: Roll dice using a random number generator.
+```
 
 ## Required fields
 
 | Field | Type | Constraint | Template variable |
 |-------|------|-----------|-------------------|
+| `skillprism` | string | Must be `'1'` | (Format header) |
 | `name` | string | 1-64 chars, `^[a-z0-9]+(-[a-z0-9]+)*$`, must match directory name | `{{ skill_name }}` |
 | `description` | string | 1-1024 chars (spec); per-harness cap may be higher | `{{ skill_description }}` |
 
@@ -38,15 +54,17 @@ weight: 40
 | `required-capabilities` | list | Harness capabilities this skill needs | `{{ required_capabilities }}` |
 | `variables` | map | Custom template values | `{{ <key> }}` (by name) |
 
-## Renamed fields
+## Template Context Aliases
 
-Three fields render under a different name than their `skill.yaml` key:
+Three fields are exposed under explicit alias names in MiniJinja template context alongside their direct YAML keys:
 
-| `skill.yaml` key | Template variable | Why |
-|------------------|-------------------|-----|
-| `model` | `{{ model_override }}` | Avoids collision with Jinja2's `model` namespace |
-| `paths` | `{{ activation_paths }}` | Avoids collision with path-related builtins |
-| `context` | `{{ context_fork }}` | Derived boolean (`true` when `context: fork`), not the raw string |
+| `skill.yaml` key | Primary Alias | Direct Key | Description |
+|------------------|---------------|------------|-------------|
+| `model` | `{{ model_override }}` | `{{ model }}` | Model string (e.g. `claude-sonnet-4-20250514`) |
+| `paths` | `{{ activation_paths }}` | `{{ paths }}` | Activation path list |
+| `context` | `{{ context_fork }}` | `{{ context }}` | `context_fork` is a boolean (`true` when `context: fork`); `context` is the raw string (`"fork"` or `"inline"`) |
+
+Both direct keys and alias names are supported in templates.
 
 ## Variables
 
@@ -86,13 +104,10 @@ See [Templating → Per-harness overrides](../templating/#per-harness-overrides)
 
 `skillprism validate` checks:
 
+- Presence of `skillprism: '1'` header
 - Name format: `^[a-z0-9]+(-[a-z0-9]+)*$` (lowercase, digits, hyphens; no leading/trailing/consecutive hyphens)
 - Name matches directory name (spec requirement)
 - Description is non-empty
 - Description within harness cap (hard error) and spec cap (warning if over)
 - Compatibility ≤500 chars
 - Template syntax, undefined variables, undefined macros
-
-## Spec mapping
-
-The Agent Skills spec defines frontmatter fields (`name`, `description`, `license`, `compatibility`, `metadata`, `allowed-tools`). skillprism maps `skill.yaml` fields to these in the rendered `SKILL.md` frontmatter — your template controls which fields appear in the output by referencing them.

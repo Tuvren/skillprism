@@ -24,11 +24,11 @@ A Playwright-based toolkit for testing local web apps, ported from Anthropic's p
 
 ```bash
 cd examples
-skillprism build --target dist
+skillprism build
 find dist -type f | sort
 ```
 
-Use `--target dist` here, not plain `skillprism build` — the default `--target project` writes live `.claude/`, `.opencode/`, and `.agents/` directories into `examples/`, which would leave generated output as untracked files in your working tree.
+Running `skillprism build` compiles each skill per harness into `dist/` (e.g. `dist/claude/skills/`, `dist/opencode/skills/`, `dist/codex/skills/`).
 
 Expect a `[resolve] skipped: ...` warning on stderr for each of the two `mcp-builder`/`opencode` and `mcp-builder`/`codex` pairs, then a successful build with 7 rendered `SKILL.md` files and two aggregated manifests.
 

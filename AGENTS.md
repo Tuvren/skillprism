@@ -56,8 +56,8 @@ Two separate mechanisms, both triggered from the `master` branch:
 
 1. **GitHub Release (binaries):** Tag a commit with a `v*` tag. The `release.yml` workflow builds Linux x86_64, macOS x86_64, and macOS ARM binaries, packages them with README/LICENSE/NOTICE/man page, and creates a GitHub Release.
    ```bash
-   git tag -a v0.1.0 -m "v0.1.0"
-   git push origin v0.1.0
+   git tag -a v0.2.0 -m "v0.2.0"
+   git push origin v0.2.0
    ```
 
 2. **crates.io (library):** Requires `cargo login` first (token from https://crates.io/settings/tokens). Then:

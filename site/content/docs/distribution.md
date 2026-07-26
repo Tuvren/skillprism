@@ -4,7 +4,7 @@ description: "Installing, listing, updating, and removing skills"
 group: "Guides"
 weight: 90
 ---
-skillprism's distribution commands let you install skills from remote Git repositories or local paths, manage their lifecycle, and keep them up to date — all with per-harness rendering built in.
+skillprism's distribution commands let you install skills from remote Git repositories or local paths into live agent directories, manage their lifecycle, and keep them up to date — all with per-harness rendering built in.
 
 ## Prerequisites
 
@@ -42,14 +42,14 @@ Append `#<ref>` to any remote source to pin to a specific branch, tag, or commit
 Each skill directory is inspected:
 
 - **skillprism-format**: Has `skill.yaml` with `skillprism: '1'`. The `SKILL.md` is rendered through MiniJinja once per harness with variables from `skill.yaml`.
-- **plain-format**: Has only `SKILL.md` (no `skill.yaml`, or `skill.yaml` without `skillprism: '1'`). The file is copied as-is to each harness path.
+- **plain-format**: Has only `SKILL.md` (bare file without `skill.yaml`). The file is copied as-is to each harness path.
 
 ### Target scopes
 
-- **`project`** (default): Writes to `.claude/skills/`, `.opencode/skills/`, etc. in the current project.
-- **`user`**: Writes to `~/.claude/skills/`, `~/.config/opencode/skills/`, etc. — available globally.
+- **`project`**: Writes live skill files to project directories (`.claude/skills/`, `.opencode/skills/`, etc.).
+- **`user`**: Writes live skill files to user home directories (`~/.claude/skills/`, `~/.config/opencode/skills/`, etc.).
 
-The `--target dist` scope is not supported for `add` (it is rejected at parse time).
+If `--target` is omitted when running `skillprism add`, skillprism prompts interactively to select the target scope. The `--target dist` scope is not supported for `add` (rejected at parse time).
 
 ## List (`list` / `ls`)
 
@@ -71,7 +71,7 @@ skillprism remove --all --all-scopes --force
 skillprism remove --target project -H claude
 ```
 
-Removes skill files from the filesystem and their records from the state tracking layer. By default, only removes from the current project scope and requires confirmation unless `--force` is passed.
+Removes skill files from the filesystem and their records from the state tracking layer. By default, only removes from the current scope and requires confirmation unless `--force` is passed.
 
 ## Update (`update` / `up`)
 
@@ -97,12 +97,15 @@ Local-path sources are skipped during update (they have no git ref to compare).
 
 ## State tracking
 
-All installed skills are recorded in `~/.config/skillprism/installed.yaml`. The state file tracks:
+Installed skills are tracked in atomic JSON manifest state files:
+- **Project scope**: `.skillprism/state.json` inside the project root
+- **User scope**: `~/.config/skillprism/state.json` in user configuration
 
+The state file tracks:
 - Skill name and format (skillprism or plain)
 - Source URL, ref, and resolved SHA
 - Install scope (project or user)
 - Per-harness output paths with file hashes (SHA-256)
 - Timestamps
 
-The state file is created with `600` permissions in a `700` directory. It is read and written atomically.
+The state file is created with `600` permissions in a `700` directory and updated atomically.

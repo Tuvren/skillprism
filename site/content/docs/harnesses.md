@@ -4,7 +4,7 @@ description: "The 5 built-in harnesses, custom harnesses, capability gating"
 group: "Authoring"
 weight: 60
 ---
-A harness is an agent product that reads skills. skillprism ships with 5 built-in harness definitions and supports custom ones.
+A harness is an agent product that reads skills. skillprism ships with 5 built-in harness definitions and supports custom on-demand harness definitions.
 
 ## Built-in harnesses
 
@@ -15,6 +15,33 @@ A harness is an agent product that reads skills. skillprism ships with 5 built-i
 | OpenCode | `opencode` | `.opencode/skills/` | `~/.config/opencode/skills/` | (none) |
 | Factory | `factory` | `.factory/skills/` | `~/.factory/skills/` | (none) |
 | Pi | `pi` | `.pi/skills/` | `~/.pi/agent/skills/` | (none) |
+
+## Custom harnesses (Advanced)
+
+Custom harness definitions are advanced and created on demand in the project's `harnesses/` directory:
+
+```bash
+skillprism init harness my-agent
+```
+
+This scaffolds `harnesses/my-agent.yaml`. Custom harness YAML definitions placed under `harnesses/` are automatically loaded during `build`, `add`, and `update` commands.
+
+```yaml
+id: my-agent
+name: my-agent
+capabilities:
+  supports_subagent: false
+  requires_sidecar: false
+  requires_manifest: false
+  name_max_length: 64
+  description_max_length: 1024
+paths:
+  project_scope_path: ".my-agent/skills"
+  user_scope_path: ".my-agent/skills"
+  skill_filename: SKILL.md
+```
+
+Edit the values to match your agent product's conventions, then add `my-agent` to `skillprism.yaml`'s `harnesses:` list.
 
 ## Capability matrix
 
@@ -54,33 +81,6 @@ If a harness doesn't support a required capability, that skill-harness pair is *
 
 This lets you write one skill that targets `claude` (which supports `allowed-tools`) while gracefully degrading for harnesses that don't — without maintaining separate source files.
 
-## Custom harnesses
-
-You can define custom harnesses in the `harnesses/` directory:
-
-```bash
-skillprism init harness my-agent
-```
-
-This scaffolds `harnesses/my-agent.yaml`:
-
-```yaml
-id: my-agent
-name: my-agent
-capabilities:
-  supports_subagent: false
-  requires_sidecar: false
-  requires_manifest: false
-  name_max_length: 64
-  description_max_length: 1024
-paths:
-  project_scope_path: ".my-agent/skills"
-  user_scope_path: ".my-agent/skills"
-  skill_filename: SKILL.md
-```
-
-Edit the values to match your agent product's conventions, then add `my-agent` to `skillprism.yaml`'s `harnesses:` list.
-
 ### Harness macros
 
 Custom harnesses can define macros — text snippets exposed as `{{ harness.<name> }}`:
@@ -110,4 +110,4 @@ paths:
   manifest_filename: index.json
 ```
 
-skillprism aggregates all rendered skills for that harness into a single manifest file at the configured path.
+skillprism aggregates all rendered skills for that harness into a single manifest file at the configured path when building or installing.

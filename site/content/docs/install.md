@@ -4,6 +4,18 @@ description: "Get skillprism running on your machine"
 group: "Get started"
 weight: 10
 ---
+## Via npm / bun
+
+`skillprism` is published as a zero-dependency npm package that auto-downloads the native platform binary:
+
+```bash
+# Using bun (recommended)
+bun add -g skillprism
+
+# Using npm
+npm install -g skillprism
+```
+
 ## From source
 
 ```bash
@@ -28,6 +40,7 @@ This drops you into a shell with `skillprism`, `cargo`, and all dependencies rea
 
 ## Prerequisites
 
+- Node.js 18+ or Bun (for npm installation)
 - Rust 1.85+ (edition 2024) — for building from source
 - No runtime dependencies — skillprism is a single static binary
 
@@ -37,7 +50,7 @@ This drops you into a shell with `skillprism`, `cargo`, and all dependencies rea
 skillprism --help
 ```
 
-You should see the four subcommands: `build`, `validate`, `init`, and `completions`.
+You should see the compiler subcommands (`build`, `validate`, `init`, `completions`) and package manager subcommands (`add`, `list`, `remove`, `update`).
 
 ## Shell completions
 

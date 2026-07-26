@@ -1,12 +1,12 @@
 ---
 title: "Quickstart"
-description: "Create your first skill and build it end-to-end"
+description: "Create your first skill, build it, and install it end-to-end"
 aliases:
   - /docs/
 group: "Get started"
 weight: 20
 ---
-This walkthrough creates a project, adds a skill, and builds it to multiple harnesses. It takes about 2 minutes.
+This walkthrough creates a project, authors a skill, compiles it to `dist/`, and installs it into live agent directories. It takes about 2 minutes.
 
 ## 1. Initialize a project
 
@@ -15,21 +15,20 @@ skillprism init project my-skills
 cd my-skills
 ```
 
-This creates:
+`skillprism init project` interactively prompts for target harnesses (default: `claude`, `opencode`) and creates:
 
 ```
 my-skills/
-├── skillprism.yaml      # Project config (harnesses list)
-├── .gitignore           # Ignores harness output dirs
+├── skillprism.yaml      # Project config (configured harnesses)
+├── .gitignore           # Ignores dist/ output dir
 ├── README.md            # Project README
-├── harnesses/           # Custom harness overrides (empty)
 └── skills/
     └── sample/          # A sample skill to get started
         ├── skill.yaml   # Skill metadata
         └── SKILL.md     # Template (MiniJinja)
 ```
 
-The default `skillprism.yaml` targets `claude` and `opencode`:
+The generated `skillprism.yaml` configures the target harnesses:
 
 ```yaml
 name: my-skills
@@ -50,6 +49,7 @@ This scaffolds `skills/dice-roller/` with a spec-compliant template. Edit the tw
 **`skills/dice-roller/skill.yaml`:**
 
 ```yaml
+skillprism: '1'
 name: dice-roller
 description: >-
   Roll dice using a random number generator. Use when asked to roll a die (d6, d20, etc.), roll dice, or generate a random dice roll.
@@ -92,44 +92,38 @@ This checks your templates for syntax errors, undefined variables, missing macro
 skillprism build
 ```
 
-skillprism renders each skill once per configured harness and writes to each harness's expected path:
+`skillprism build` compiles each skill into `dist/<harness>/`:
 
 ```
-.claude/skills/dice-roller/SKILL.md
-.claude/skills/sample/SKILL.md
-.opencode/skills/dice-roller/SKILL.md
-.opencode/skills/sample/SKILL.md
+dist/claude/skills/dice-roller/SKILL.md
+dist/claude/skills/sample/SKILL.md
+dist/opencode/skills/dice-roller/SKILL.md
+dist/opencode/skills/sample/SKILL.md
 ```
 
-Each rendered `SKILL.md` has the frontmatter filled in with the real values from `skill.yaml`. The skills are now discoverable by Claude Code and OpenCode.
+Each rendered `SKILL.md` has the frontmatter filled in with the real values from `skill.yaml`. You can inspect `dist/` to verify compiler output.
 
-## 5. Preview changes
+## 5. Preview build diffs
 
 ```bash
 skillprism build --diff
 ```
 
-Shows a unified diff of what *would* be written, without modifying any files. Useful before committing to see exactly what changed.
+Shows a unified diff of what *would* be built, without modifying any files. Useful before committing to see exactly what changed.
 
-## 6. Add more harnesses
+## 6. Install live skills
 
-Edit `skillprism.yaml` to target more harnesses:
+When you want to activate skills in live agent directories (e.g. `.claude/skills/`), use `skillprism add`:
 
-```yaml
-name: my-skills
-harnesses:
-  - claude
-  - opencode
-  - codex
-  - factory
-  - pi
-skills_dir: skills
+```bash
+skillprism add ./ --target project
 ```
 
-Re-run `skillprism build` — your skills are now compiled to all five harnesses from the same source.
+This installs the compiled skills into your live harness paths (`.claude/skills/`, `.opencode/skills/`) and registers them in `.skillprism/state.json`.
 
 ## Next steps
 
+- [Concepts](../concepts) — Source vs dist vs installed states
+- [CLI Reference](../cli) — Complete flags and commands
 - [skill.yaml reference](../skill-yaml) — Every metadata field and what it does
 - [Templating](../templating) — Variables, harness macros, per-harness overrides
-- [Spec compliance](../spec-compliance) — How skillprism maps to the Agent Skills spec
