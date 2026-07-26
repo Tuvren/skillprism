@@ -54,15 +54,17 @@ description: Roll dice using a random number generator.
 | `required-capabilities` | list | Harness capabilities this skill needs | `{{ required_capabilities }}` |
 | `variables` | map | Custom template values | `{{ <key> }}` (by name) |
 
-## Renamed fields
+## Template Context Aliases
 
-Three fields render under a different name than their `skill.yaml` key:
+Three fields are exposed under explicit alias names in MiniJinja template context alongside their direct YAML keys:
 
-| `skill.yaml` key | Template variable | Why |
-|------------------|-------------------|-----|
-| `model` | `{{ model_override }}` | Avoids collision with Jinja2's `model` namespace |
-| `paths` | `{{ activation_paths }}` | Avoids collision with path-related builtins |
-| `context` | `{{ context_fork }}` | Derived boolean (`true` when `context: fork`), not the raw string |
+| `skill.yaml` key | Primary Alias | Direct Key | Description |
+|------------------|---------------|------------|-------------|
+| `model` | `{{ model_override }}` | `{{ model }}` | Model string (e.g. `claude-sonnet-4-20250514`) |
+| `paths` | `{{ activation_paths }}` | `{{ paths }}` | Activation path list |
+| `context` | `{{ context_fork }}` | `{{ context }}` | `context_fork` is a boolean (`true` when `context: fork`); `context` is the raw string (`"fork"` or `"inline"`) |
+
+Both direct keys and alias names are supported in templates.
 
 ## Variables
 

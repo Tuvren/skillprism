@@ -103,7 +103,15 @@ dist/opencode/skills/sample/SKILL.md
 
 Each rendered `SKILL.md` has the frontmatter filled in with the real values from `skill.yaml`. You can inspect `dist/` to verify compiler output.
 
-## 5. Install live skills
+## 5. Preview build diffs
+
+```bash
+skillprism build --diff
+```
+
+Shows a unified diff of what *would* be built, without modifying any files. Useful before committing to see exactly what changed.
+
+## 6. Install live skills
 
 When you want to activate skills in live agent directories (e.g. `.claude/skills/`), use `skillprism add`:
 
@@ -112,14 +120,6 @@ skillprism add ./ --target project
 ```
 
 This installs the compiled skills into your live harness paths (`.claude/skills/`, `.opencode/skills/`) and registers them in `.skillprism/state.json`.
-
-## 6. Preview build diffs
-
-```bash
-skillprism build --diff
-```
-
-Shows a unified diff of what *would* be built, without modifying any files. Useful before committing to see exactly what changed.
 
 ## Next steps
 

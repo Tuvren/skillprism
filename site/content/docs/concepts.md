@@ -37,7 +37,7 @@ dist/
 `skillprism build` is compile-only. It renders templates for configured harnesses into `dist/` without polluting your working tree or installed agent directories.
 
 ### 3. Installed (What live agents read)
-Installed skills are live agent files managed by skillprism's package manager (`add`, `list`, `remove`, `update`, `link`, `unlink`):
+Installed skills are live agent files managed by skillprism's package manager (`add`, `list`, `remove`, `update`):
 - **Project scope (`--target project`)**: Live project paths (e.g. `.claude/skills/`, `.opencode/skills/`)
 - **User scope (`--target user`)**: User home paths (e.g. `~/.claude/skills/`, `~/.config/opencode/skills/`)
 
