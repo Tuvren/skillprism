@@ -701,7 +701,7 @@ fn is_interactive_terminal() -> bool {
     }
     #[cfg(not(test))]
     {
-        std::io::stdin().is_terminal()
+        std::io::stdin().is_terminal() && std::io::stdout().is_terminal()
     }
 }
 

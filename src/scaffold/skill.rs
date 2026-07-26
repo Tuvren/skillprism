@@ -20,6 +20,13 @@ use std::path::Path;
 /// SKILL.md template (YAML frontmatter + body), and standard asset directories
 /// with deletable placeholder content (references/, scripts/, assets/).
 pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!("skill name `{name}` must not contain path separators or '..'"),
+        ));
+    }
+
     let config_path = project_root.join("skillprism.yaml");
     let rel_skills_dir = if config_path.exists() {
         let content = fs::read_to_string(&config_path)?;
