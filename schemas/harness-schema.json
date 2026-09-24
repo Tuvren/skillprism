@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "harness-definition-schema.json",
+  "title": "Harness Definition",
+  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected.",
+  "type": "object",
+  "required": ["id", "name", "capabilities", "paths"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Canonical harness identifier (e.g., claude, codex, opencode)"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-readable display name (e.g., Claude Code, Codex CLI)"
+    },
+    "version": {
+      "type": "string",
+      "description": "Optional version string of this harness definition. The loader accepts any string."
+    },
+    "capabilities": {
+      "type": "object",
+      "description": "Feature flags and length caps for this harness",
+      "properties": {
+        "supports_subagent": {
+          "type": "boolean",
+          "description": "Whether the harness supports sub-agent invocation"
+        },
+        "requires_sidecar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the harness requires sidecar files"
+        },
+        "requires_manifest": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the harness requires a manifest file"
+        },
+        "name_max_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum allowed skill name length",
+          "default": 64
+        },
+        "description_max_length": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Maximum allowed description length",
+          "default": 1024
+        },
+        "supports_allowed_tools": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether allowed-tools is supported in skill config"
+        },
+        "supports_disable_model_invocation": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether disable-model-invocation is supported in skill config"
+        },
+        "supports_user_invocable_flag": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether user-invocable is supported in skill config"
+        }
+      },
+      "required": ["supports_subagent"],
+      "additionalProperties": false
+    },
+    "paths": {
+      "type": "object",
+      "description": "Output path configuration for this harness",
+      "required": ["project_scope_path", "user_scope_path", "skill_filename"],
+      "properties": {
+        "project_scope_path": {
+          "type": "string",
+          "description": "Directory for project-scoped skill output relative to project root (e.g., .claude/skills)"
+        },
+        "user_scope_path": {
+          "type": "string",
+          "description": "Directory for user-scoped skill output (e.g., ~/.claude/skills)"
+        },
+        "skill_filename": {
+          "type": "string",
+          "description": "Filename for the rendered skill file (e.g., SKILL.md)"
+        },
+        "manifest_scope_path": {
+          "type": "string",
+          "description": "Directory for manifest output (e.g., .claude). Omit if the harness has no manifest system."
+        },
+        "manifest_filename": {
+          "type": "string",
+          "description": "Filename for the manifest file (e.g., plugin.json). Omit if the harness has no manifest system."
+        }
+      },
+      "additionalProperties": false
+    },
+    "macros": {
+      "type": "object",
+      "description": "Named macros available to templates as harness.<name>. Each value is either an inline string or an object with a content string. Omission defaults to an empty map. Keys are any string.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "description": "Function-like macro. The loader reads content and ignores other keys.",
+            "properties": {
+              "content": { "type": "string", "description": "The macro body" }
+            },
+            "required": ["content"]
+          }
+        ]
+      }
+    },
+    "sidecars": {
+      "type": "array",
+      "description": "Sidecar file templates generated alongside each skill (zero or more). Omission defaults to an empty list.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "filename": { "type": "string", "description": "Filename for the sidecar output" },
+          "template": { "type": "string", "description": "Jinja2 template for the sidecar content" },
+          "output_dir": {
+            "type": "string",
+            "description": "Optional subdirectory within the skill output directory"
+          }
+        },
+        "required": ["filename", "template"],
+        "additionalProperties": false
+      }
+    },
+    "manifest": {
+      "type": "object",
+      "description": "Optional manifest definition. The loader reads only the template string.",
+      "properties": {
+        "template": {
+          "type": "string",
+          "description": "Jinja2 template for the manifest content"
+        }
+      },
+      "required": ["template"],
+      "additionalProperties": false
+    },
+    "skill_ref_pattern": {
+      "type": "string",
+      "description": "Pattern for referencing skills in this harness (e.g., /{name}). {name} is replaced at runtime."
+    }
+  },
+  "additionalProperties": false
+}

@@ -10,7 +10,7 @@ surfaces:
   - README.md
   - npm/**
   - site/content/**
-  - .constitution/tech-spec/contracts/**
+  - schemas/**
   - .constitution/tech-spec/data-models/**
 diff_exclusions:
   - "**/Cargo.lock"

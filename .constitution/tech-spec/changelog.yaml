@@ -1,4 +1,14 @@
 entries:
+  - version: v1.0.1
+    date: "2026-09-24"
+    changed:
+      - "Pointed contract sidecars at src/cli.rs and schemas/, and deleted the stale CLI copy."
+      - "The domain-model prose is the companion and is a historical sketch, not a field-accurate mirror. It points at src."
+      - "Aligned the schemas with the deserializers after the move."
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+    by: patch-lane
   - version: v1.0.0
     date: 2026-09-24
     changed: ["Replaced the markdown constitution with structured records."]

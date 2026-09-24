@@ -12,7 +12,7 @@ fixture (`tests/examples.rs`), not documentation-only snippets.
   every skillprism-specific mechanism at least once in one short file: the built-ins
   (`skill_name`, `skill_description`, `harness.id`, `harness.name`), a custom
   `variables:` entry, a builtin harness macro (`{{ harness.subagent_guide }}`), and
-  `skill.yaml`'s per-skill `harnesses:` block overriding both a variable (for
+  `skill.yaml`'s per-skill `overrides:` block overriding both a variable (for
   `opencode` only) and a macro (for `codex` only) — the one mechanism `mcp-builder`
   and `webapp-testing` below don't need and so leave undemonstrated. Start here if
   you're new to skillprism.
@@ -115,7 +115,7 @@ fixes, so this section stays honest as the code evolves.
    `disable-model-invocation`, `user-invocable`, `disallowed-tools`, `model`, `effort`,
    `context`, `agent`, `hooks`, `paths`, and `shell` into `SkillModel`. The schema
    itself says several of them "map to SKILL.md frontmatter"
-   (`.constitution/tech-spec/contracts/skill-schema.json`), but
+   (`schemas/skill-schema.json`), but
    `src/engine/context.rs::build_context` only ever inserted `skill_name`,
    `skill_description`, each `variables` entry, and `harness` into the template
    context — none of the rest. **Fix:** `build_context` now inserts all of them under
@@ -147,7 +147,7 @@ fixes, so this section stays honest as the code evolves.
    `allowed-tools`, which only `claude` supports among this project's three targeted
    harnesses, so it resolves for `claude` only — `opencode`/`codex` are skipped with a
    warning instead of failing the whole build. (Separately, the schema also documents a
-   per-skill `harnesses:` block for per-harness `variables`/`macros` overrides — not
+   per-skill `overrides:` block for per-harness `variables`/`macros` overrides — not
    the same mechanism as this fix and not what makes `mcp-builder`'s skip work, but
    worth noting because it's a different kind of harness-scoping. It was unimplemented
    when this finding was first written up; see #4 below.)
@@ -178,12 +178,12 @@ fixes, so this section stays honest as the code evolves.
    surfaced this: when asked to justify it, there was no justification, because
    `src/engine/context.rs::build_context` only ever inserted `skill.variables` as one
    flat, harness-invariant map (confirmed by grep — no harness branching anywhere near
-   it). The schema documents exactly the missing mechanism: a per-skill `harnesses:`
-   block (`.constitution/tech-spec/contracts/skill-schema.json`) where
-   `harnesses.<id>.variables` is "merged with top-level variables, harness wins," and
-   `harnesses.<id>.macros` overrides a harness's builtin macro *for this skill only*.
+   it). The schema documents exactly the missing mechanism: a per-skill `overrides:`
+   block (`schemas/skill-schema.json`) where
+   `overrides.<id>.variables` is "merged with top-level variables, harness wins," and
+   `overrides.<id>.macros` overrides a harness's builtin macro *for this skill only*.
    `SkillYamlRaw` had no `harnesses` field at all — silently dropped, not even a parse
-   error. **Fix:** `SkillYamlRaw` now parses `harnesses:`, populating
+   error. **Fix:** `SkillYamlRaw` now parses `overrides:`, populating
    `SkillModel::harness_overrides`; `SkillModel::variables_for_harness(harness_id)`
    merges the per-harness override over the top-level default (`types/project.rs`);
    `build_context` resolves both variables and `harness.*` macros against this specific
@@ -199,7 +199,7 @@ fixes, so this section stays honest as the code evolves.
    `mcp-builder` nor `webapp-testing` uses this feature: their content genuinely doesn't
    need to differ by harness, and forcing a demonstration in would have repeated the
    exact mistake findings #1–#3 already corrected — implementing unused machinery one
-   layer up. `skills/quickstart/skill.yaml`'s `harnesses:` block (an `opencode`
+   layer up. `skills/quickstart/skill.yaml`'s `overrides:` block (an `opencode`
    variable override and a `codex` macro override) demonstrates the mechanism
    directly, once it existed to demonstrate — see
    `tests/examples.rs::examples_quickstart_demonstrates_harness_variable_override` and

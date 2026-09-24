@@ -24,6 +24,9 @@ verification_commands:
     command: devenv test
     exists: true
 layout:
+  - path: schemas
+    purpose: JSON schemas for harness definitions, project config, and skill.yaml
+    exists: true
   - path: Cargo.toml
     purpose: Package manifest (single crate)
   - path: Cargo.lock
@@ -200,6 +203,10 @@ skillprism/
 │   └── release.yml         # GitHub Actions release (tag-triggered, matrix, GH Release)
 ├── scripts/
 │   └── generate-man.sh     # Man page regeneration script
+├── schemas/                # JSON schemas for harness definitions, project config, and skill.yaml
+│   ├── harness-schema.json
+│   ├── project-config-schema.json
+│   └── skill-schema.json
 ├── src/
 │   ├── main.rs             # CLI entrypoint (clap dispatch + hidden __generate_man)
 │   ├── cli.rs              # Command/flag definitions (clap derive) + pipeline dispatch

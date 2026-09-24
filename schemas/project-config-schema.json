@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "project-config-schema.json",
+  "title": "skillprism.yaml",
+  "description": "Project-level configuration file for skillprism (skillprism.yaml). Determines which harnesses to build for and where skills live. Matches ProjectConfig in src/types/project.rs. Unknown fields are rejected. harnesses defaults to an empty list when omitted.",
+  "type": "object",
+  "properties": {
+    "harnesses": {
+      "type": "array",
+      "description": "Harness IDs this project targets (e.g., claude, codex, opencode, factory, pi). Omission defaults to an empty list. The loader does not require at least one entry.",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "skills_dir": {
+      "type": "string",
+      "description": "Directory containing skill definitions, relative to project root (default: skills)",
+      "default": "skills"
+    }
+  },
+  "additionalProperties": false
+}

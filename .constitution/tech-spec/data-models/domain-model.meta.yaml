@@ -1,7 +1,8 @@
-artifact: domain-model.md
+artifact_path: src
 surface: data-model
 flows: [flow-compile-template]
 boundaries: [BND-02, BND-06]
+companion: domain-model.md
 certainty: assumed
-assumption: "Prose data model kept beside the sidecar until the upgrade decides whether it is a companion or a code artifact."
-settles_when: "Tests exercise the Rust types this document describes."
+assumption: "The companion is a historical sketch, not a field-accurate mirror of the current types. Some names, such as SkillGroup, were folded into the modules under src/ and are not a ticket to build."
+settles_when: "Tests exercise the Rust types the companion describes."
