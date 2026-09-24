@@ -3,5 +3,5 @@ surface: json
 flows: [flow-compile-template, flow-merge-variables]
 boundaries: [BND-02]
 certainty: assumed
-assumption: "The schema moved to schemas/ unchanged. No test validates a project config against it yet."
+assumption: "The schema was aligned with ProjectConfig after the move. It describes the supported shape, not every value the parser silently ignores."
 settles_when: "A test validates a project config against this schema."

@@ -3,5 +3,5 @@ surface: json
 flows: [flow-builtin-harness, flow-override-harness]
 boundaries: [BND-03]
 certainty: assumed
-assumption: "The schema moved to schemas/ unchanged. No test validates a harness definition against it yet."
+assumption: "The schema was aligned with the harness structs after the move. It describes the supported shape. The parser may ignore an unknown manifest field that this schema rejects."
 settles_when: "A test validates a built-in harness definition against this schema."

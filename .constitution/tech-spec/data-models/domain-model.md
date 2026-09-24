@@ -1,8 +1,8 @@
 // In-Memory Domain Data Models
 //
-// This file documents the core Rust types that flow through the pipeline.
-// Types are grouped by the logical container that produces them.
-// All types implement Debug + Clone + PartialEq unless noted.
+// Historical sketch, not a field-accurate contract and not a list of types to implement.
+// The code under src/ is the artifact. Names and fields here can lag that code.
+// Types are grouped by the logical container that produced them when this sketch was written.
 
 // ─── Project Loader ──────────────────────────────────────────────────────────
 
