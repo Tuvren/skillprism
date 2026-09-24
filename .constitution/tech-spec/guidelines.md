@@ -24,38 +24,27 @@ verification_commands:
     command: devenv test
     exists: true
 live_verification:
-  - name: build-fixture
+  - name: validate-examples
     surface: cli
     launch: cargo build
-    doctor: test -x target/debug/skillprism
-    drive: cargo test --test integration full_build_pipeline -- --exact
+    doctor: cargo run --quiet -- --version
+    drive: cargo run --quiet -- validate examples
     drive_kind: command
     evidence:
       kind: log_line
-      ref: "test result: ok"
+      ref: "Validation passed"
     cleanup: "true"
     exists: true
-  - name: distribute-local
+  - name: list-empty
     surface: cli
     launch: cargo build
-    doctor: test -x target/debug/skillprism
-    drive: cargo test --test distribution distribution_lifecycle_add_list_remove -- --exact
+    doctor: cargo run --quiet -- --version
+    drive: XDG_CONFIG_HOME=/tmp/skillprism-recipe-state cargo run --quiet -- list
     drive_kind: command
     evidence:
       kind: log_line
-      ref: "test result: ok"
-    cleanup: "true"
-    exists: true
-  - name: site-build
-    surface: other
-    launch: hugo --gc --minify -s site
-    doctor: test -d site/public
-    drive: test -f site/public/index.html
-    drive_kind: command
-    evidence:
-      kind: file
-      ref: site/public/index.html
-    cleanup: rm -rf site/public
+      ref: "No installed skills"
+    cleanup: rm -rf /tmp/skillprism-recipe-state
     exists: true
 layout:
   - path: schemas
@@ -312,7 +301,7 @@ skillprism/
 
 ## Live verification
 
-The CLI recipes build the binary and run one integration test each. The site recipe builds the static docs site. The npm launcher is not a local recipe: it downloads a GitHub Release, so it cannot run without network access and a published release.
+The CLI recipes run the built binary: one validates the examples project, and one lists an empty install store under a temporary config directory. The docs site is not a live recipe. Serving it needs a long-running process this command format does not stop reliably, and `hugo --gc --minify -s site` is already a verification command. The npm launcher is not a local recipe: it downloads a GitHub Release, so it cannot run without network access and a published release.
 
 ## Coding Standards
 

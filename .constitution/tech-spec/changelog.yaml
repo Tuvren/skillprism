@@ -2,7 +2,7 @@ entries:
   - version: v1.0.2
     date: "2026-09-24"
     changed:
-      - "Declared live-verification recipes for the CLI build, a local install, and the docs site."
+      - "Declared live-verification recipes that run the built binary. The docs site and the npm launcher are not local recipes."
       - "Added a sidecar for installed.yaml. No contract is pinned, because no epics are active."
     upstream:
       prd: v1.0.0
