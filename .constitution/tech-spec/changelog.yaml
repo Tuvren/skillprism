@@ -1,4 +1,13 @@
 entries:
+  - version: v1.0.2
+    date: "2026-09-24"
+    changed:
+      - "Declared live-verification recipes for the CLI build, a local install, and the docs site."
+      - "Added a sidecar for installed.yaml. No contract is pinned, because no epics are active."
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+    by: stage
   - version: v1.0.1
     date: "2026-09-24"
     changed:

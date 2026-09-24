@@ -1,0 +1,8 @@
+artifact_path: src/state/installed.rs
+surface: data-model
+flows: []
+boundaries: [BND-10]
+companion: installed.md
+certainty: assumed
+assumption: "The Rust types are the schema. Distribution tests exercise the store, but this pass does not cite one test as settlement evidence."
+settles_when: "A test reads and writes installed.yaml through StateStore and checks the schema version."

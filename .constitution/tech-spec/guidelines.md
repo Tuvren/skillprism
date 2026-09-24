@@ -23,6 +23,40 @@ verification_commands:
     label: Developer environment checks
     command: devenv test
     exists: true
+live_verification:
+  - name: build-fixture
+    surface: cli
+    launch: cargo build
+    doctor: test -x target/debug/skillprism
+    drive: cargo test --test integration full_build_pipeline -- --exact
+    drive_kind: command
+    evidence:
+      kind: log_line
+      ref: "test result: ok"
+    cleanup: "true"
+    exists: true
+  - name: distribute-local
+    surface: cli
+    launch: cargo build
+    doctor: test -x target/debug/skillprism
+    drive: cargo test --test distribution distribution_lifecycle_add_list_remove -- --exact
+    drive_kind: command
+    evidence:
+      kind: log_line
+      ref: "test result: ok"
+    cleanup: "true"
+    exists: true
+  - name: site-build
+    surface: other
+    launch: hugo --gc --minify -s site
+    doctor: test -d site/public
+    drive: test -f site/public/index.html
+    drive_kind: command
+    evidence:
+      kind: file
+      ref: site/public/index.html
+    cleanup: rm -rf site/public
+    exists: true
 layout:
   - path: schemas
     purpose: JSON schemas for harness definitions, project config, and skill.yaml
@@ -275,6 +309,10 @@ skillprism/
 │       └── webapp-testing/  # Real skill ported from anthropics/skills
 └── harnesses/              # Users' override directory (documented, not shipped)
 ```
+
+## Live verification
+
+The CLI recipes build the binary and run one integration test each. The site recipe builds the static docs site. The npm launcher is not a local recipe: it downloads a GitHub Release, so it cannot run without network access and a published release.
 
 ## Coding Standards
 
