@@ -39,12 +39,12 @@ live_verification:
     surface: cli
     launch: cargo build
     doctor: cargo run --quiet -- --version
-    drive: XDG_CONFIG_HOME=/tmp/skillprism-recipe-state cargo run --quiet -- list
+    drive: env XDG_CONFIG_HOME=$(mktemp -d) cargo run --quiet -- list
     drive_kind: command
     evidence:
       kind: log_line
       ref: "No installed skills"
-    cleanup: rm -rf /tmp/skillprism-recipe-state
+    cleanup: "true"
     exists: true
 layout:
   - path: schemas
@@ -301,7 +301,7 @@ skillprism/
 
 ## Live verification
 
-The CLI recipes run the built binary: one validates the examples project, and one lists an empty install store under a temporary config directory. The docs site is not a live recipe. Serving it needs a long-running process this command format does not stop reliably, and `hugo --gc --minify -s site` is already a verification command. The npm launcher is not a local recipe: it downloads a GitHub Release, so it cannot run without network access and a published release.
+The CLI recipes run the built binary: one validates the examples project, and one lists an empty install store under a directory `mktemp` creates. That directory is left in place, because cleanup cannot name a directory the drive just created. The empty-list line is on stderr, which is that command's status stream. The docs site is not a live recipe. Serving it needs a long-running process this command format does not stop reliably, and `hugo --gc --minify -s site` is already a verification command. The npm launcher is not a local recipe: it downloads a GitHub Release, so it cannot run without network access and a published release.
 
 ## Coding Standards
 
