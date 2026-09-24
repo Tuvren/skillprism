@@ -1,3 +1,11 @@
+---
+job: JOB-01
+capabilities: [CAP-004]
+boundaries: [BND-06, BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Generate Sidecar Files
 
 **PRD Capability:** TC-4 — Generate harness-specific sidecar files from inline templates defined in the harness definition.

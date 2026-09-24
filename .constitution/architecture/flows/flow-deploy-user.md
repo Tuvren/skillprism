@@ -1,3 +1,11 @@
+---
+job: JOB-06
+capabilities: [CAP-011]
+boundaries: [BND-01, BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Deploy to User Scope
 
 **PRD Capability:** BD-2 — Accept a `--target` flag (project | user | dist) that deploys generated output to the agent's installation path instead of the default project scope.

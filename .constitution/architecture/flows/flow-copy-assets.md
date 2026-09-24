@@ -1,3 +1,11 @@
+---
+job: JOB-01
+capabilities: [CAP-002]
+boundaries: [BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Copy Shared Assets
 
 **PRD Capability:** TC-2 — Copy shared assets (references/, scripts/) from the skill source to each harness output directory unchanged.
@@ -28,7 +36,7 @@ sequenceDiagram
   Resolver-->>CLI: Vec<ResolvedPair>
 
   CLI->>Valid8: validate(pairs)
-  Valid8->>Valid8: undeclared_variables() via MiniJinja
+  Valid8->>Valid8: undeclared_variables() via the template engine
   Valid8->>Valid8: scan for harness.<name> refs
   Valid8-->>CLI: validated
 

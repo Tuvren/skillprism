@@ -1,3 +1,11 @@
+---
+job: JOB-02
+capabilities: [CAP-007]
+boundaries: [BND-03]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Ship Built-in Harness Definitions
 
 **PRD Capability:** HS-1 — Ship built-in harness definitions for Claude Code, Codex, OpenCode, Factory, and Pi that cover skill format, installation paths, subagent API patterns, invocation syntax, frontmatter fields, sidecar requirements, and validation strictness.

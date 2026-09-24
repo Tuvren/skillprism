@@ -1,0 +1,228 @@
+id: D
+name: "Safety & Robustness"
+kind: product
+capabilities: []
+depends_on: []
+scope:
+  paths: [src/router, src/cli.rs, src/engine, src/loader]
+  tech_spec_patchable: []
+estimate_source: migrated
+tickets:
+  - id: SKP-D001
+    title: Path Traversal Protection
+    type: Security
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add scope confinement validation to the Output Router to reject harness installation paths containing .. traversal that escape the determined scope (project root, user home, or dist/). Canonicalize resolved paths via std::fs::canonicalize and verify the final path is a prefix of the allowed base directory. Both project-scope and user-scope paths must be validated"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a harness with project_scope_path containing "../" traversal
+          When resolving the skill output path
+          Then the router returns an error rejecting path traversal
+
+          Given a harness with a valid project_scope_path
+          When resolving the skill output path
+          Then the path resolves normally within the project root
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D002
+    title: Interactive Overwrite Confirmation
+    type: Feature
+    effort: 3
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: Implement interactive user prompt when writing to existing files without --force. Show a diff summary of what would change using the existing diff infrastructure. Support yes/no/skip-all/abort responses. Extend skip protection to project scope (currently only user scope has it). The existing --force flag bypasses prompts. Prompts read from stdin and print to stderr
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given existing files at target paths
+          When running build without --force
+          Then the user is prompted with a diff summary before each overwrite
+
+          Given running build with --force
+          When existing files are encountered
+          Then files are overwritten without prompting
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D003
+    title: Signal Handling
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Register SIGINT/SIGTERM handlers using ctrlc crate or manual signal handling. On signal during build, abandon in-progress atomic writes and exit with code 130 (SIGINT) or 143 (SIGTERM). Already-renamed files remain intact. Temp .tmp files are left for cleanup or reuse"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a build operation in progress
+          When SIGINT is received
+          Then in-progress writes are abandoned cleanly
+          And exit code is 130
+
+          Given a build operation in progress
+          When SIGTERM is received
+          Then in-progress writes are abandoned cleanly
+          And exit code is 143
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D004
+    title: Verbose Output with Phase Timing
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add elapsed-time tracking per pipeline phase in --verbose mode. Use std::time::Instant to measure and print duration after each stage (load, resolve, validate, render, route). Format as [build] loaded N skills (XXms)"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a build with --verbose
+          When the pipeline runs
+          Then each phase prints its elapsed time in milliseconds
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D005
+    title: Verbose Resolved Variable Listing
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "In --verbose mode, print final resolved variables per skill after the Project Loader finishes. Show merged parent+child variable set. Format as [build] skill <name> variables: theme=dark, lang=fr"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a build with --verbose
+          When a skill has inherited parent variables
+          Then the final resolved variables are printed in verbose output
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D006
+    title: Path Collision Detection
+    type: Feature
+    effort: 3
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Before writing, resolve all output paths for all skill-harness pairs and check for collisions (two pairs resolving to the same file path). Report all collisions as errors before any write. Integrate into the pipeline between validation and rendering. Collect all collisions — do not fail on first"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given two skills configured for the same harness
+          When both resolve to the same output path
+          Then a path collision error is reported for both skills
+          And the build fails before any writes occur
+
+          Given no path collisions
+          When the build runs
+          Then writing proceeds normally
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D007
+    title: Source Line/Column in Render Errors
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Extract MiniJinja error line/column information using minijinja::Error::kind() and minijinja::Error::line()/minijinja::Error::column(). Include source file path, line, and column in EngineError::RenderError diagnostics. Map template source paths so errors show the correct .j2 file location"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a template with a syntax error at a specific line
+          When rendering fails
+          Then the error message includes the file path, line number, and column
+
+          Given a template with an undefined variable
+          When rendering fails
+          Then the error message includes the variable name and source location
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D008
+    title: Missing Asset Directory Warning
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "When an asset directory listed in skill.asset_dirs does not exist on disk, emit a warning to stderr instead of silently skipping. Continue the build despite the warning. Include the skill name and expected path in the warning"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a skill with a non-existent asset directory in its config
+          When building
+          Then a warning is printed with the skill name and missing path
+          And the build continues successfully
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-D009
+    title: home_dir Fallback Returns Error
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, src/engine, src/loader]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Change router/paths.rs home_dir() from falling back to /tmp to returning an error when $HOME is unset. User-scope builds should fail with a clear, actionable message: $HOME is not set; cannot resolve user-scope path. The function signature must change to return Result"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given $HOME is not set in the environment
+          When running build --target user
+          Then an error message says "$HOME is not set"
+
+          Given $HOME is set
+          When running build --target user
+          Then user paths resolve against $HOME as before
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [SKP-D001, SKP-D002, SKP-D003, SKP-D004, SKP-D005, SKP-D006, SKP-D007, SKP-D008, SKP-D009]
+  tickets_deferred: []
+  points_completed: 16
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

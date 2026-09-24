@@ -1,12 +1,10 @@
 # Vision
 
-**Version:** v0.1.0 (see [changelog.md](./changelog.md))
-
 ## Executive Summary
 
-skillprism is a build-time compiler that transforms a single canonical skill source (MiniJinja templates with harness-aware macros) into correct, harness-specific output files for every major agent platform. It eliminates manual cross-harness duplication so that one skill change propagates to Claude Code, Codex, OpenCode, Factory, Pi, and beyond — without editing N copies.
+skillprism is a build-time compiler that transforms a single canonical skill source (templates with harness-aware macros) into correct, harness-specific output files for every major agent platform. It eliminates manual cross-harness duplication so that one skill change propagates to Claude Code, Codex, OpenCode, Factory, Pi, and beyond, without editing N copies.
 
-**Target archetype:** CLI tool (single static binary).
+**Target archetype:** CLI tool (single native executable).
 
 ## Jobs to Be Done (JTBD)
 
@@ -25,7 +23,7 @@ The following technology choices are non-binding implementation hints for downst
 
 | Preference | Choice | Rationale |
 | :--- | :--- | :--- |
-| Language | Rust | Single static binary, no runtime dependencies; ecosystem alignment with `skill-harness` project. |
+| Language | Rust | Single native executable, no language runtime; ecosystem alignment with `skill-harness` project. |
 | Template engine | MiniJinja (Jinja2-compatible) | Near-perfect Jinja2 implementation by Armin Ronacher; designed for text generation (YAML, config, Markdown). |
 | Configuration format | YAML | Matches the skill ecosystem's YAML frontmatter convention; supports comments; more readable than JSON/TOML for nested structures. |
 | CLI framework | Clap v4.6 (derive macros) | De facto Rust CLI framework; derive macros reduce boilerplate. |

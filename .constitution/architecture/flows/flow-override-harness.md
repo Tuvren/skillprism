@@ -1,3 +1,11 @@
+---
+job: JOB-02
+capabilities: [CAP-008, CAP-009]
+boundaries: [BND-02, BND-03]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Override Built-in Harness
 
 **PRD Capability:** HS-2 — Allow users to override a built-in harness definition by placing a `harnesses/{name}.yaml` file in the project root.

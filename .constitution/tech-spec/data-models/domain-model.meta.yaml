@@ -1,0 +1,7 @@
+artifact: domain-model.md
+surface: data-model
+flows: [flow-compile-template]
+boundaries: [BND-02, BND-06]
+certainty: assumed
+assumption: "Prose data model kept beside the sidecar until the upgrade decides whether it is a companion or a code artifact."
+settles_when: "Tests exercise the Rust types this document describes."

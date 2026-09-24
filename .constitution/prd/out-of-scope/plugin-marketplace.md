@@ -1,6 +1,10 @@
+---
+decision: deferred
+date: "2026-07-02"
+---
 # Out of Scope: Plugin Marketplace Integration
 
-> **\[REOPENED 2026-07-02\]** — Operator directive (Epic I activation) reopens this non-goal. The distribution CLI (`add` / `list` / `remove` / `update`) is now in scope per `.constitution/tasks/active/EPIC-I-distribution.md`; the marketplace-specific facets below (storefronts, publishing, discovery) remain deferred. A full PRD revision lifting this file out of `out-of-scope/` is tracked as a downstream follow-up in `prd/changelog.md` (v0.2.0). Until that revision lands, the canonical record is this banner: the original "out of scope" status applies to the marketplace-specific facets only; the distribution CLI commands are the in-scope operator-approved expansion.
+> **\[REOPENED 2026-07-02\]** — Operator directive (Epic I activation) reopens this non-goal. The distribution CLI (`add` / `list` / `remove` / `update`) is now in scope per `.constitution/tasks/completed/EPIC-I-distribution.yaml`; the marketplace-specific facets below (storefronts, publishing, discovery) remain deferred. A full PRD revision lifting this file out of `out-of-scope/` is tracked as a downstream follow-up in `prd/changelog.yaml` (v0.2.0). Until that revision lands, the canonical record is this banner: the original "out of scope" status applies to the marketplace-specific facets only; the distribution CLI commands are the in-scope operator-approved expansion.
 
 **Context:** Determined out of scope during initial scope definition.
 

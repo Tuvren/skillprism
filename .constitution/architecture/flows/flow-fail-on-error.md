@@ -1,3 +1,11 @@
+---
+job: JOB-05
+capabilities: [CAP-006]
+boundaries: [BND-05]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Fail on Missing Reference
 
 **PRD Capability:** TC-6 — Fail the build on any missing macro reference or undefined template variable.
@@ -28,7 +36,7 @@ sequenceDiagram
   CLI->>Valid8: validate(pairs)
 
   loop over every ResolvedPair
-    Valid8->>Valid8: undeclared_variables() via MiniJinja
+    Valid8->>Valid8: undeclared_variables() via the template engine
     Valid8->>Valid8: scan for harness.<name> refs
     Valid8->>Valid8: check template syntax
   end

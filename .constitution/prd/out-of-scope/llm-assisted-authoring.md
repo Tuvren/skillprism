@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-06-17"
+---
 # Out of Scope: LLM-Assisted Template Authoring
 
 **Context:** Determined out of scope during initial scope definition.

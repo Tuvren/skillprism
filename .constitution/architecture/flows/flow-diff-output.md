@@ -1,3 +1,11 @@
+---
+job: JOB-03
+capabilities: [CAP-015]
+boundaries: [BND-01, BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Diff Build Output
 
 **PRD Capability:** OB-1 — Generate a diff preview that compares rendered output against whatever currently exists at the target paths, without writing anything.

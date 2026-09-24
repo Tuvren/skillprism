@@ -1,0 +1,204 @@
+id: H
+name: Release Readiness
+kind: product
+capabilities: []
+depends_on: [G]
+scope:
+  paths: [".github", scripts, site, CHANGELOG.md]
+  tech_spec_patchable: []
+estimate_source: migrated
+tickets:
+  - id: SKP-H001
+    title: Shell Completions
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add a completions subcommand to the CLI that generates shell completion scripts for bash, fish, and zsh using clap_complete. Alternatively, add a build script or Makefile target that generates completion files into a completions/ directory. Document how to install them in the README"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the built binary
+          When generating bash completions
+          Then the output can be sourced to enable tab completion for all subcommands and flags
+
+          Given completion files are generated
+          When inspecting the bash completion output
+          Then it includes the build, validate, and init subcommands
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H002
+    title: Add --dry-run Alias for --diff
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: Add --dry-run as a visible alias for --diff in the Build subcommand. Both flags should be interchangeable. Update --help output and any documentation references. Add a test verifying both flags produce identical behavior
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given running build --dry-run
+          When executing
+          Then it behaves identically to build --diff
+          And no files are written
+
+          Given the CLI help output
+          When inspecting
+          Then both --dry-run and --diff are listed
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H003
+    title: ".gitignore Polish"
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add missing common entries to .gitignore: .direnv/ (nix/direnv cache), dist/ (build output target), *.tmp (leftover atomic write temp files). Keep existing entries for target/, .devenv/, and .pre-commit-config.yaml"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the .gitignore file
+          When inspecting
+          Then .direnv/, dist/, and *.tmp are listed as ignored patterns
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H004
+    title: CLI Help Polish
+    type: Chore
+    effort: 2
+    depends_on: [SKP-H001, SKP-H002]
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Review all clap about, long_about, and flag description strings across every subcommand for consistency, correctness, and professional tone. Ensure examples use consistent formatting. Verify --help output is scannable and complete for a v1 release"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the built binary
+          When running skillprism --help
+          Then every subcommand has a description and usage line
+          And all flags are listed with consistent descriptions
+          And no placeholder or TODO text appears in help output
+
+          Given the built binary
+          When running skillprism build --help
+          Then --dry-run and --diff are both listed
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H005
+    title: Man Page Generation
+    type: Chore
+    effort: 1
+    depends_on: [SKP-H001, SKP-H002]
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: Generate a man page for the skillprism CLI. Provide a script or Makefile target to regenerate it. Include installation instructions in the README or a man page reference
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a built binary
+          When generating the man page
+          Then a skillprism.1 man page exists
+          And man skillprism displays the correct synopsis, subcommands, and flags
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H006
+    title: Release CI Workflow
+    type: Feature
+    effort: 3
+    depends_on: []
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add a GitHub Actions workflow triggered by git tags matching v*. Builds for Linux (x86_64) and macOS (x86_64 + ARM), attaches binaries to a GitHub Release, and optionally runs cargo publish. The release matrix should expand beyond the CI baseline to include a macOS ARM runner (e.g., macos-14)"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a tag v1.0.0 is pushed
+          When the release workflow runs
+          Then a GitHub Release is created with the tag name
+          And Linux x86_64 binary is attached
+          And macOS (x86_64 + ARM) binaries are attached
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H007
+    title: User-Facing CHANGELOG
+    type: Chore
+    effort: 1
+    depends_on: [SKP-H001, SKP-H002, SKP-H003, SKP-H004, SKP-H005, SKP-H006]
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Create a CHANGELOG.md at the project root summarizing all work from Epics A through H in user-facing language. Target audience: someone evaluating or installing the tool. Reference the license, supported harnesses, and key CLI commands"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the repository root
+          When inspecting CHANGELOG.md
+          Then it lists all epics from A (Foundation) through H (Release Readiness)
+          And each entry describes user-facing changes, not implementation detail
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-H008
+    title: Cargo Publish Readiness
+    type: Chore
+    effort: 2
+    depends_on: [SKP-H006, SKP-H007]
+    scope:
+      in: [".github", scripts, site, CHANGELOG.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Verify all Cargo.toml metadata fields are correct for publication. Run cargo publish --dry-run to validate. Add any missing metadata (e.g., [package.metadata.docs.rs], [package.metadata.release]). Publish to crates.io"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the Cargo.toml
+          When running cargo publish --dry-run
+          Then it passes without errors
+
+          Given the dry-run passes
+          When publishing to crates.io
+          Then the crate is available under the skillprism name
+          And version matches the release tag
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [SKP-H001, SKP-H002, SKP-H003, SKP-H004, SKP-H005, SKP-H006, SKP-H007, SKP-H008]
+  tickets_deferred: []
+  points_completed: 13
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

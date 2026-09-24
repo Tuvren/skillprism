@@ -1,7 +1,5 @@
 # Logical Containers
 
-**Version:** v0.2.0
-
 ## Container Diagram
 
 ```mermaid
@@ -17,7 +15,7 @@ C4Container
     Container(registry, "Harness Registry", "Library", "Manage built-in and user-override harness definitions")
     Container(resolver, "Harness Resolver", "Library", "Pair each skill with its resolved harness definition, check capability compatibility")
     Container(validator, "Validator", "Library", "Batch-check all resolved skill-harness pairs for syntax errors, missing macros, undefined variables")
-    Container(engine, "Template Engine", "Library", "Render MiniJinja templates with resolved variables and macros")
+    Container(engine, "Template Engine", "Library", "Render templates with resolved variables and macros")
     Container(router, "Output Router", "Library", "Resolve target path (project/user/dist), write with atomic safety")
     Container(scaffolder, "Scaffolder", "Library", "Generate project or skill scaffolding")
     Container(distribution, "Distribution CLI", "Library", "Fetch, install, list, remove, and update skills from remote/local sources (add/list/remove/update)")
@@ -25,41 +23,43 @@ C4Container
   }
 
   System_Ext(fs, "Filesystem", "Project files, agent install directories")
+  System_Ext(source, "Source host", "Remote skill repositories")
 
   Rel(solo, cli, "Invokes via shell", "args, flags")
   Rel(lead, cli, "Invokes via shell/CI", "args, flags")
 
-  Rel(cli, loader, "Dispatches build/validate", "project root path")
-  Rel(cli, scaffolder, "Dispatches init", "scaffold type, path")
+  Rel(cli, loader, "Dispatches build/validate", "in-process")
+  Rel(cli, scaffolder, "Dispatches init", "in-process")
 
-  Rel(loader, fs, "Reads", "skillprism.yaml, skill.yaml, harnesses/*.yaml")
+  Rel(loader, fs, "Reads skillprism.yaml, skill.yaml, and harness overrides", "file-handoff")
 
-  Rel(registry, fs, "Reads (optional)", "user harness overrides")
+  Rel(registry, fs, "Reads optional user harness overrides", "file-handoff")
 
-  Rel(resolver, loader, "Pairs skills with", "project model")
-  Rel(resolver, registry, "Resolves against", "harness registry")
+  Rel(resolver, loader, "Pairs skills from the project model", "in-process")
+  Rel(resolver, registry, "Resolves each harness name", "in-process")
 
-  Rel(validator, resolver, "Validates", "resolved skill-harness pairs")
-  Rel(validator, fs, "Reads", "template files for validation")
+  Rel(validator, resolver, "Validates resolved pairs", "in-process")
+  Rel(validator, fs, "Reads templates to check syntax", "file-handoff")
 
-  Rel(engine, validator, "Renders validated", "skill-harness pairs")
-  Rel(engine, fs, "Reads", "template files for rendering")
+  Rel(engine, validator, "Renders pairs the validator accepted", "in-process")
+  Rel(engine, fs, "Reads templates to render", "file-handoff")
 
-  Rel(router, engine, "Routes rendered output", "harness output per pair")
-  Rel(router, fs, "Writes", "skill files, sidecars, manifests atomically")
+  Rel(router, engine, "Routes rendered output", "in-process")
+  Rel(router, fs, "Writes skill files, sidecars, and manifests atomically", "file-handoff")
 
-  Rel(scaffolder, fs, "Creates", "project files")
+  Rel(scaffolder, fs, "Creates scaffolded project files", "file-handoff")
 
-  Rel(cli, distribution, "Dispatches add/list/remove/update", "source, scope, harness flags")
-  Rel(distribution, loader, "Reuses discovery/template helpers", "skill dirs, template paths")
-  Rel(distribution, registry, "Resolves harnesses", "built-in harness registry")
-  Rel(distribution, resolver, "Pairs fetched skills with", "harness definitions")
-  Rel(distribution, validator, "Validates before writing", "resolved pairs (fail-closed)")
-  Rel(distribution, engine, "Renders", "skillprism-format skills")
-  Rel(distribution, router, "Writes rendered output", "skill files, sidecars")
-  Rel(distribution, state, "Records/queries installs", "InstalledSkill records")
-  Rel(distribution, fs, "Fetches/copies", "git clones, local paths, assets")
-  Rel(state, fs, "Reads/writes atomically", "~/.config/skillprism/installed.yaml (0o600)")
+  Rel(cli, distribution, "Dispatches add, list, remove, and update", "in-process")
+  Rel(distribution, loader, "Reuses discovery and template helpers", "in-process")
+  Rel(distribution, registry, "Resolves harnesses for an install", "in-process")
+  Rel(distribution, resolver, "Pairs a fetched skill with harness definitions", "in-process")
+  Rel(distribution, validator, "Validates before writing. Fail closed", "in-process")
+  Rel(distribution, engine, "Renders skillprism-format skills", "in-process")
+  Rel(distribution, router, "Writes rendered output", "in-process")
+  Rel(distribution, state, "Records and queries installs", "in-process")
+  Rel(distribution, fs, "Copies local sources and writes installed files", "file-handoff")
+  Rel(distribution, source, "Shallow clone and ls-remote through the source-control client", "other")
+  Rel(state, fs, "Reads and writes installed.yaml atomically", "file-handoff")
 ```
 
 ## Container Responsibilities
@@ -109,7 +109,7 @@ C4Container
 | Field | Value |
 | :--- | :--- |
 | **Logical type** | Library boundary |
-| **Responsibility** | For every resolved skill-harness pair: read the template file and check MiniJinja syntax by attempting to parse it, use MiniJinja's `undeclared_variables()` to find undefined variable references, scan template text for `harness.<macro_name>` refs and verify each resolves against the harness definition. Collect all errors across all pairs. Return valid pairs alongside errors (collect-all-errors pattern). |
+| **Responsibility** | For every resolved skill-harness pair: read the template file and check template syntax by attempting to parse it, use the template engine's undeclared-variable check to find undefined variable references, scan template text for `harness.<macro_name>` refs and verify each resolves against the harness definition. Collect all errors across all pairs. Return valid pairs alongside errors (collect-all-errors pattern). |
 | **Inputs** | List of `ResolvedPair` from Resolver |
 | **Outputs** | `ValidationOutcome` — list of valid pairs + list of `ValidationError` |
 | **Depends on** | Harness Resolver, Filesystem (template reads) |
@@ -119,10 +119,10 @@ C4Container
 | Field | Value |
 | :--- | :--- |
 | **Logical type** | Library boundary |
-| **Responsibility** | For a resolved skill-harness pair: read the template, build a MiniJinja context with skill variables (name, description, custom variables) and the `harness` object (id, name, version, macros as strings), register custom helpers (`skill_ref`), and render skill content, sidecars, and manifest entry. |
+| **Responsibility** | For a resolved skill-harness pair: read the template, build a template context with skill variables (name, description, custom variables) and the `harness` object (id, name, version, macros as strings), register custom helpers (`skill_ref`), and render skill content, sidecars, and manifest entry. |
 | **Inputs** | `ResolvedPair` (skill + harness) |
 | **Outputs** | `HarnessOutput` (skill_content, sidecars, manifest_entry) or `EngineError` |
-| **Depends on** | Harness Resolver, Filesystem (template reads), MiniJinja runtime |
+| **Depends on** | Harness Resolver, Filesystem (template reads), template engine |
 
 ### Output Router
 
@@ -149,10 +149,10 @@ C4Container
 | Field | Value |
 | :--- | :--- |
 | **Logical type** | Library boundary |
-| **Responsibility** | Implement the distribution commands (Epic I, DIST-I001–I010): `add` (parse source, fetch via the git auth chain or local copy, detect skillprism vs plain format, render/copy per harness, record state), `list`, `remove`, and `update` (ls-remote no-op check, per-file SHA-256 change detection, `--diff`). Reuse the build-time containers (loader discovery/template helpers, registry, resolver, validator, engine, router) rather than re-implementing them; validate every resolved pair before writing (fail-closed). Harden untrusted-source handling: credential redaction, symlink-escape rejection, path-traversal guards. |
+| **Responsibility** | Implement the distribution commands (Epic I): `add` (parse source, fetch via the source-control client or a local copy, detect skillprism vs plain format, render/copy per harness, record state), `list`, `remove`, and `update` (remote-ref no-op check, per-file SHA-256 change detection, `--diff`). Reuse the build-time containers (loader discovery/template helpers, registry, resolver, validator, engine, router) rather than re-implementing them; validate every resolved pair before writing (fail-closed). Harden untrusted-source handling: credential redaction, symlink-escape rejection, path-traversal guards. |
 | **Inputs** | Source string, scope/harness selection, command flags; the built-in harness registry |
 | **Outputs** | Rendered/copied skill files per harness, `InstalledSkill` state records, or a typed `CommandError`/`miette::Report` |
-| **Depends on** | Project Loader, Harness Registry, Harness Resolver, Validator, Template Engine, Output Router, State Layer, Filesystem, git/`gh` (subprocess) |
+| **Depends on** | Project Loader, Harness Registry, Harness Resolver, Validator, Template Engine, Output Router, State Layer, Filesystem, source-control client (subprocess) |
 
 ### State Layer
 

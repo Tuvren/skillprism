@@ -1,0 +1,204 @@
+bill_of_materials:
+  - name: Hugo
+    role: tooling
+    version: "0.163.3"
+    ecosystem: other
+    justification: "Site generator. The version is the hugo-extended pin in devenv.nix, matching the deploy workflow."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: devenv.nix
+      version: "0.163.3"
+      date: "2026-09-24"
+  - name: Node
+    role: runtime
+    version: ">=18"
+    ecosystem: other
+    justification: "Runtime for the npm launcher. package.json engines declares a minimum, not an exact pin."
+    certainty: assumed
+    assumption: "The repository pins a compatibility floor of Node 18, not a reproducible patch."
+    evidence:
+      kind: repository
+      ref: npm/package.json
+      version: ">=18"
+      date: "2026-09-24"
+  - name: Rust
+    role: language
+    version: "1.85"
+    ecosystem: system
+    justification: "Single native executable and edition 2024. Pinned in rust-toolchain.toml."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: rust-toolchain.toml
+      version: "1.85"
+      date: "2026-09-24"
+  - name: clap
+    role: library
+    version: "4.6.1"
+    ecosystem: cargo
+    justification: "CLI parser. Derive macros define commands and flags."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "4.6.1"
+      date: "2026-09-24"
+  - name: clap_complete
+    role: library
+    version: "4.6.5"
+    ecosystem: cargo
+    justification: "Generates Bash, Fish, and Zsh completions from the clap command tree."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "4.6.5"
+      date: "2026-09-24"
+  - name: clap_mangen
+    role: library
+    version: "0.3.0"
+    ecosystem: cargo
+    justification: "Renders the skillprism.1 man page from the clap command tree."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "0.3.0"
+      date: "2026-09-24"
+  - name: minijinja
+    role: library
+    version: "2.21.0"
+    ecosystem: cargo
+    justification: "Template engine for text and YAML generation, with a parse-only mode for validation."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "2.21.0"
+      date: "2026-09-24"
+  - name: yaml_serde
+    role: library
+    version: "0.10.4"
+    ecosystem: cargo
+    justification: "YAML parser for project config, skill files, and harness definitions."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "0.10.4"
+      date: "2026-09-24"
+  - name: serde
+    role: library
+    version: "1.0.228"
+    ecosystem: cargo
+    justification: "Derive-based serialization for config and state records."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "1.0.228"
+      date: "2026-09-24"
+  - name: miette
+    role: library
+    version: "7.6.0"
+    ecosystem: cargo
+    justification: "Diagnostic errors with source spans and actionable help text."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "7.6.0"
+      date: "2026-09-24"
+  - name: thiserror
+    role: library
+    version: "2.0.18"
+    ecosystem: cargo
+    justification: "Typed error enums that implement the diagnostic trait."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "2.0.18"
+      date: "2026-09-24"
+  - name: similar
+    role: library
+    version: "2.7.0"
+    ecosystem: cargo
+    justification: "Colored unified diffs for --diff."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "2.7.0"
+      date: "2026-09-24"
+  - name: sha2
+    role: library
+    version: "0.10.9"
+    ecosystem: cargo
+    justification: "Per-file SHA-256 hashes for install state and update change detection."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "0.10.9"
+      date: "2026-09-24"
+  - name: ctrlc
+    role: library
+    version: "3.5.2"
+    ecosystem: cargo
+    justification: "Signal handling so an interrupted write does not leave a partial install."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "3.5.2"
+      date: "2026-09-24"
+  - name: dialoguer
+    role: library
+    version: "0.12.0"
+    ecosystem: cargo
+    justification: "Interactive prompts for add when the user omits harness and scope flags."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "0.12.0"
+      date: "2026-09-24"
+  - name: assert_cmd
+    role: testing
+    version: "2.2.2"
+    ecosystem: cargo
+    justification: "CLI integration tests against the compiled binary."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "2.2.2"
+      date: "2026-09-24"
+  - name: predicates
+    role: testing
+    version: "3.1.4"
+    ecosystem: cargo
+    justification: "Exit-code and stderr assertions in CLI tests."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "3.1.4"
+      date: "2026-09-24"
+  - name: tempfile
+    role: testing
+    version: "3.27.0"
+    ecosystem: cargo
+    justification: "Isolated temporary directories for tests."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: Cargo.lock
+      version: "3.27.0"
+      date: "2026-09-24"
+compatibility_policy:
+  pinning: "Pin each direct dependency to a minor version in Cargo.toml and commit Cargo.lock. Pin the Rust toolchain to 1.85 in rust-toolchain.toml."
+  lockfiles: [Cargo.lock]
+  upgrade_boundaries: "A minor upgrade that does not change rendered output or CLI behavior may land with the lockfile. A major upgrade, or any upgrade that changes rendered output or CLI behavior, needs an ADR and updated tests."

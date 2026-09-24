@@ -1,0 +1,93 @@
+id: C
+name: Developer Experience
+kind: product
+capabilities: [CAP-015]
+depends_on: [B]
+scope:
+  paths: [src/router, src/cli.rs, README.md]
+  tech_spec_patchable: []
+estimate_source: migrated
+tickets:
+  - id: SKP-C001
+    title: Diff Preview Mode
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in: [src/router, src/cli.rs, README.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement --diff flag behavior (OB-1). When --diff is set, render output to in-memory buffers and produce a colored diff between the rendered content and the current file on disk (if any). Display the diff to stdout instead of writing to disk. Handle new-file (no existing file) and deleted-target scenarios"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a skill with existing output on disk
+          When running with `--diff` and rendered content differs
+          Then a unified diff is printed with additions and removals highlighted
+          When running with `--diff` and rendered content matches disk content
+          Then a "no changes" message is printed for that file
+          When running with `--diff` and no file exists on disk
+          Then the full rendered content is shown as an addition
+          When running without `--diff`
+          Then no diff is computed and output is written to disk normally
+    flows: [flow-diff-output]
+    certainty: assumed
+    status: done
+  - id: SKP-C002
+    title: Force Flag Enforcement and Error UX Polish
+    type: Feature
+    effort: 3
+    depends_on: [SKP-C001]
+    scope:
+      in: [src/router, src/cli.rs, README.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement the --force flag (BD-2) to skip safety checks (overwriting user-scope files, missing output directories). Polish all miette diagnostic rendering for consistency (error codes, severity coloring, suggestion hints). Add human-readable error messages for common failure modes"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a target with user-scope path that already exists
+          When running without `--force`
+          Then it prints a warning and skips the file
+          When running with `--force`
+          Then it overwrites the existing file without warning
+          When the output path is invalid (permissions, read-only filesystem)
+          Then it reports a diagnostic with the system error and the path
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-C003
+    title: Rustdoc Documentation and README
+    type: Chore
+    effort: 2
+    depends_on: [SKP-C002]
+    scope:
+      in: [src/router, src/cli.rs, README.md]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Document all public API items with rustdoc. Write a top-level README.md covering installation (cargo install, devenv), quickstart usage, supported agent platforms, and a development guide. Ensure cargo doc --no-deps --document-private-items produces complete documentation with no warnings"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the project source
+          When `cargo doc --no-deps` is run
+          Then it completes with zero warnings
+          And all public items have doc comments
+          When the README.md is viewed
+          Then it includes installation, quickstart, and development sections
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [SKP-C001, SKP-C002, SKP-C003]
+  tickets_deferred: []
+  points_completed: 10
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

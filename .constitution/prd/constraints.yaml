@@ -1,0 +1,84 @@
+constraints:
+  - id: NFC-01
+    legacy_id: platform-hosts
+    class: compatibility
+    statement: "The tool must run on Linux x86_64 and on macOS x86_64 and ARM. Windows is not a v1 host."
+    scale: "Supported host triples: Linux x86_64, macOS x86_64, macOS ARM"
+    meter: "A release binary exits 0 for skillprism --version on each listed host, and no v1 package claims a Windows build."
+    goal: holds
+    fail: "Any listed host is missing, or a Windows build is shipped as v1."
+    certainty: assumed
+    assumption: "Migrated from the Platform section of constraints.md, which stated the duty and no measured result."
+  - id: NFC-02
+    legacy_id: static-binary
+    class: archetype
+    statement: "The release binary bundles no language runtime and no network client. Only add and update may spawn git, which must already be on PATH."
+    scale: "binary: the duty holds or it does not"
+    meter: "build, validate, init, and completions do not spawn a helper and do not bundle a language runtime or a network client. add and update may spawn git and surface a missing git as a normal command error."
+    goal: holds
+    fail: "A non-distribution command bundles a language runtime, bundles a network client, or spawns a helper, or a missing git is swallowed."
+    certainty: assumed
+    assumption: "Migrated from the Binary Distribution section of constraints.md. The git exception is the v0.2.0 amendment. The Linux release target in .github/workflows/release.yml is x86_64-unknown-linux-gnu, so the binary links the system libc rather than a fully static musl link."
+  - id: NFC-03
+    legacy_id: actionable-errors
+    class: operability
+    statement: "Every configuration and template error names the file, the line when it is known, and the specific issue."
+    scale: "binary: the duty holds or it does not"
+    meter: "Each configuration or template diagnostic includes the file, the line when the parser has one, and the specific issue."
+    goal: holds
+    fail: "Any such error omits the file or the issue, or omits a line the parser had."
+    certainty: assumed
+    assumption: "Migrated from the Error Handling section of constraints.md, which stated the duty and no measured result."
+  - id: NFC-04
+    legacy_id: no-silent-fallback
+    class: reliability
+    statement: "Configuration and template failures return an error. The tool does not emit placeholder output."
+    scale: "binary: the duty holds or it does not"
+    meter: "A missing file, invalid YAML, missing macro, or undefined variable fails the command instead of writing a placeholder."
+    goal: holds
+    fail: "Any silent fallback or placeholder output."
+    certainty: assumed
+    assumption: "Migrated from the Error Handling section of constraints.md, which stated the duty and no measured result."
+  - id: NFC-05
+    legacy_id: overwrite-confirmation
+    class: security
+    statement: "A write must not overwrite an existing file unless the user confirms it or passes --force."
+    scale: "binary: the duty holds or it does not"
+    meter: "A write to an existing file prompts, unless --force is set."
+    goal: holds
+    fail: "Any overwrite without confirmation and without --force."
+    certainty: assumed
+    assumption: "Migrated from the Safety section of constraints.md, which stated the duty and no measured result."
+  - id: NFC-06
+    legacy_id: path-confinement
+    class: security
+    statement: "A write to dist/ or to an explicit output path must not modify files outside that path."
+    scale: "binary: the duty holds or it does not"
+    meter: "Every output path for --target dist, or for an explicit output path, stays inside that root."
+    goal: holds
+    fail: "Any write outside the target path."
+    certainty: assumed
+    assumption: "Migrated from the Safety section of constraints.md, which stated the duty and no measured result."
+  - id: NFC-07
+    legacy_id: harness-release-coupling
+    class: operability
+    statement: "Built-in harness definitions ship in the same repository and the same release as the tool."
+    scale: "binary: the duty holds or it does not"
+    meter: "Each release contains the built-in harness definitions from that same commit."
+    goal: holds
+    fail: "A harness-definition change ships without a tool release, or the reverse."
+    certainty: assumed
+    assumption: "Migrated from the Maintainability section of constraints.md, which stated the duty and no measured result."
+  - id: NFC-08
+    legacy_id: harness-without-template-edit
+    class: compatibility
+    statement: "Adding a built-in harness must not require a skill template change. It requires only a new harness definition."
+    scale: "binary: the duty holds or it does not"
+    meter: "A new built-in harness is a new harness definition YAML and no edit to an existing skill template."
+    goal: holds
+    fail: "A new built-in harness requires a skill template edit."
+    certainty: assumed
+    assumption: "Migrated from the Maintainability section of constraints.md, which stated the duty and no measured result."
+deferred:
+  - class: performance
+    risk: "v1 states no latency target. Treating the expected sub-second build as a goal would invent a requirement the PRD refused to enforce."

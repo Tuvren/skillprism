@@ -1,0 +1,31 @@
+terms:
+  - term: Harness
+    definition: "An agent platform that skillprism generates output for, such as Claude Code, Codex, or OpenCode."
+    do_not_use: []
+  - term: Skill
+    definition: "A portable agent capability definition that conforms to the Agent Skills specification. It is a SKILL.md file with YAML front matter."
+    do_not_use: []
+  - term: Template
+    definition: "A SKILL.md or SKILL.md.j2 file that contains MiniJinja syntax and harness-aware macro references. skillprism compiles it into a harness-specific SKILL.md. A skill directory may use either extension, but not both."
+    do_not_use: []
+  - term: Macro
+    definition: "A named content block in a harness definition. A template references it to emit harness-specific content."
+    do_not_use: []
+  - term: Sidecar
+    definition: "A harness-specific companion file generated alongside SKILL.md, such as Codex agents/openai.yaml."
+    do_not_use: []
+  - term: Plugin manifest
+    definition: "A harness-specific discovery file that registers skills with an agent, such as Claude's marketplace.json."
+    do_not_use: []
+  - term: Build
+    definition: "The skillprism build command compiling templates into harness-specific output files."
+    do_not_use: []
+  - term: Harness definition
+    definition: "A YAML file that describes one harness's identity, capabilities, installation paths, macros, and sidecar templates."
+    do_not_use: []
+  - term: Variable
+    definition: "A named value in skill.yaml that a template references through MiniJinja for harness-aware rendering."
+    do_not_use: []
+  - term: Group-level variable
+    definition: "A variable in a parent directory's skill.yaml that every skill in that group inherits."
+    do_not_use: []

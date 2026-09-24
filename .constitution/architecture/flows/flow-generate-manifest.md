@@ -1,3 +1,11 @@
+---
+job: JOB-01
+capabilities: [CAP-005]
+boundaries: [BND-06, BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Generate Plugin Manifest
 
 **PRD Capability:** TC-5 — Generate harness-specific plugin manifests that register skills with the agent's discovery system.
