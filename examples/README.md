@@ -115,7 +115,7 @@ fixes, so this section stays honest as the code evolves.
    `disable-model-invocation`, `user-invocable`, `disallowed-tools`, `model`, `effort`,
    `context`, `agent`, `hooks`, `paths`, and `shell` into `SkillModel`. The schema
    itself says several of them "map to SKILL.md frontmatter"
-   (`.constitution/tech-spec/contracts/skill-schema.json`), but
+   (`schemas/skill-schema.json`), but
    `src/engine/context.rs::build_context` only ever inserted `skill_name`,
    `skill_description`, each `variables` entry, and `harness` into the template
    context — none of the rest. **Fix:** `build_context` now inserts all of them under
@@ -179,7 +179,7 @@ fixes, so this section stays honest as the code evolves.
    `src/engine/context.rs::build_context` only ever inserted `skill.variables` as one
    flat, harness-invariant map (confirmed by grep — no harness branching anywhere near
    it). The schema documents exactly the missing mechanism: a per-skill `harnesses:`
-   block (`.constitution/tech-spec/contracts/skill-schema.json`) where
+   block (`schemas/skill-schema.json`) where
    `harnesses.<id>.variables` is "merged with top-level variables, harness wins," and
    `harnesses.<id>.macros` overrides a harness's builtin macro *for this skill only*.
    `SkillYamlRaw` had no `harnesses` field at all — silently dropped, not even a parse
