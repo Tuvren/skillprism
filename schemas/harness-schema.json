@@ -2,14 +2,13 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "harness-definition-schema.json",
   "title": "Harness Definition",
-  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, and sidecar templates.",
+  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected.",
   "type": "object",
   "required": ["id", "name", "capabilities", "paths"],
   "properties": {
     "id": {
       "type": "string",
-      "description": "Canonical harness identifier (e.g., claude, codex, opencode)",
-      "pattern": "^[a-z][a-z0-9-]*$"
+      "description": "Canonical harness identifier (e.g., claude, codex, opencode)"
     },
     "name": {
       "type": "string",
@@ -17,51 +16,55 @@
     },
     "version": {
       "type": "string",
-      "description": "Version of this harness definition (SemVer string)",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      "description": "Optional version string of this harness definition. The loader accepts any string."
     },
     "capabilities": {
       "type": "object",
-      "description": "Feature flags for this harness",
+      "description": "Feature flags and length caps for this harness",
       "properties": {
-        "supports_subagent": { "type": "boolean" },
-        "requires_sidecar": { "type": "boolean" },
-        "requires_manifest": { "type": "boolean" },
-        "frontmatter_mode": {
-          "type": "string",
-          "enum": ["lenient", "extended"],
-          "description": "How the harness validates SKILL.md frontmatter: lenient (ignores unknowns, accepts spec fields), extended (accepts spec + platform-specific extras)"
+        "supports_subagent": {
+          "type": "boolean",
+          "description": "Whether the harness supports sub-agent invocation"
+        },
+        "requires_sidecar": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the harness requires sidecar files"
+        },
+        "requires_manifest": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether the harness requires a manifest file"
         },
         "name_max_length": {
           "type": "integer",
-          "description": "Maximum length for skill name field (default: 64, Codex: 100)",
-          "minimum": 1,
+          "minimum": 0,
+          "description": "Maximum allowed skill name length",
           "default": 64
         },
         "description_max_length": {
           "type": "integer",
-          "description": "Maximum length for skill description field (spec: 1024, Codex: 500, Claude Code: 1536 combined with when_to_use)",
-          "minimum": 1,
+          "minimum": 0,
+          "description": "Maximum allowed description length",
           "default": 1024
         },
         "supports_allowed_tools": {
           "type": "boolean",
-          "description": "Whether the harness recognizes the allowed-tools field (spec: experimental; Claude Code: fully supported with string, comma-separated, or YAML list format)"
+          "default": false,
+          "description": "Whether allowed-tools is supported in skill config"
         },
         "supports_disable_model_invocation": {
           "type": "boolean",
-          "description": "Whether the harness recognizes disable-model-invocation to hide from auto-load"
+          "default": false,
+          "description": "Whether disable-model-invocation is supported in skill config"
         },
         "supports_user_invocable_flag": {
           "type": "boolean",
-          "description": "Whether the harness recognizes user-invocable to hide from / menu"
-        },
-        "extra_metadata_path": {
-          "type": "string",
-          "description": "Optional per-skill metadata file path relative to skill dir (e.g. agents/openai.yaml for Codex)"
+          "default": false,
+          "description": "Whether user-invocable is supported in skill config"
         }
       },
-      "required": ["supports_subagent", "frontmatter_mode"],
+      "required": ["supports_subagent"],
       "additionalProperties": false
     },
     "paths": {
@@ -71,82 +74,55 @@
       "properties": {
         "project_scope_path": {
           "type": "string",
-          "description": "Project-scoped skill output directory relative to project root (e.g., .claude/skills, .agents/skills, .opencode/skills, .pi/skills, .factory/skills)"
+          "description": "Directory for project-scoped skill output relative to project root (e.g., .claude/skills)"
         },
         "user_scope_path": {
           "type": "string",
-          "description": "User-scoped skill output directory relative to home (e.g., ~/.claude/skills, ~/.codex/skills, ~/.config/opencode/skills, ~/.pi/agent/skills, ~/.factory/skills)"
+          "description": "Directory for user-scoped skill output (e.g., ~/.claude/skills)"
         },
         "skill_filename": {
           "type": "string",
-          "description": "Skill file name (e.g., SKILL.md, skill.mdx for Factory, agent.md)"
+          "description": "Filename for the rendered skill file (e.g., SKILL.md)"
         },
         "manifest_scope_path": {
           "type": "string",
-          "description": "Directory for plugin manifest relative to scope root (e.g., .claude for Claude plugin). Omit if harness has no manifest system."
+          "description": "Directory for manifest output (e.g., .claude). Omit if the harness has no manifest system."
         },
         "manifest_filename": {
           "type": "string",
-          "description": "Plugin manifest filename (e.g., plugin.json, marketplace.json). Omit if harness has no manifest system."
+          "description": "Filename for the manifest file (e.g., plugin.json). Omit if the harness has no manifest system."
         }
       },
       "additionalProperties": false
     },
     "macros": {
       "type": "object",
-      "description": "Named content blocks referenced by templates as {{ harness.<name> }}",
-      "patternProperties": {
-        "^[a-z][a-zA-Z0-9_]*$": {
-          "oneOf": [
-            { "type": "string" },
-            {
-              "type": "object",
-              "description": "Macro with a body and optional list of arguments",
-              "properties": {
-                "content": { "type": "string" },
-                "arguments": {
-                  "type": "array",
-                  "items": { "type": "string" },
-                  "uniqueItems": true
-                }
-              },
-              "required": ["content"],
-              "additionalProperties": false
-            }
-          ]
-        }
-      },
-      "additionalProperties": false
-    },
-    "functions": {
-      "type": "object",
-      "description": "Custom template functions exposed to templates (e.g., skill_ref)",
-      "patternProperties": {
-        "^[a-z][a-zA-Z0-9_]*$": {
-          "type": "object",
-          "description": "Function definition with a signature description and optional inline template",
-          "properties": {
-            "description": { "type": "string" },
-            "returns": { "type": "string" },
-            "template": { "type": "string" }
-          },
-          "required": ["description"],
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
+      "description": "Named macros available to templates as harness.<name>. Each value is either an inline string or an object with a content string. Omission defaults to an empty map. Keys are any string.",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string" },
+          {
+            "type": "object",
+            "description": "Function-like macro. The loader reads content and ignores other keys.",
+            "properties": {
+              "content": { "type": "string", "description": "The macro body" }
+            },
+            "required": ["content"]
+          }
+        ]
+      }
     },
     "sidecars": {
       "type": "array",
-      "description": "Sidecar file templates generated alongside each skill (zero or more)",
+      "description": "Sidecar file templates generated alongside each skill (zero or more). Omission defaults to an empty list.",
       "items": {
         "type": "object",
         "properties": {
-          "filename": { "type": "string" },
-          "template": { "type": "string" },
+          "filename": { "type": "string", "description": "Filename for the sidecar output" },
+          "template": { "type": "string", "description": "Jinja2 template for the sidecar content" },
           "output_dir": {
             "type": "string",
-            "description": "Relative directory within the skill output dir (defaults to .)"
+            "description": "Optional subdirectory within the skill output directory"
           }
         },
         "required": ["filename", "template"],
@@ -155,43 +131,19 @@
     },
     "manifest": {
       "type": "object",
-      "description": "Optional plugin manifest template with platform-specific format",
+      "description": "Optional manifest definition. The loader reads only the template string.",
       "properties": {
-        "format": {
-          "type": "string",
-          "enum": ["claude-plugin", "codex-plugin"],
-          "description": "Which platform manifest format this template targets"
-        },
         "template": {
           "type": "string",
-          "description": "Template string rendered with skill variables to produce the manifest entry"
+          "description": "Jinja2 template for the manifest content"
         }
       },
-      "required": ["format", "template"],
+      "required": ["template"],
       "additionalProperties": false
     },
     "skill_ref_pattern": {
       "type": "string",
-      "description": "Pattern for referencing other skills (e.g., /{name}, {name}, /skill:{name}). {name} is replaced at runtime."
-    },
-    "discovery": {
-      "type": "object",
-      "description": "Discovery path support for this harness",
-      "properties": {
-        "project": {
-          "type": "boolean",
-          "description": "Whether the harness discovers skills from project-scoped directories"
-        },
-        "user": {
-          "type": "boolean",
-          "description": "Whether the harness discovers skills from user home-scoped directories"
-        },
-        "plugin": {
-          "type": "boolean",
-          "description": "Whether the harness discovers skills from plugin/package-managed directories"
-        }
-      },
-      "additionalProperties": false
+      "description": "Pattern for referencing skills in this harness (e.g., /{name}). {name} is replaced at runtime."
     }
   },
   "additionalProperties": false

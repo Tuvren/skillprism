@@ -2,24 +2,27 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "skill-yaml-schema.json",
   "title": "Skill YAML",
-  "description": "Per-skill configuration file (skill.yaml) — defines a single skill's metadata and template variables. Note: this is a build-time config file, NOT the output SKILL.md frontmatter. Fields are processed internally; only the rendered template becomes SKILL.md.",
+  "description": "Per-skill configuration file (skill.yaml) — defines a single skill's metadata and template variables. Note: this is a build-time config file, NOT the output SKILL.md frontmatter. Fields are processed internally; only the rendered template becomes SKILL.md. Whenever skill.yaml is present, including a group file that only contributes variables, the loader requires `skillprism` with value 1 (string or integer) and rejects the legacy `harnesses` key. `name` and `description` are not required: a group skill.yaml may omit them. A leaf skill that omits `name` uses its directory name; a leaf skill that omits `description` gets an empty description.",
   "type": "object",
   "properties": {
+    "skillprism": {
+      "description": "Manifest format version. Required. The loader accepts only the string \"1\" or the integer 1.",
+      "oneOf": [
+        { "type": "string", "const": "1" },
+        { "type": "integer", "const": 1 }
+      ]
+    },
     "name": {
       "type": "string",
-      "description": "Skill name (lowercase letters, digits, and hyphens only; used for directory and skill references)",
-      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
-      "maxLength": 64
+      "description": "Skill name. Optional. A group skill.yaml may omit it. A leaf skill that omits it uses the directory name. The loader does not restrict the character set or length."
     },
     "description": {
       "type": "string",
-      "description": "Brief description of what the skill does and when to use it",
-      "maxLength": 1024
+      "description": "Brief description of what the skill does and when to use it. Optional. A group skill.yaml may omit it. A leaf skill that omits it gets an empty description."
     },
     "version": {
       "type": "string",
-      "description": "Skill version (SemVer string, used internally; stripped from rendered output unless mapped via metadata)",
-      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+      "description": "Skill version string, used internally. The loader accepts any string."
     },
     "license": {
       "type": "string",
@@ -27,8 +30,7 @@
     },
     "compatibility": {
       "type": "string",
-      "description": "Environment requirements (max 500 chars). Indicates intended product, system packages, network access, etc. (maps to SKILL.md frontmatter)",
-      "maxLength": 500
+      "description": "Environment requirements. Indicates intended product, system packages, network access, etc. (maps to SKILL.md frontmatter). The loader accepts any string."
     },
     "required-capabilities": {
       "type": "array",
@@ -41,11 +43,8 @@
       "additionalProperties": { "type": "string" }
     },
     "allowed-tools": {
-      "oneOf": [
-        { "type": "string" },
-        { "type": "array", "items": { "type": "string" } }
-      ],
-      "description": "Pre-approved tools the skill may use. Accepts space/comma-separated string or YAML list (experimental in spec, supported in Claude Code). Maps to SKILL.md frontmatter."
+      "type": "string",
+      "description": "Pre-approved tools the skill may use. The loader accepts a string only, not a YAML list. Maps to SKILL.md frontmatter."
     },
     "variables": {
       "type": "object",
@@ -61,28 +60,22 @@
       "description": "Autocomplete hint shown after skill name (e.g., [issue-number]) (Claude Code)"
     },
     "arguments": {
-      "oneOf": [
-        { "type": "string" },
-        { "type": "array", "items": { "type": "string" } }
-      ],
-      "description": "Named positional arguments for $name substitution in skill content (Claude Code). Accepts space-separated string or YAML list."
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Named positional arguments for $name substitution in skill content (Claude Code). The loader accepts a YAML list of strings only, not a single string."
     },
     "disable-model-invocation": {
       "type": "boolean",
-      "default": false,
-      "description": "When true, prevents agent from automatically loading this skill (Claude Code, Factory, Pi). Use for manual-only workflows."
+      "description": "When true, prevents agent from automatically loading this skill (Claude Code, Factory, Pi). Use for manual-only workflows. Omission leaves the field unset; the loader does not fill a default."
     },
     "user-invocable": {
       "type": "boolean",
-      "default": true,
-      "description": "When false, hides from / command menu (Claude Code, Factory)"
+      "description": "When false, hides from / command menu (Claude Code, Factory). Omission leaves the field unset; the loader does not fill a default."
     },
     "disallowed-tools": {
-      "oneOf": [
-        { "type": "string" },
-        { "type": "array", "items": { "type": "string" } }
-      ],
-      "description": "Tools removed from agent's available pool while this skill is active (Claude Code). Accepts space/comma-separated string or YAML list."
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Tools removed from agent's available pool while this skill is active (Claude Code). The loader accepts a YAML list of strings only, not a single string."
     },
     "model": {
       "type": "string",
@@ -90,13 +83,11 @@
     },
     "effort": {
       "type": "string",
-      "enum": ["low", "medium", "high", "xhigh", "max"],
-      "description": "Effort level for skill execution (Claude Code)"
+      "description": "Effort level hint for skill execution (Claude Code). The loader accepts any string."
     },
     "context": {
       "type": "string",
-      "enum": ["fork"],
-      "description": "When set to fork, runs skill in a separate subagent context (Claude Code)"
+      "description": "Context mode string. The loader sets context forking only when the value is \"fork\"; any other string is accepted and does not enable forking."
     },
     "agent": {
       "type": "string",
@@ -104,45 +95,40 @@
     },
     "hooks": {
       "type": "object",
-      "description": "Lifecycle hooks scoped to this skill (Claude Code)"
+      "description": "Lifecycle hooks scoped to this skill (Claude Code). Values may be any YAML value.",
+      "additionalProperties": true
     },
     "paths": {
-      "oneOf": [
-        { "type": "string" },
-        { "type": "array", "items": { "type": "string" } }
-      ],
-      "description": "Glob patterns limiting automatic activation (Claude Code)"
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Glob patterns limiting automatic activation (Claude Code). The loader accepts a YAML list of strings only, not a single string."
     },
     "shell": {
       "type": "string",
-      "enum": ["bash", "powershell"],
-      "description": "Shell for command injection in this skill (Claude Code)"
+      "description": "Shell for command injection in this skill (Claude Code). The loader accepts any string."
     },
-    "harnesses": {
+    "overrides": {
       "type": "object",
-      "description": "Per-harness overrides (build-time config, stripped from rendered output). Keys are harness IDs (e.g., claude, codex).",
-      "patternProperties": {
-        "^[a-z][a-z0-9-]*$": {
-          "type": "object",
-          "description": "Override specific fields for this harness",
-          "properties": {
-            "variables": {
-              "type": "object",
-              "description": "Harness-specific variable overrides (merged with top-level variables, harness wins)",
-              "additionalProperties": true
-            },
-            "macros": {
-              "type": "object",
-              "description": "Harness-specific macro overrides for this skill only",
-              "additionalProperties": { "type": "string" }
-            }
+      "description": "Per-harness overrides (build-time config, stripped from rendered output). Keys are harness IDs (e.g., claude, codex). The loader rejects a `harnesses` key here.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Override variables and macros for this harness. Unknown keys are rejected.",
+        "properties": {
+          "variables": {
+            "type": "object",
+            "description": "Harness-specific variable overrides (merged with top-level variables, harness wins)",
+            "additionalProperties": true
           },
-          "additionalProperties": false
-        }
-      },
-      "additionalProperties": false
+          "macros": {
+            "type": "object",
+            "description": "Harness-specific macro overrides for this skill only. Values are strings.",
+            "additionalProperties": { "type": "string" }
+          }
+        },
+        "additionalProperties": false
+      }
     }
   },
-  "required": ["name", "description"],
+  "required": ["skillprism"],
   "additionalProperties": false
 }
