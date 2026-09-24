@@ -1,4 +1,8 @@
 entries:
+  - version: v1.0.0
+    date: 2026-09-24
+    changed: ["Replaced the markdown constitution with structured records."]
+    by: migrate
   - version: v0.2.1
     date: 2026-09-24
     changed: [Filled jobs from the vision.md jobs table. Bootstrap is P1 because scaffolding capabilities are P1 and no flow covers init, Restored the --target capability row that the migrator split on a pipe, Wrote binary constraint meters from the prose constraints. Deferred performance because v1 states no latency target, "Cleared glossary do_not_use lists. The old bans were generic English and technical words, which the checker forbids"]

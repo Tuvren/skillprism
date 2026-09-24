@@ -25,7 +25,7 @@ tickets:
         Given a harness with project_scope_path containing "../" traversal
           When resolving the skill output path
           Then the router returns an error rejecting path traversal
-        
+
           Given a harness with a valid project_scope_path
           When resolving the skill output path
           Then the path resolves normally within the project root
@@ -49,7 +49,7 @@ tickets:
         Given existing files at target paths
           When running build without --force
           Then the user is prompted with a diff summary before each overwrite
-        
+
           Given running build with --force
           When existing files are encountered
           Then files are overwritten without prompting
@@ -74,7 +74,7 @@ tickets:
           When SIGINT is received
           Then in-progress writes are abandoned cleanly
           And exit code is 130
-        
+
           Given a build operation in progress
           When SIGTERM is received
           Then in-progress writes are abandoned cleanly
@@ -140,7 +140,7 @@ tickets:
           When both resolve to the same output path
           Then a path collision error is reported for both skills
           And the build fails before any writes occur
-        
+
           Given no path collisions
           When the build runs
           Then writing proceeds normally
@@ -164,7 +164,7 @@ tickets:
         Given a template with a syntax error at a specific line
           When rendering fails
           Then the error message includes the file path, line number, and column
-        
+
           Given a template with an undefined variable
           When rendering fails
           Then the error message includes the variable name and source location
@@ -209,7 +209,7 @@ tickets:
         Given $HOME is not set in the environment
           When running build --target user
           Then an error message says "$HOME is not set"
-        
+
           Given $HOME is set
           When running build --target user
           Then user paths resolve against $HOME as before

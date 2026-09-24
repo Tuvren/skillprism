@@ -25,7 +25,7 @@ tickets:
         Given the built binary
           When generating bash completions
           Then the output can be sourced to enable tab completion for all subcommands and flags
-        
+
           Given completion files are generated
           When inspecting the bash completion output
           Then it includes the build, validate, and init subcommands
@@ -50,7 +50,7 @@ tickets:
           When executing
           Then it behaves identically to build --diff
           And no files are written
-        
+
           Given the CLI help output
           When inspecting
           Then both --dry-run and --diff are listed
@@ -96,7 +96,7 @@ tickets:
           Then every subcommand has a description and usage line
           And all flags are listed with consistent descriptions
           And no placeholder or TODO text appears in help output
-        
+
           Given the built binary
           When running skillprism build --help
           Then --dry-run and --diff are both listed
@@ -184,7 +184,7 @@ tickets:
         Given the Cargo.toml
           When running cargo publish --dry-run
           Then it passes without errors
-        
+
           Given the dry-run passes
           When publishing to crates.io
           Then the crate is available under the skillprism name

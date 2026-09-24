@@ -1,7 +1,5 @@
 # Resilience & Cross-Cutting Concerns
 
-**Version:** v0.1.0
-
 ## Error Handling
 
 | Concern | Design |

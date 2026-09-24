@@ -1,4 +1,10 @@
 entries:
+  - version: v1.0.0
+    date: 2026-09-24
+    changed: ["Replaced the markdown constitution with structured records."]
+    upstream:
+      prd: v1.0.0
+    by: migrate
   - version: v0.2.3
     date: 2026-09-24
     changed: [Wrote boundaries and edges from containers.md. The migrator did not recognize the responsibility tables, "Mapped each existing flow to the job and capabilities it already names. Flows were not merged: each one is a distinct pipeline story"]

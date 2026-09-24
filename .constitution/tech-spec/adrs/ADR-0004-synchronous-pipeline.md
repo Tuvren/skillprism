@@ -11,7 +11,7 @@ assumption: "Migrated; the decision's ruling reference was not found in the stat
 
 ## Context
 
-The architecture's pipe-and-filter pipeline is sequential by design: Load → Resolve → Validate → Render → Route/Write. Each stage depends on the previous. The PRD expects sub-second build times for 5–20 skills. Concurrency would add Tokio dependency overhead.
+The architecture's pipe-and-filter pipeline is sequential by design: Load → Resolve → Validate → Render → Route/Write. Each stage depends on the previous. Assumption, not a requirement: a project of 5–20 skills is small enough that concurrency is not worth a Tokio dependency. The performance constraint is deferred, and a sub-second build is not a PRD requirement.
 
 ## Decision
 

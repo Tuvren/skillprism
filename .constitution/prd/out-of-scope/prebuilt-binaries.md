@@ -1,9 +1,11 @@
 ---
 decision: deferred
-date: "2026-09-24"
+date: "2026-06-17"
 ---
 # Out of Scope: Pre-built Binary Distribution
 
 **Context:** Determined out of scope during initial scope definition.
 
-**Reasoning:** v1 distributes via Cargo build from source. Pre-built binaries (Homebrew taps, GitHub Releases with asset uploads, etc.) introduce CI/CD, signing, and platform-specific packaging complexity that is better addressed after the core tool is validated.
+**Reasoning:** v1 originally distributed via Cargo build from source. Store-style packaging such as Homebrew taps still adds signing and platform-specific packaging work that remains deferred.
+
+GitHub Release binaries shipped with Epic H and are in scope. Homebrew taps remain deferred.

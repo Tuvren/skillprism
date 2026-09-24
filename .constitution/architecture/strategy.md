@@ -1,8 +1,6 @@
 # Architecture Strategy
 
-**Version:** v0.2.2 (see [changelog.md](./changelog.md))
-
-> **PRD alignment:** BD-1/BD-2 were updated in PRD v0.1.1 to reflect deploy-first (project scope default). See `.constitution/prd/capabilities.md`.
+> **PRD alignment:** BD-1/BD-2 were updated in PRD v0.1.1 to reflect deploy-first (project scope default). See `.constitution/prd/capabilities.yaml`.
 
 ## Architectural Pattern
 
@@ -28,7 +26,7 @@ The CLI entrypoint dispatches to the appropriate pipeline variant or directly to
 
 | Sacrifice | Why it's acceptable |
 | :--- | :--- |
-| **No concurrent rendering** — Skills render sequentially in the pipeline. | Typical projects have 5-20 skills with sub-second render times. Concurrency adds coordination complexity for no measurable gain. |
+| **No concurrent rendering** — Skills render sequentially in the pipeline. | Assumption, not a requirement: a typical project of 5-20 skills is small enough that concurrency adds coordination complexity for no measurable gain. The performance constraint is deferred, and a sub-second build is not a PRD requirement. |
 | **No hot-reload** — Harness definitions are compiled into the binary. Adding or modifying a harness requires a rebuild. | PRD constraint requires harness definitions to ship with the tool and follow its release cycle. The compiled-in approach keeps the binary self-contained. |
 | **No pluggable renderers** — Only one template engine is supported. | The PRD's template engine choice is settled. Supporting multiple template engines would add abstraction overhead without demand. |
-| **Synchronous pipeline** — Each stage blocks until the previous completes. | CLI tool expected to run in <1s. Async would add complexity without perceptible benefit. |
+| **Synchronous pipeline** — Each stage blocks until the previous completes. | Assumption, not a requirement: a CLI of this size is expected to finish quickly enough that async would add complexity without a perceptible benefit. The performance constraint is deferred, and a sub-second build is not a PRD requirement. |

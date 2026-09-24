@@ -1,6 +1,6 @@
 ---
 decision: deferred
-date: "2026-09-24"
+date: "2026-06-17"
 ---
 # Out of Scope: Variable Schema Enforcement
 

@@ -1,7 +1,7 @@
 # Spike Report: CLEAN-G006 Evaluate yaml_serde → serde_yml Migration
 
 ## 1. Context & Objective
-- **Triggering upstream file/section:** `.constitution/tech-spec/stack.md` — YAML deserialization via `yaml_serde 0.10.x`
+- **Triggering upstream file/section:** `.constitution/tech-spec/stack.yaml` — YAML deserialization via `yaml_serde 0.10.x`
 - **Target:** Determine whether `yaml_serde` (a fork of the deprecated `serde_yaml`) should be replaced with `serde_yml`, and estimate migration effort.
 
 ## 2. Codebase Baseline

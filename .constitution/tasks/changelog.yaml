@@ -1,4 +1,12 @@
 entries:
+  - version: v2.0.0
+    date: 2026-09-24
+    changed: ["Replaced the markdown constitution with structured records."]
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+      tech-spec: v1.0.0
+    by: migrate
   - version: v1.0.1
     date: 2026-09-24
     changed: ["Set the project acronym to SKP. Per-epic prefixes cannot satisfy the ticket-id rule, which requires one acronym", Renamed completed ticket ids from their epic prefix to SKP-<epic><nnn>. The old ids remain in git history, "Recorded epic dependencies from the epic headers: B on A, C on B, F on D, G on F, H on G, I on H. E states no code dependency", Set scope paths from the modules each epic delivered. Estimates stay migrated and are not copied from actuals]

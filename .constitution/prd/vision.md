@@ -1,7 +1,5 @@
 # Vision
 
-**Version:** v0.1.0 (see [changelog.md](./changelog.md))
-
 ## Executive Summary
 
 skillprism is a build-time compiler that transforms a single canonical skill source (MiniJinja templates with harness-aware macros) into correct, harness-specific output files for every major agent platform. It eliminates manual cross-harness duplication so that one skill change propagates to Claude Code, Codex, OpenCode, Factory, Pi, and beyond — without editing N copies.

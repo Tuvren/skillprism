@@ -49,7 +49,7 @@ boundaries:
     name: Validator
     kind: module
     type: Library boundary
-    responsibility: "Check MiniJinja syntax, undefined variables, and macro references for every resolved pair, and collect every error."
+    responsibility: "Check template syntax, undefined variables, and macro references for every resolved pair, and collect every error."
     inputs: ["Resolved skill-harness pairs"]
     outputs: ["Valid pairs plus a collected list of validation errors"]
     depends_on: [BND-04]
@@ -201,9 +201,9 @@ edges:
     protocol: file-handoff
     note: "Copies local sources and writes installed files."
   - from: BND-09
-    to: git
+    to: Source host
     protocol: other
-    note: "Shallow clone and ls-remote through the git binary. The only network surface."
+    note: "Shallow clone and ls-remote. The tech-spec chose the git binary. The only network surface."
   - from: BND-10
     to: Filesystem
     protocol: file-handoff

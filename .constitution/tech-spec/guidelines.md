@@ -179,8 +179,6 @@ commit_convention: Conventional Commits
 ---
 # Guidelines & Project Structure
 
-**Version:** v0.1.0
-
 ## Developer Environment (Phase 0)
 
 The project uses [devenv](https://devenv.sh/) for reproducible developer environments.

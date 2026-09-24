@@ -12,13 +12,13 @@ constraints:
   - id: NFC-02
     legacy_id: static-binary
     class: archetype
-    statement: "The release binary has no runtime libraries. Only add and update may spawn the git binary, which must already be on PATH."
+    statement: "The release binary bundles no language runtime and no network client. Only add and update may spawn git, which must already be on PATH."
     scale: "binary: the duty holds or it does not"
-    meter: "build, validate, init, and completions do not spawn a helper or link a runtime library. add and update spawn git and surface a missing git as a normal command error."
+    meter: "build, validate, init, and completions do not spawn a helper and do not bundle a language runtime or a network client. add and update may spawn git and surface a missing git as a normal command error."
     goal: holds
-    fail: "Any non-distribution command requires a runtime library or a network client, or a missing git is swallowed."
+    fail: "A non-distribution command bundles a language runtime or a network client, or a missing git is swallowed."
     certainty: assumed
-    assumption: "Migrated from the Binary Distribution section of constraints.md. The git exception is the v0.2.0 amendment."
+    assumption: "Migrated from the Binary Distribution section of constraints.md. The git exception is the v0.2.0 amendment. The Linux release target in .github/workflows/release.yml is x86_64-unknown-linux-gnu, so the binary links the system libc rather than a fully static musl link."
   - id: NFC-03
     legacy_id: actionable-errors
     class: operability

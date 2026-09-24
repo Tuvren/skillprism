@@ -1,4 +1,11 @@
 entries:
+  - version: v1.0.0
+    date: 2026-09-24
+    changed: ["Replaced the markdown constitution with structured records."]
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+    by: migrate
   - version: v0.11.2
     date: 2026-09-24
     changed: ["guidelines.md: layout harnesses marked exists: false"]

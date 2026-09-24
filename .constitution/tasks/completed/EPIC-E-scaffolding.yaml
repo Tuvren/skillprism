@@ -25,7 +25,7 @@ tickets:
         Given running init project --harnesses claude,codex,pi
           When the project is scaffolded
           Then skillprism.yaml contains harnesses: claude, codex, pi
-        
+
           Given running init project without --harnesses
           When the project is scaffolded
           Then skillprism.yaml contains the default harnesses (claude, opencode)
@@ -90,7 +90,7 @@ tickets:
         Given running init harness my-custom
           When the harness is scaffolded
           Then harnesses/my-custom.yaml exists with id, name, capabilities, and paths fields
-        
+
           Given the generated harness file
           When inspecting its content
           Then it contains placeholder values ready for editing

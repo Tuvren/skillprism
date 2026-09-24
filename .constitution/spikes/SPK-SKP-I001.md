@@ -4,12 +4,12 @@
 
 - **Triggering upstream file/section:** `.constitution/prd/out-of-scope/plugin-marketplace.md` (reopened by operator directive — skillprism expands from build-time compiler to distribution CLI).
 - **Target:** Determine how `skillprism add` should fetch skill sources from remote repositories, grounded in the actual implementation of Vercel's `skills` CLI at https://github.com/vercel-labs/skills.
-- **Outcome:** A recommended fetch methodology for skillprism, justified against `.constitution/prd/constraints.md` and `.constitution/architecture/strategy.md`, with the implementation tickets in Epic I pinned to the spike's findings.
+- **Outcome:** A recommended fetch methodology for skillprism, justified against `.constitution/prd/constraints.yaml` and `.constitution/architecture/strategy.md`, with the implementation tickets in Epic I pinned to the spike's findings.
 
 ## 2. Codebase Baseline
 
 - **skillprism today:** Single static binary, no runtime dependencies, synchronous pipeline. All existing commands (`build`, `validate`, `init`, `completions`) operate on local files only. ADR-0003 (single crate), ADR-0004 (synchronous), ADR-0005 (atomic writes).
-- **Constraints in force (before this spike):** `.constitution/prd/constraints.md` "single static binary with no runtime dependencies"; `.constitution/architecture/strategy.md` line 24 "No network, no daemon, no IPC."
+- **Constraints in force (before this spike):** `.constitution/prd/constraints.yaml` "single static binary with no runtime dependencies"; `.constitution/architecture/strategy.md` line 24 "No network, no daemon, no IPC."
 - **Existing target infrastructure:** `TargetScope` (project/user/dist) and `HarnessPaths` (project_scope_path/user_scope_path) are the install targets. The `find_template_path` helper at `src/loader/project.rs:121` returns one of `SKILL.md.j2`, `SKILL.md`, or `None` — the canonical source for template detection.
 
 ## 3. Vercel's actual implementation (confirmed by reading source)
@@ -115,7 +115,7 @@ The `ParsedSource` enum has variants `GitHub { url, ref, subpath, skill_filter }
 skillprism uses a single state file at `~/.config/skillprism/installed.yaml`:
 
 - **Format:** YAML, schema-versioned (top-level `version: 1`).
-- **Directory mode:** `0o700` (per-user only) — divergence from Vercel's umask-based mkdir, justified by `prd/constraints.md`'s safety section.
+- **Directory mode:** `0o700` (per-user only) — divergence from Vercel's umask-based mkdir, justified by `prd/constraints.yaml`'s safety section.
 - **Resolution:** `XDG_CONFIG_HOME` with `~/.config/skillprism/` fallback (per the spike's decision to align with XDG conventions rather than Vercel's `XDG_STATE_HOME` + `~/.agents/` split).
 - **Atomicity:** read-all / write-all via single temp-rename per ADR-0005.
 - **Per-skill fields** (modeled on Vercel's union of global+local fields, with skillprism-specific additions):
@@ -149,17 +149,17 @@ skills:
 
 ## 5. Constraint and strategy tension resolution
 
-### 5.1 `prd/constraints.md` — focused exception (per operator decision)
+### 5.1 `prd/constraints.yaml` — focused exception (per operator decision)
 
-The "no runtime dependencies" rule is amended to allow `git` for distribution commands only. See `.constitution/prd/constraints.md` (amended in this PR) and `.constitution/prd/changelog.md` v0.2.0.
+The "no runtime dependencies" rule is amended to allow `git` for distribution commands only. See `.constitution/prd/constraints.yaml` (amended in this PR) and `.constitution/prd/changelog.yaml` v0.2.0.
 
 ### 5.2 `architecture/strategy.md` — focused exception inline (per operator decision)
 
-Line 24 "No network, no daemon, no IPC" is amended to scope the exception to the distribution commands. See `.constitution/architecture/strategy.md` (amended in this PR) and `.constitution/architecture/changelog.md` v0.2.2.
+Line 24 "No network, no daemon, no IPC" is amended to scope the exception to the distribution commands. See `.constitution/architecture/strategy.md` (amended in this PR) and `.constitution/architecture/changelog.yaml` v0.2.2.
 
 ### 5.3 `ADR-0008: Network Layer for Distribution` (per operator decision)
 
-The design is recorded as a formal ADR. See `.constitution/tech-spec/adrs/ADR-0008-network-layer-for-distribution.md` (new in this PR) and `.constitution/tech-spec/changelog.md` v0.11.0.
+The design is recorded as a formal ADR. See `.constitution/tech-spec/adrs/ADR-0008-network-layer-for-distribution.md` (new in this PR) and `.constitution/tech-spec/changelog.yaml` v0.11.0.
 
 ## 6. Downstream Backlog Impact
 

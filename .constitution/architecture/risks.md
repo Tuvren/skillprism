@@ -1,7 +1,5 @@
 # Logical Risks & Technical Debt
 
-**Version:** v0.1.0
-
 | Risk | Likelihood | Impact | Mitigation |
 | :--- | :--- | :--- | :--- |
 | **Group-level variable inheritance ambiguity** — Deeply nested skill directories with multiple intermediate `skill.yaml` files can create surprising precedence behavior that is hard to debug. | Medium | Medium | Document the merge rule explicitly (single-level parent → child, not transitive merge). Validate by listing final resolved variables per skill in `--verbose` output. |

@@ -1,4 +1,26 @@
 bill_of_materials:
+  - name: Hugo
+    role: tooling
+    version: "0.163.3"
+    ecosystem: other
+    justification: "Site generator. The version is the hugo-extended pin in devenv.nix, matching the deploy workflow."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: devenv.nix
+      version: "0.163.3"
+      date: "2026-09-24"
+  - name: Node
+    role: runtime
+    version: ">=18"
+    ecosystem: other
+    justification: "Runtime for the npm launcher. package.json engines declares the minimum; no exact patch is pinned."
+    certainty: settled
+    evidence:
+      kind: repository
+      ref: npm/package.json
+      version: ">=18"
+      date: "2026-09-24"
   - name: Rust
     role: language
     version: "1.85"

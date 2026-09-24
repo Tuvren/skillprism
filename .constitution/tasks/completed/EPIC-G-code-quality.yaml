@@ -121,12 +121,12 @@ tickets:
     verification:
       command: cargo test
       expected: exit 0
-    description: "Research serde_yml as a replacement for yaml_serde (itself a fork of the deprecated serde_yaml). Compare API compatibility, maintenance status (last commit, open issues, downloads), and migration complexity. The spike report must include: API compatibility matrix, migration effort estimate in hours, and any breaking changes. Write findings to .constitution/spikes/SPK-CLEAN-G006.md"
+    description: "Research serde_yml as a replacement for yaml_serde (itself a fork of the deprecated serde_yaml). Compare API compatibility, maintenance status (last commit, open issues, downloads), and migration complexity. The spike report must include: API compatibility matrix, migration effort estimate in hours, and any breaking changes. Write findings to .constitution/spikes/SPK-SKP-G006.md"
     acceptance:
       mode: gherkin
       evidence: |
         Given the spike completes
-          When reading .constitution/spikes/SPK-CLEAN-G006.md
+          When reading .constitution/spikes/SPK-SKP-G006.md
           Then the report contains an API compatibility matrix
           And migration effort estimate
           And a clear recommendation (migrate now, defer, or don't migrate)
