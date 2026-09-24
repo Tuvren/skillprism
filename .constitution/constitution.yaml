@@ -4,7 +4,7 @@ archetype:
   primary: CLI/Tooling
   secondary: []
   confidence: high
-  rationale: "skillprism is a single static binary. A skill author runs it from a shell to compile and install skills. vision.md names that target, and the repository ships a clap CLI with no server."
+  rationale: "skillprism is a single native executable. A skill author runs it from a shell to compile and install skills. vision.md names that target, and the repository ships a clap CLI with no server."
 surfaces:
   - src/cli.rs
   - README.md

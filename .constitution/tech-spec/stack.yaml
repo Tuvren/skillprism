@@ -14,8 +14,9 @@ bill_of_materials:
     role: runtime
     version: ">=18"
     ecosystem: other
-    justification: "Runtime for the npm launcher. package.json engines declares the minimum; no exact patch is pinned."
-    certainty: settled
+    justification: "Runtime for the npm launcher. package.json engines declares a minimum, not an exact pin."
+    certainty: assumed
+    assumption: "The repository pins a compatibility floor of Node 18, not a reproducible patch."
     evidence:
       kind: repository
       ref: npm/package.json
@@ -25,7 +26,7 @@ bill_of_materials:
     role: language
     version: "1.85"
     ecosystem: system
-    justification: "Single static binary and edition 2024. Pinned in rust-toolchain.toml."
+    justification: "Single native executable and edition 2024. Pinned in rust-toolchain.toml."
     certainty: settled
     evidence:
       kind: repository

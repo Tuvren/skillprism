@@ -2,10 +2,10 @@
 decision: deferred
 date: "2026-06-17"
 ---
-# Out of Scope: Pre-built Binary Distribution
+# Out of Scope: Store packaging
 
-**Context:** Determined out of scope during initial scope definition.
+**Context:** Determined out of scope during initial scope definition. Narrowed after Epic H shipped GitHub Release binaries.
 
-**Reasoning:** v1 originally distributed via Cargo build from source. Store-style packaging such as Homebrew taps still adds signing and platform-specific packaging work that remains deferred.
+**Reasoning:** GitHub Release binaries are in scope. They shipped with Epic H. This record defers only store-style packaging, such as Homebrew taps, which still adds signing and platform-specific packaging work.
 
-GitHub Release binaries shipped with Epic H and are in scope. Homebrew taps remain deferred.
+Homebrew taps remain deferred. GitHub Release binaries are not deferred.

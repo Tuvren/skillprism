@@ -38,7 +38,7 @@ sequenceDiagram
   Resolver-->>CLI: Vec<ResolvedPair>
 
   CLI->>Valid8: validate(pairs)
-  Valid8->>Valid8: undeclared_variables() via MiniJinja
+  Valid8->>Valid8: undeclared_variables() via the template engine
   Valid8->>Valid8: scan for harness.<name> refs
   Valid8-->>CLI: validated (or errors)
 

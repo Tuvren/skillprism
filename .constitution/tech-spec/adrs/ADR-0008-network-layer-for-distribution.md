@@ -13,7 +13,7 @@ assumption: "Migrated; the decision's ruling reference was not found in the stat
 
 Epic I (Distribution CLI) introduces the `add` and `update` commands, which fetch skill sources from remote repositories and require network access. This conflicts with two upstream decisions:
 
-- `.constitution/prd/constraints.yaml` "single static binary with no runtime dependencies" (now amended in v0.2.0 to allow `git` for distribution commands only).
+- `.constitution/prd/constraints.yaml` NFC-02: no bundled language runtime and no bundled network client, amended to allow a source-control client for distribution commands only.
 - `.constitution/architecture/strategy.md` line 24 "No network, no daemon, no IPC" (now amended in v0.2.2 to allow network access for distribution commands only).
 
 The spike at `.constitution/spikes/SPK-SKP-I001.md` was conducted to determine the fetch methodology. The spike grounded its recommendation in the actual implementation of Vercel's `skills` CLI (https://github.com/vercel-labs/skills) and concluded that shelling out to `git` directly is the right approach: it matches Vercel's two-year production track record, adds zero new Rust dependencies, and supports the full git URL space (private SSH-key repos, GitLab, self-hosted, refs, subpaths).
@@ -66,6 +66,6 @@ For non-GitHub hosts (GitLab, self-hosted), only layer 1 is used. The auth chain
   - The `gh` CLI fallback requires another optional binary on PATH.
   - Vercel's two-file JSON lock design is intentionally not copied; we use a single YAML file (see `.constitution/spikes/SPK-SKP-I001.md` §4.4).
 - **Mitigation:**
-  - The `git` dependency is documented in the README and the `init`/`build` commands remain purely static-binary.
+  - The source-control client is documented in the README, and the `init` and `build` commands do not bundle a language runtime or a network client.
   - The `gh` fallback is non-blocking and degrades gracefully if `gh` is missing.
   - The `find` command (deferred to a future epic) would be the natural place to revisit the auth chain for directory/registry use cases.

@@ -203,7 +203,7 @@ edges:
   - from: BND-09
     to: Source host
     protocol: other
-    note: "Shallow clone and ls-remote. The tech-spec chose the git binary. The only network surface."
+    note: "Shallow clone and ls-remote through the source-control client. The only network surface."
   - from: BND-10
     to: Filesystem
     protocol: file-handoff

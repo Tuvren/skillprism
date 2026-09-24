@@ -36,7 +36,7 @@ sequenceDiagram
   CLI->>Valid8: validate(pairs)
 
   loop over every ResolvedPair
-    Valid8->>Valid8: undeclared_variables() via MiniJinja
+    Valid8->>Valid8: undeclared_variables() via the template engine
     Valid8->>Valid8: scan for harness.<name> refs
     Valid8->>Valid8: check template syntax
   end

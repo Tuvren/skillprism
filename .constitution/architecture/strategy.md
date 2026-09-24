@@ -4,7 +4,7 @@
 
 ## Architectural Pattern
 
-**Local-first compilation pipeline** (pipe-and-filter within a single static binary).
+**Local-first compilation pipeline** (pipe-and-filter within a single native executable).
 
 The system is a sequential pipeline of independent processing stages. Each stage transforms its input and passes it to the next. Two pipeline variants share the first three stages:
 
@@ -19,7 +19,7 @@ The CLI entrypoint dispatches to the appropriate pipeline variant or directly to
 
 1. **Natural decomposition** — A build-time compiler is inherently sequential: you must load configuration before you can validate it, validate before you render, render before you write. Pipe-and-filter makes the dependency chain explicit.
 2. **Validate reuses build stages** — The validate command (`VA-1`) shares Load → Resolve → Validate with the build command, reducing duplication by construction.
-3. **Single-binary core with distribution exception** — The `build`, `validate`, `init`, and `completions` commands run all filters in-process and have no network, no daemon, no IPC. The `add` and `update` distribution commands (Epic I) are the **single exception**: they perform network access by shelling out to `git` for shallow clones. This is the only network surface in skillprism, and it makes no persistent connections, no daemons, and no IPC. The pipeline becomes a function composition chain for the in-process subset; the distribution commands add a thin network shim that does not violate the static-binary guarantee of the rest.
+3. **Single-binary core with distribution exception** — The `build`, `validate`, `init`, and `completions` commands run all filters in-process and have no network, no daemon, no IPC. The `add` and `update` distribution commands (Epic I) are the **single exception**: they perform network access by shelling out to `git` for shallow clones. This is the only network surface in skillprism, and it makes no persistent connections, no daemons, and no IPC. The pipeline becomes a function composition chain for the in-process subset; the distribution commands add a thin network shim that does not bundle a language runtime or a network client into the executable.
 4. **Collect-all-errors** — The Validate stage is a batch accumulator that inspects every skill before reporting, then passes the validated model to Render. This satisfies the operator's choice of collect-all-errors over fail-fast.
 
 ## Trade-offs Accepted
