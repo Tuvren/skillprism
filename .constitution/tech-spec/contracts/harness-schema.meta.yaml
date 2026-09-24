@@ -1,7 +1,7 @@
-artifact: harness-schema.json
+artifact_path: schemas/harness-schema.json
 surface: json
 flows: [flow-builtin-harness, flow-override-harness]
 boundaries: [BND-03]
 certainty: assumed
-assumption: "JSON Schema for a harness definition. Moving it into the code is the upgrade's artifact phase."
+assumption: "The schema moved to schemas/ unchanged. No test validates a harness definition against it yet."
 settles_when: "A test validates a built-in harness definition against this schema."

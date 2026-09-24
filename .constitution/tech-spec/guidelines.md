@@ -24,6 +24,9 @@ verification_commands:
     command: devenv test
     exists: true
 layout:
+  - path: schemas
+    purpose: JSON schemas for harness definitions, project config, and skill.yaml
+    exists: true
   - path: Cargo.toml
     purpose: Package manifest (single crate)
   - path: Cargo.lock

@@ -1,4 +1,4 @@
-artifact: cli.rs
+artifact_path: src/cli.rs
 surface: cli
 flows:
   - flow-build-project
@@ -15,5 +15,5 @@ flows:
   - flow-validate
 boundaries: [BND-01]
 certainty: assumed
-assumption: "The command tree in this file documents the CLI. Moving it into the code is the upgrade's artifact phase."
-settles_when: "A test asserts the clap command tree matches this contract."
+assumption: "The command tree in src/cli.rs is the contract. The tech-spec copy was behind the code and has been deleted."
+settles_when: "A test asserts the clap command tree for build, validate, init, completions, add, list, remove, and update."
