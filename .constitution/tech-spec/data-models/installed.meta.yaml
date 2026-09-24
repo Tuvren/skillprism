@@ -1,0 +1,11 @@
+artifact_path: src/state/installed.rs
+surface: data-model
+flows: []
+boundaries: [BND-10]
+companion: installed.md
+certainty: settled
+evidence:
+  kind: repository
+  ref: src/state/installed.rs
+  date: "2026-09-24"
+  note: "creates_empty_state_file writes version 1, unsupported_version_rejected rejects another version, and roundtrip_preserves_full_record reads and writes a full record."

@@ -23,6 +23,29 @@ verification_commands:
     label: Developer environment checks
     command: devenv test
     exists: true
+live_verification:
+  - name: validate-examples
+    surface: cli
+    launch: cargo build
+    doctor: cargo run --quiet -- --version
+    drive: cargo run --quiet -- validate examples
+    drive_kind: command
+    evidence:
+      kind: log_line
+      ref: "Validation passed"
+    cleanup: "true"
+    exists: true
+  - name: list-empty
+    surface: cli
+    launch: cargo build
+    doctor: cargo run --quiet -- --version
+    drive: env XDG_CONFIG_HOME=$(mktemp -d) cargo run --quiet -- list
+    drive_kind: command
+    evidence:
+      kind: log_line
+      ref: "No installed skills"
+    cleanup: "true"
+    exists: true
 layout:
   - path: schemas
     purpose: JSON schemas for harness definitions, project config, and skill.yaml
@@ -275,6 +298,10 @@ skillprism/
 │       └── webapp-testing/  # Real skill ported from anthropics/skills
 └── harnesses/              # Users' override directory (documented, not shipped)
 ```
+
+## Live verification
+
+The CLI recipes run the built binary: one validates the examples project, and one lists an empty install store under a directory `mktemp` creates. That directory is left in place, because cleanup cannot name a directory the drive just created. The empty-list line is on stderr, which is that command's status stream. The docs site is not a live recipe. Serving it needs a long-running process this command format does not stop reliably, and `hugo --gc --minify -s site` is already a verification command. The npm launcher is not a local recipe: it downloads a GitHub Release, so it cannot run without network access and a published release.
 
 ## Coding Standards
 
