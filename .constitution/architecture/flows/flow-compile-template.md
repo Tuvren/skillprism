@@ -1,3 +1,11 @@
+---
+job: JOB-01
+capabilities: [CAP-001]
+boundaries: [BND-01, BND-02, BND-03, BND-04, BND-05, BND-06, BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Compile a Template
 
 **PRD Capability:** TC-1 — Compile a template into a harness-specific SKILL.md file, resolving macro references and variable substitutions from the harness definition and skill configuration.

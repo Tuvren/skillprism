@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-24"
+---
 # Out of Scope: Template Testing Framework
 
 **Context:** Determined out of scope during initial scope definition.

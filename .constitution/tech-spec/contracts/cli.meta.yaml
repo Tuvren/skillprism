@@ -1,0 +1,19 @@
+artifact: cli.rs
+surface: cli
+flows:
+  - flow-build-project
+  - flow-builtin-harness
+  - flow-compile-template
+  - flow-copy-assets
+  - flow-deploy-user
+  - flow-diff-output
+  - flow-fail-on-error
+  - flow-generate-manifest
+  - flow-generate-sidecar
+  - flow-merge-variables
+  - flow-override-harness
+  - flow-validate
+boundaries: [BND-01]
+certainty: assumed
+assumption: "The command tree in this file documents the CLI. Moving it into the code is the upgrade's artifact phase."
+settles_when: "A test asserts the clap command tree matches this contract."

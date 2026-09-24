@@ -1,0 +1,109 @@
+id: E
+name: Scaffolding Enhancements
+kind: product
+capabilities: [CAP-013, CAP-014]
+depends_on: []
+scope:
+  paths: [src/scaffold, src/cli.rs]
+  tech_spec_patchable: []
+estimate_source: migrated
+tickets:
+  - id: SKP-E001
+    title: init project --harnesses Flag
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/scaffold, src/cli.rs]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add a --harnesses flag to init project that accepts a comma-separated list of harness IDs instead of hardcoding claude, opencode. Default remains claude, opencode when flag is omitted. Update the generated skillprism.yaml to include only the specified harnesses. Also rename the existing init skill --targets flag to --harnesses for naming consistency across both init subcommands"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given running init project --harnesses claude,codex,pi
+          When the project is scaffolded
+          Then skillprism.yaml contains harnesses: claude, codex, pi
+        
+          Given running init project without --harnesses
+          When the project is scaffolded
+          Then skillprism.yaml contains the default harnesses (claude, opencode)
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-E002
+    title: init project Creates Sample Skill
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/scaffold, src/cli.rs]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Make init project scaffold a sample skill inside the skills/ directory. The sample skill should include a skill.yaml with description and a SKILL.md.j2 template that demonstrates variable substitution and harness macro usage. This fulfills the PRD's SC-1 requirement for \"a sample skill template.\""
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given running init project
+          When the project is scaffolded
+          Then skills/ contains a sample skill directory with skill.yaml and SKILL.md.j2
+          And the sample template demonstrates at least {{ skill_name }} and {{ harness.id }}
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-E003
+    title: init Skill Creates Asset Directories
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src/scaffold, src/cli.rs]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Update init skill to create references/ and scripts/ subdirectories inside the skill directory. These are the standard asset directories that the engine's copy_assets expects. The engine silently skips missing asset dirs, but the scaffold should set them up correctly"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given running init skill
+          When the skill is scaffolded
+          Then the skill directory contains references/ and scripts/ subdirectories
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-E004
+    title: init harness Command
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/scaffold, src/cli.rs]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Add init harness subcommand that scaffolds a new custom harness definition YAML file in the harnesses/ directory. The generated file includes all required fields (id, name, capabilities, paths) with placeholder values. User edits the file to customize. This supports HS-3 (P1: user-defined harnesses) by making harness creation discoverable"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given running init harness my-custom
+          When the harness is scaffolded
+          Then harnesses/my-custom.yaml exists with id, name, capabilities, and paths fields
+        
+          Given the generated harness file
+          When inspecting its content
+          Then it contains placeholder values ready for editing
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [SKP-E001, SKP-E002, SKP-E003, SKP-E004]
+  tickets_deferred: []
+  points_completed: 7
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

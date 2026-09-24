@@ -1,3 +1,7 @@
+---
+decision: deferred
+date: "2026-09-24"
+---
 # Out of Scope: Variable Schema Enforcement
 
 **Context:** Determined non-goal during initial scope definition.

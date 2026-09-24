@@ -1,0 +1,7 @@
+artifact: skill-schema.json
+surface: json
+flows: [flow-compile-template, flow-merge-variables, flow-copy-assets]
+boundaries: [BND-02]
+certainty: assumed
+assumption: "JSON Schema for skill.yaml. Moving it into the code is the upgrade's artifact phase."
+settles_when: "A test validates a skill file against this schema."

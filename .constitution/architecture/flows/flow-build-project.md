@@ -1,3 +1,11 @@
+---
+job: JOB-06
+capabilities: [CAP-010]
+boundaries: [BND-01, BND-07]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Build to Project Scope
 
 **PRD Capability:** BD-1 — Write all generated output to project-level harness paths by default, with each subdirectory mirroring the exact layout that harness expects.

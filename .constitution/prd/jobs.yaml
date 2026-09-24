@@ -1,0 +1,43 @@
+jobs:
+  - id: JOB-01
+    legacy_id: JTBD 1
+    actor: Skill Author
+    statement: "When a skill's shared logic changes, update one template and have every harness output reflect the change, with no manual propagation."
+    priority: P0
+    certainty: assumed
+    assumption: "Migrated from the jobs table in vision.md. That table did not set priority. P0 matches the template-compilation capabilities that serve this job."
+  - id: JOB-02
+    legacy_id: JTBD 2
+    actor: Skill Author
+    statement: "When a new agent platform appears, add a harness definition without editing any skill template."
+    priority: P0
+    certainty: assumed
+    assumption: "Migrated from the jobs table in vision.md. Priority was not stated there. P0 matches the harness-support capabilities that serve this job."
+  - id: JOB-03
+    legacy_id: JTBD 3
+    actor: Skill Author
+    statement: "Before overwriting installed skills, diff the generated output against the current files and confirm it is correct."
+    priority: P0
+    certainty: assumed
+    assumption: "Migrated from the jobs table in vision.md. Priority was not stated there. P0 matches the diff capability that serves this job."
+  - id: JOB-04
+    legacy_id: JTBD 4
+    actor: Skill Author
+    statement: "When starting a multi-harness skill library, run one command that scaffolds the project layout, config, and a sample skill."
+    priority: P1
+    certainty: assumed
+    assumption: "Migrated from the jobs table in vision.md. Set to P1 because the scaffolding capabilities are P1 and architecture has no init flow."
+  - id: JOB-05
+    legacy_id: JTBD 5
+    actor: Skill Author
+    statement: "During authoring or CI, fail the build on a missing macro, an undefined variable, or malformed configuration instead of shipping a broken skill."
+    priority: P0
+    certainty: assumed
+    assumption: "Migrated from the jobs table in vision.md. Priority was not stated there. P0 matches the fail-closed and validate capabilities."
+  - id: JOB-06
+    legacy_id: JTBD 6
+    actor: Skill Author
+    statement: "After a build, install the generated skills in the correct harness-specific directory with one flag."
+    priority: P0
+    certainty: assumed
+    assumption: "Migrated from the jobs table in vision.md. Priority was not stated there. P0 matches the build-and-deploy capabilities that serve this job."

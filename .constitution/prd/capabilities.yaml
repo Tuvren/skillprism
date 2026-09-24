@@ -1,0 +1,136 @@
+capabilities:
+  - id: CAP-001
+    legacy_id: TC-1
+    group: Template compilation
+    priority: P0
+    statement: "Compile a template into a harness-specific SKILL.md file, resolving macro references and variable substitutions from the harness definition and skill configuration."
+    rationale: "Core function of the tool. Every other capability depends on this."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-002
+    legacy_id: TC-2
+    group: Template compilation
+    priority: P0
+    statement: "Copy shared assets (references/ and scripts/) from the skill source to each harness output directory unchanged."
+    rationale: "Skills depend on these files. They must not be duplicated or modified."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-003
+    legacy_id: TC-3
+    group: Template compilation
+    priority: P0
+    statement: "Merge group-level variables with per-skill variables, with the skill winning, before rendering each template."
+    rationale: "Enables shared configuration for skill groups while allowing individual overrides."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-004
+    legacy_id: TC-4
+    group: Template compilation
+    priority: P0
+    statement: "Generate harness-specific sidecar files from inline templates defined in the harness definition."
+    rationale: "Harnesses such as Codex require companion metadata files alongside each skill."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-005
+    legacy_id: TC-5
+    group: Template compilation
+    priority: P0
+    statement: "Generate harness-specific plugin manifests that register skills with the agent's discovery system."
+    rationale: "Harnesses require manifests, such as marketplace.json, for skills to be discoverable."
+    jobs: [JOB-01]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-006
+    legacy_id: TC-6
+    group: Template compilation
+    priority: P0
+    statement: "Fail the build on any missing macro reference or undefined template variable."
+    rationale: "Prevents deploying a broken skill. Catches the error at build time, not at agent invocation."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-007
+    legacy_id: HS-1
+    group: Harness support
+    priority: P0
+    statement: "Ship built-in harness definitions for Claude Code, Codex, OpenCode, Factory, and Pi that cover skill format, installation paths, subagent API patterns, invocation syntax, front matter fields, sidecar requirements, and validation strictness."
+    rationale: "Covers the five most common agent platforms out of the box, based on real-world validation."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-008
+    legacy_id: HS-2
+    group: Harness support
+    priority: P0
+    statement: "Allow users to override a built-in harness definition by placing a harnesses/{name}.yaml file in the project root."
+    rationale: "Power users can customize harness behavior without forking the tool."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-009
+    legacy_id: HS-3
+    group: Harness support
+    priority: P1
+    statement: "Allow users to define an entirely new harness, not only an override, by placing harnesses/{name}.yaml in the project root."
+    rationale: "Enables support for a niche or future agent platform without waiting for the tool to ship it."
+    jobs: [JOB-02]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-010
+    legacy_id: BD-1
+    group: Build and deployment
+    priority: P0
+    statement: "Write all generated output directly to harness-specific agent paths, project scope by default, with each target directory mirroring the layout that harness expects."
+    rationale: "Skills are usable after build, with no separate deploy step."
+    jobs: [JOB-06]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-011
+    legacy_id: BD-2
+    group: Build and deployment
+    priority: P0
+    statement: "Accept a --target flag (project, user, or dist) that reroutes output to project-level agent paths, user-level agent paths, or a dist/ directory for inspection."
+    rationale: "One-command targeting for the correct scope. dist/ lets CI inspect artifacts without touching live agent paths."
+    jobs: [JOB-06]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. The table cell contained a pipe, which the migrator split. Restored from the original row."
+  - id: CAP-012
+    legacy_id: VA-1
+    group: Validation
+    priority: P0
+    statement: "Provide a validate command that checks template syntax, variable definitions, and macro references without writing output."
+    rationale: "Enables CI and authoring-time verification without side effects."
+    jobs: [JOB-05]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-013
+    legacy_id: SC-1
+    group: Scaffolding
+    priority: P1
+    statement: "Provide an init command that scaffolds a new skillprism project: skillprism.yaml, a sample skill template, and a harnesses/ directory."
+    rationale: "Reduces time to first build for a new user and establishes the project layout."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-014
+    legacy_id: SC-2
+    group: Scaffolding
+    priority: P1
+    statement: "Provide an init command variant that scaffolds a single skill within an existing project."
+    rationale: "Enables incremental adoption. Add skills one at a time to an existing skills repository."
+    jobs: [JOB-04]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."
+  - id: CAP-015
+    legacy_id: OB-1
+    group: Observability
+    priority: P0
+    statement: "Generate a diff preview that compares rendered output against whatever currently exists at the target paths, without writing anything."
+    rationale: "Prevents an accidental overwrite and enables a review workflow."
+    jobs: [JOB-03]
+    certainty: assumed
+    assumption: "Migrated from capabilities.md. Not yet confirmed against a ruling beyond that file."

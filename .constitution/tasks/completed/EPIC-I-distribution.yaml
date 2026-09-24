@@ -1,0 +1,520 @@
+id: I
+name: Distribution CLI
+kind: product
+capabilities: []
+depends_on: [H]
+scope:
+  paths: [src/distribution, src/state, src/cli.rs, npm, site]
+  tech_spec_patchable: []
+estimate_source: migrated
+tickets:
+  - id: SKP-I001
+    title: State Tracking Layer
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement a system-wide state tracking layer in ~/.config/skillprism/ that records installed skills. The state file is installed.yaml (YAML, schema-versioned). The directory is created with mode 0o700 (per-user only) and resolved via XDG_CONFIG_HOME with ~/.config/skillprism/ fallback. On macOS, ~/.config/ is a non-standard path (Apple's HIG is ~/Library/Application Support/skillprism/); skillprism follows the XDG convention because XDG_CONFIG_HOME is respected by enough cross-platform tooling to outweigh Apple-platform aesthetics, and a future ticket can layer in a macOS-specific path if it becomes a real complaint. A new src/state/ module encapsulates read/write/query operations"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        version: 1
+          skills:
+            - name: my-skill
+              source: anthropics/skills@pdf                   # the input string the user passed
+              sourceUrl: https://github.com/anthropics/skills.git
+              sourceType: github                              # github | gitlab | git | local | wellknown
+              ref: main                                       # branch/tag/SHA at install time (null for local)
+              resolvedRef: 9f2c...                            # (impl extension) concrete commit SHA HEAD resolved to; powers the `update` ls-remote no-op check (DIST-I005)
+              skillPath: skills/pdf                           # subpath within the source (null if root)
+              projectRoot: /path/to/project                   # (impl extension) project root captured at install; needed for update/remove path resolution (null for user scope)
+              scope: project                                  # project | user
+              harnesses: [claude, opencode]
+              format: skillprism                              # skillprism | plain
+              installedAt: 2026-07-02T14:23:45Z
+              updatedAt: 2026-07-02T14:23:45Z
+              files:                                          # per-file records for change detection
+                - path: .claude/skills/my-skill/SKILL.md      # (impl) stored ABSOLUTE for project scope — resolved under `projectRoot`; the relative form here is illustrative
+                  hash: sha256:abc123...
+                - path: .claude/skills/my-skill/references/api.md
+                  hash: sha256:def456...
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I002
+    title: "add Command — Fetch, Auto-Detect, Render, Write"
+    type: Feature
+    effort: 8
+    depends_on: [SKP-I001]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement the skillprism add <source> command. The source is one of the v1-scoped forms from spike §4.3 (local paths, github:/gitlab: prefixes, full GitHub/GitLab URLs, owner/repo shorthand with @skill and #<ref> variants, .well-known/agent-skills/index.json discovery, source alias map). The command parses the source, fetches the repo via the spike's mechanism, walks it for skill directories, and for each skill auto-detects the format"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a skillprism-format skill repo with `skill.yaml` declaring `skillprism: '1'` and `SKILL.md`
+        When the user runs `skillprism add owner/repo`
+        Then the repo is fetched to a temporary directory via `git clone --depth 1`
+        And each skill directory's `skill.yaml` is read and the `skillprism:` field is consulted
+        And the skill is recognized as `skillprism-format` (manifest-declared)
+        And the skill is rendered once per configured harness (the `skill.yaml` provides the variable context)
+        And the rendered SKILL.md files are written to each harness's project scope path
+        And each installed skill is recorded in the state tracking layer with `format: skillprism`
+        
+        Given a plain-format skill repo with only `SKILL.md` (no `skill.yaml`)
+        When the user runs `skillprism add owner/repo`
+        Then the repo is fetched to a temporary directory via `git clone --depth 1`
+        And each skill directory has no manifest, so it is recognized as `plain-format` (default)
+        And the SKILL.md is copied as-is to each harness's project scope path
+        And each installed skill is recorded in the state tracking layer with `format: plain`
+        
+        Given a multi-skill repo with skills "alpha" and "beta"
+        When the user runs `skillprism add owner/repo --skill alpha`
+        Then only the "alpha" skill is installed
+        And "beta" is not installed
+        
+        # Source form Gherkin (v1 — Vercel parity per spike §4.3)
+        
+        Given a public GitHub repo accessible via the `github:owner/repo` prefix
+        When the user runs `skillprism add github:anthropics/skills`
+        Then the prefix is normalized to `https://github.com/anthropics/skills.git`
+        And the install proceeds the same as the `owner/repo` shorthand
+        
+        Given a GitLab.com repo accessible via the `gitlab:owner/repo` prefix
+        When the user runs `skillprism add gitlab:mygroup/myskill`
+        Then the prefix is normalized to `https://gitlab.com/mygroup/myskill.git`
+        And the install proceeds
+        
+        Given a public GitHub repo with a tree URL including branch and subpath
+        When the user runs `skillprism add https://github.com/owner/repo/tree/main/skills/pdf`
+        Then the URL is normalized to clone `https://github.com/owner/repo.git` with `--branch main` and the source-walk is scoped to the `skills/pdf` subpath
+        
+        Given a self-hosted GitLab instance at `https://gitlab.example.com/`
+        When the user runs `skillprism add https://gitlab.example.com/team/project`
+        Then the install proceeds with `https://gitlab.example.com/team/project.git` — the auth chain is **`git clone` only**: no `gh` fallback (the `gh` CLI is GitHub-only) and no SSH fallback (the SSH retry in the auth chain is also GitHub-only). Skillprism relies on the user's own git credential resolution (SSH agent, `~/.netrc`, git credential helper) for the GitLab case.
+        
+        Given the source `owner/repo` and a `ref` fragment
+        When the user runs `skillprism add owner/repo#v1.2.3`
+        Then the install fetches the tag `v1.2.3` (not the default branch) and records `ref: v1.2.3` in the state
+        
+        Given the source `owner/repo` and a `ref` and `skill` fragment
+        When the user runs `skillprism add owner/repo#main@pdf`
+        Then the install fetches `main` and filters to the `pdf` skill only (same as `--skill pdf`)
+        
+        Given a `.well-known/agent-skills/index.json` endpoint published at `https://example.com/.well-known/agent-skills/index.json`
+        When the user runs `skillprism add https://example.com`
+        Then the index is fetched and the listed skills are installed per the manifest
+        
+        Given a source alias `coinbase/agentWallet` mapped to `coinbase/agentic-wallet-skills` in the alias map
+        When the user runs `skillprism add coinbase/agentWallet`
+        Then the alias is resolved to `coinbase/agentic-wallet-skills` and the install proceeds
+        
+        Given a source `unknown/repo` that has no entry in the alias map
+        When the user runs `skillprism add unknown/repo`
+        Then the parser falls through to the `owner/repo` shorthand path (no special "unknown alias" error — an unknown alias is indistinguishable from a regular shorthand)
+        
+        Given a source `   ` (whitespace only) entered as an alias
+        When the user runs `skillprism add '   '`
+        Then the command fails with a clear error: "source cannot be empty or whitespace"
+        And the exit code is 2 (usage error)
+        
+        Given a repo with skills targeting claude and opencode
+        When the user runs `skillprism add owner/repo --harnesses claude`
+        Then skills are only rendered/copied to .claude/skills/
+        And .opencode/skills/ is not written
+        
+        Given a `skill.yaml` present but missing the `skillprism:` field
+        When the user runs `skillprism add owner/repo --skill that-skill`
+        Then the command fails with a clear error: "skill.yaml is present but missing the `skillprism:` field; either add `skillprism: '1'` to declare skillprism-format, or remove `skill.yaml` to declare plain-format."
+        And no files are written
+        And the state tracking layer is not modified
+        And the exit code is 1
+        
+        Given a `skill.yaml` with an empty `skillprism:` value (`skillprism: ''`)
+        When the user runs `skillprism add owner/repo --skill that-skill`
+        Then the command fails with the same malformed-manifest error
+        And the exit code is 1
+        
+        Given a `skill.yaml` with a non-string `skillprism:` field (e.g. `skillprism: true` or `skillprism: 1` without quotes)
+        When the user runs `skillprism add owner/repo --skill that-skill`
+        Then the command fails with the malformed-manifest error naming the bad field type
+        And the exit code is 1
+        
+        Given a fetched repo with no skill directories anywhere (no SKILL.md* reachable)
+        When the user runs `skillprism add owner/repo`
+        Then the command exits with code 1
+        And a clear error is printed to stderr naming the source and explaining that no skillprism-format or plain-format skills were found
+        And no files are written
+        And the state tracking layer is not modified
+        
+        Given the user invokes `skillprism add` with --target dist
+        When the command runs
+        Then it exits with a non-zero status
+        And the error names `--target` and lists the valid values: project, user
+        And the state tracking layer is not modified
+        
+        Given the user is in a directory with no skillprism.yaml (no project root)
+        When the user runs `skillprism add owner/repo --target user`
+        Then the command does not invoke the build-style `find_project_root()` resolution
+        And the skill is installed to ~/.config/<harness>/skills/ (the user scope) for each configured harness
+        And the installed skill is recorded in the state tracking layer with scope: user
+        
+        Given the user is in a directory with no skillprism.yaml
+        When the user runs `skillprism add owner/repo` (default --target project)
+        Then the command fails with a clear error explaining that --target project requires being inside a project directory
+        And the error suggests using --target user
+        And the exit code is 2 (usage error)
+        <!-- SUPERSEDED by DIST-I008 (Phase 2): the no-flags path no longer silently defaults to `--target project`. With no `--target`, `add` now prompts interactively for scope (offering `user` when outside a project), or errors with actionable guidance on a non-TTY. The exit-2 usage error still applies to the explicit `--target project` outside-a-project path (add.rs `resolve_scope`) and to malformed sources (empty/whitespace). -->
+        
+        
+        Given a skill directory containing both SKILL.md and SKILL.md.j2 (ambiguous template)
+        When the user runs `skillprism add owner/repo --skill that-skill`
+        Then the command fails with ProjectError::AmbiguousTemplate (re-uses the existing loader rule from src/loader/project.rs)
+        And no files are written
+        And the state tracking layer is not modified
+        
+        Given a plain-format skill directory containing only `SKILL.md` (no `skill.yaml`) and a `references/` subdirectory
+        When the user runs `skillprism add owner/repo --skill that-skill --harnesses claude`
+        Then that skill is recognized as `plain-format` (no manifest, default)
+        And the SKILL.md is copied as-is to .claude/skills/that-skill/SKILL.md
+        And the references/ directory tree is copied to .claude/skills/that-skill/references/ via the existing copy_assets helper
+        And the installed skill is recorded in the state tracking layer with `format: plain` and `harnesses: [claude]`
+        
+        Given a bare `SKILL.md` that contains MiniJinja markers (e.g. `# {{ name }}`), with no `skill.yaml`
+        When the user runs `skillprism add owner/repo --skill that-skill`
+        Then that skill is recognized as `plain-format` (no manifest declares skillprism) — the markers in the file are **not consulted**
+        And the SKILL.md is copied as-is to each harness's project scope path (the markers will be visible in the output, which is the correct behavior for a plain copy)
+        And the installed skill is recorded in the state tracking layer with `format: plain`
+        
+        Given an already-installed skill "my-skill" at the target scope
+        When the user runs `skillprism add owner/repo --skill my-skill` without --force
+        Then the user is prompted to overwrite (y/n/s/a)
+        And if the user declines, no files are written
+        
+        Given a skillprism-format skill (manifest-declared) whose template references variables that are NOT defined in `skill.yaml`'s `variables:` block
+        When the user runs `skillprism add owner/repo`
+        Then the render fails with a validation error identifying the undefined variable
+        And no output files are written
+        
+        Given a fetch failure (network error, invalid URL, repo not found, auth failure)
+        When the user runs `skillprism add invalid-source`
+        Then a clear error message is printed to stderr identifying the failure
+        And the actionable guidance is shown for auth failures (per spike §4.2)
+        And the exit code is 1
+        
+        Given a source URL that is neither a v1-scoped source form nor a local path
+        When the user runs `skillprism add <url>`
+        Then the command fails with a clear error listing the supported source forms
+        And the exit code is 2 (usage error)
+        
+        Given `git` is not on the user's PATH
+        When the user runs `skillprism add owner/repo`
+        Then the command exits with code 1
+        And a clear error is printed to stderr explaining that `git` is required and how to install it
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I003
+    title: list Command
+    type: Feature
+    effort: 3
+    depends_on: [SKP-I001]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement the skillprism list command (alias: ls). Reads the state tracking layer and displays installed skills in a tab-separated table: name, source, ref (short SHA or branch name), format (skillprism|plain), scope, harnesses. (The format column is an implementation addition to the original five-column sketch; it is cheap, useful, and kept.) The --target flag filters by scope (project|user). The --harnesses flag (-H, comma-separated) filters by harness — same flag name as the existing init and add commands. Output goes to stdout (machine-parseable table); diagnostics to stderr per the stdout/stderr discipline. If no skills are installed, prints an empty-state notice (\"No installed skills\"). (Implementation note: per guidelines.md stdout-discipline, this status notice is emitted to stderr so piped stdout stays empty/clean — superseding the \"to stdout\" wording in the Gherkin below, exactly as the is up to date status is handled in DIST-I005.)"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given 3 skills installed across project and user scopes
+        When the user runs `skillprism list`
+        Then a table is printed to stdout showing all 3 skills with name, source, ref, format, scope, and harnesses
+        
+        Given skills installed in both project and user scopes
+        When the user runs `skillprism list --target user`
+        Then only user-scoped skills are listed
+        
+        Given skills installed for claude and opencode
+        When the user runs `skillprism list --harnesses claude`
+        Then only skills installed for the claude harness are listed
+        
+        Given no skills installed
+        When the user runs `skillprism list`
+        Then "No installed skills" is printed to stderr (stdout stays empty per stdout-discipline)
+        And the exit code is 0
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I004
+    title: remove Command
+    type: Feature
+    effort: 3
+    depends_on: [SKP-I001]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement the skillprism remove [skills...] command (alias: rm). Removes installed skills from the filesystem and the state tracking layer. The --target flag filters by scope. The --harnesses flag (-H, comma-separated) removes only from a specific harness's directory. The --all flag removes all installed skills. Interactive confirmation is shown unless --force is passed (the same flag name as the existing build command's skip-confirmation behavior; using --force for consistency, not --yes). Removal respects scope confinement (never deletes outside the determined scope path). After removing files, the state record is updated atomically per the DIST-I001 atomicity model"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given an installed skill "my-skill" in project scope for claude and opencode
+        When the user runs `skillprism remove my-skill --force`
+        Then the skill files are deleted from .claude/skills/my-skill/ and .opencode/skills/my-skill/
+        And the state record for "my-skill" is removed
+        And the exit code is 0
+        
+        Given an installed skill "my-skill" for claude and opencode
+        When the user runs `skillprism remove my-skill --harnesses claude --force`
+        Then only .claude/skills/my-skill/ is deleted
+        And .opencode/skills/my-skill/ remains
+        And the state record is updated to reflect only opencode
+        
+        Given 3 installed skills in project scope and 2 in user scope
+        When the user runs `skillprism remove --all --force --all-scopes`
+        Then all 5 installed skills are removed from both project and user scopes
+        And the state file is empty
+        
+        Given 3 installed skills in project scope and 2 in user scope
+        When the user runs `skillprism remove --all --force`
+        Then only the 3 project-scope skills are removed
+        And the 2 user-scope skills remain
+        
+        Given the user invokes `skillprism remove` with --target dist
+        When the command runs
+        Then it exits with a non-zero status
+        And the error names `--target` and lists the valid values: project, user
+        
+        Given an installed skill "my-skill"
+        When the user runs `skillprism remove my-skill` without --force
+        Then an interactive confirmation prompt is shown
+        And if the user declines, no files are deleted
+        
+        Given a skill "not-installed" that is not in the state
+        When the user runs `skillprism remove not-installed`
+        Then a clear error is printed to stderr saying the skill is not installed
+        And the exit code is 1
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I005
+    title: update Command
+    type: Feature
+    effort: 5
+    depends_on: [SKP-I001, SKP-I002]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement the skillprism update [skills...] command. For each named skill (or all if none named), re-fetches the source at the latest version (per the spike's fetch mechanism in DIST-I002), re-renders/re-copies, and decides whether each file needs writing via per-file SHA-256 comparison against the files array stored in the state record (per spike §4.5). Only files whose hash differs from the stored hash are written, via the same atomic-write infrastructure as the build pipeline. The existing Router::diff is the display-only diff renderer used solely for the --diff flag's user-facing output, not as the change test"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given an installed skill "my-skill" at ref "abc123"
+        When a newer ref "def456" is available and the user runs `skillprism update my-skill --force`
+        Then a fresh clone of the latest source is fetched via `git clone --depth 1 --branch def456 <url> <tempdir>` (full re-clone, not `git fetch` against a prior checkout — the per-file SHA-256 + atomic-rename infrastructure from DIST-I001 is designed around a fresh temp dir)
+        And the new rendered output is computed per file
+        And the SHA-256 of each file is compared against the state record's `files` array
+        And only files whose hash differs are written atomically
+        And the state record's `files` array is updated with the new hashes and `ref` is updated to "def456"
+        And the exit code is 0
+        
+        Given an installed skill "my-skill" at the latest ref
+        When the user runs `skillprism update my-skill`
+        Then "my-skill is up to date" is printed to stdout
+        And no files are modified
+        And the exit code is 0
+        
+        Given an installed skill "my-skill" with a newer ref available
+        When the user runs `skillprism update my-skill --diff`
+        Then a unified diff of the changes is printed to stdout
+        And no files are modified
+        
+        Given 3 installed skills with updates available
+        When the user runs `skillprism update --force`
+        Then all 3 skills are updated to their latest refs
+        And all state records are updated
+        
+        Given a skill "my-skill" whose source repo no longer exists
+        When the user runs `skillprism update my-skill`
+        Then a clear error is printed to stderr identifying the fetch failure
+        And the existing installed files are not modified
+        And the exit code is 1
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I006
+    title: Integration Tests for Distribution Commands
+    type: Feature
+    effort: 5
+    depends_on: [SKP-I002, SKP-I003, SKP-I004, SKP-I005]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Write integration tests in tests/distribution.rs covering the full add → list → update → remove lifecycle end-to-end via assert_cmd. Tests use a local fixture repo (created in a temp dir with both skillprism-format and plain-format skills) as the add source to avoid network dependency in CI — the add command accepts a local path as a v1 source form. Each test asserts on both filesystem state (files exist/don't exist at expected paths) and the state tracking layer (records present/absent with correct metadata)"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given a local fixture repo with one skillprism-format skill and one plain-format skill
+        When the integration test runs `skillprism add <fixture-path> --force`
+        Then both skills are installed to the expected harness paths
+        And the state tracking layer contains records for both skills
+        
+        Given both skills are installed
+        When the integration test runs `skillprism list`
+        Then stdout contains both skill names with correct metadata
+        
+        Given both skills are installed
+        When the integration test runs `skillprism remove --all --force --all-scopes`
+        Then both skills are removed from all harness paths
+        And the state tracking layer is empty
+        And `skillprism list` emits "No installed skills" to stderr (stdout stays empty)
+        
+        Given a skillprism-format skill installed at version A
+        When the fixture is updated to version B and the test runs `skillprism update --force`
+        Then the installed files reflect version B
+        And the state record is updated to version B
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I007
+    title: Docs and Website Updates
+    type: Feature
+    effort: 3
+    depends_on: [SKP-I002, SKP-I003, SKP-I004, SKP-I005]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Update the README, CHANGELOG, Hugo website docs, and CLI reference to cover the new distribution commands. Add a \"Distribution\" section to the website (install from remote sources, the add/list/remove/update workflow, auto-detection of skillprism vs plain format, per-harness rendering on install, the git runtime dependency for distribution commands). Update the CLI reference page with the new commands and flags. Update the homepage to position skillprism as a distribution CLI with per-harness templating, not just a build tool. Add a \"skillprism vs Vercel skills CLI\" comparison page that is honest about what each tool does, grounded in the spike's analysis (Vercel's simple-git + gh + SSH fallback; skillprism's direct git shell-out). Update AGENTS.md with any new devenv commands"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the Hugo website at site/
+        When the docs are updated
+        Then a new docs/distribution.md page exists covering add/list/remove/update
+        And the CLI reference page includes the new commands with all flags
+        And the homepage positions skillprism as a distribution CLI with per-harness templating
+        And a comparison page honestly contrasts skillprism with Vercel's skills CLI (citing vercel-labs/skills as the upstream reference)
+        
+        Given the README.md
+        When it is updated
+        Then the CLI reference includes add/list/remove/update commands
+        And a new section explains the distribution workflow with examples
+        And a "Prerequisites" note documents that `git` must be on PATH for `add` and `update`
+        
+        Given the CHANGELOG.md
+        When it is updated
+        Then an "Unreleased" entry documents the new distribution commands
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I008
+    title: Interactive add Prompts
+    type: Feature
+    effort: 2
+    depends_on: [SKP-I002, SKP-I010]
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "When --harnesses is not provided and no skillprism.yaml exists, prompt the user interactively to select which harnesses to install to. When --target is not provided, prompt the user to choose project or user scope. Show a summary before executing. Reuse --force to skip prompts. Use dialoguer crate for interactive multi-select and confirm prompts. No harnesses are pre-selected; detected agents are shown as a hint only. The user must explicitly choose which agents to install to"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given no --harnesses flag and no skillprism.yaml
+        When the user runs skillprism add owner/repo
+        Then the user is prompted to select harnesses interactively
+        And no harnesses are pre-selected
+        And detected agents are shown as a hint
+        
+        Given no --target flag
+        When the user runs skillprism add owner/repo
+        Then the user is prompted to choose project or user scope
+        
+        Given all selections made and user confirms
+        When the installation proceeds
+        Then the selected scope and harnesses are used
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I009
+    title: npm Launcher
+    type: Feature
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Create a thin npm package (npm/ at repo root) whose bin entry is a small JS launcher script. On npx skillprism or npm install -g skillprism, the launcher detects the platform, downloads the correct pre-built binary from the latest GitHub Release, caches it, and execs it. The binary is never built from npm — the npm package is purely a download + exec gateway. Modeled after Biome's approach (@biomejs/biome)"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the npm package is scaffolding exists
+        When node npm/bin/cli.mjs --help is run
+        Then it downloads the correct binary for the platform
+        And forwards --help to the binary
+        And prints the help output
+        
+        Given the binary is cached
+        When node npm/bin/cli.mjs list is run a second time
+        Then it uses the cached binary
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-I010
+    title: Agent Auto-Detection
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src/distribution, src/state, src/cli.rs, npm, site]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Implement a module that probes common agent installation paths (~/.claude/, ~/.config/opencode/, ~/.codex/, ~/.factory/, ~/.pi/) to detect which agents the user has installed. Detection is purely filesystem-based (no API calls). Used by DIST-I008 to display a \"Detected agents\" hint in the interactive add prompt; detected agents are not pre-selected"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given no skillprism.yaml and no --harnesses flag
+        When add probes for installed agents
+        Then it checks ~/.claude, ~/.config/opencode, ~/.codex, ~/.factory, ~/.pi
+        
+        Given ~/.claude exists but ~/.opencode does not
+        When detection runs
+        Then only claude is returned as detected
+        
+        Given the interactive add harness prompt is shown
+        When agents are detected
+        Then a hint lists the detected agents
+        And no harnesses are pre-selected
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [SKP-I001, SKP-I002, SKP-I003, SKP-I004, SKP-I005, SKP-I006, SKP-I007, SKP-I008, SKP-I009, SKP-I010]
+  tickets_deferred: []
+  points_completed: 37
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

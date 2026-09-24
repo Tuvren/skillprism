@@ -1,3 +1,11 @@
+---
+job: JOB-05
+capabilities: [CAP-012]
+boundaries: [BND-01, BND-05]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Validate Without Writing
 
 **PRD Capability:** VA-1 — Provide a validate command that checks template syntax, variable definitions, and macro references without writing output.

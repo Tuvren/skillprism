@@ -1,0 +1,7 @@
+artifact: project-config-schema.json
+surface: json
+flows: [flow-compile-template, flow-merge-variables]
+boundaries: [BND-02]
+certainty: assumed
+assumption: "JSON Schema for skillprism.yaml. Moving it into the code is the upgrade's artifact phase."
+settles_when: "A test validates a project config against this schema."

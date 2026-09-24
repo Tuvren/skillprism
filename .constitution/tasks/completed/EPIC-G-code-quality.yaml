@@ -1,0 +1,188 @@
+id: G
+name: Code Quality
+kind: product
+capabilities: []
+depends_on: [F]
+scope:
+  paths: [src]
+  tech_spec_patchable: []
+estimate_source: migrated
+tickets:
+  - id: SKP-G001
+    title: Remove Dead TemplateCollision Variant
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Remove the unused EngineError::TemplateCollision variant from engine/mod.rs and its associated #[allow(dead_code)] attribute. Verify no compilation errors after removal"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the engine module
+          When compiling
+          Then no dead_code warnings are suppressed for TemplateCollision
+          And the code compiles cleanly
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-G002
+    title: Remove Dead MissingField Variant
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Remove the unused ProjectError::MissingField variant from types/error.rs and its associated #[allow(dead_code)] attribute"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the types/error module
+          When compiling
+          Then no dead_code warnings are suppressed for MissingField
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-G003
+    title: Remove Dead skill_output_dir Function
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Remove the unused skill_output_dir() function from router/paths.rs and its #[allow(dead_code)] attribute"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the router/paths module
+          When compiling
+          Then no dead_code warnings are suppressed for skill_output_dir
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-G004
+    title: Fix Module-Level Allow in project.rs
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Replace the module-level #![allow(clippy::redundant_pub_crate, dead_code)] in types/project.rs with targeted #[allow(...)] attributes on the specific items that genuinely need them. Remove the module-level attr entirely"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given types/project.rs
+          When running cargo clippy
+          Then no module-level #[allow(...)] attributes remain
+          And clippy passes with -D warnings
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-G005
+    title: Fix Module-Level Allow in registry/types.rs
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Replace the module-level #![allow(clippy::struct_excessive_bools, dead_code)] in registry/types.rs with targeted allows. struct_excessive_bools may remain as module-level if justified with a // reason: comment. Remove the dead_code allow entirely"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given registry/types.rs
+          When running cargo clippy
+          Then only justified allow attributes remain
+          And no dead_code suppression exists at module level
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-G006
+    title: "Spike: Evaluate yaml_serde → serde_yml Migration"
+    type: Spike
+    effort: 2
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Research serde_yml as a replacement for yaml_serde (itself a fork of the deprecated serde_yaml). Compare API compatibility, maintenance status (last commit, open issues, downloads), and migration complexity. The spike report must include: API compatibility matrix, migration effort estimate in hours, and any breaking changes. Write findings to .constitution/spikes/SPK-CLEAN-G006.md"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given the spike completes
+          When reading .constitution/spikes/SPK-CLEAN-G006.md
+          Then the report contains an API compatibility matrix
+          And migration effort estimate
+          And a clear recommendation (migrate now, defer, or don't migrate)
+    flows: []
+    certainty: assumed
+    status: done
+    spike: SPK-SKP-G006
+  - id: SKP-G007
+    title: Fix Module-Level Allow in loader/mod.rs
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Replace the module-level #![allow(dead_code, unused_imports)] in loader/mod.rs with targeted #[allow(...)] attributes on the specific items that genuinely need them. Remove the module-level attr entirely"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given loader/mod.rs
+          When running cargo clippy
+          Then no module-level #[allow(...)] attributes remain
+          And clippy passes with -D warnings
+    flows: []
+    certainty: assumed
+    status: done
+  - id: SKP-G008
+    title: Fix Module-Level Allow in types/mod.rs
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in: [src]
+    verification:
+      command: cargo test
+      expected: exit 0
+    description: "Replace the module-level #![allow(unused_imports)] in types/mod.rs with targeted #[allow(...)] attributes on the specific items that genuinely need them. Remove the module-level attr entirely"
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Given types/mod.rs
+          When running cargo clippy
+          Then no module-level #[allow(...)] attributes remain
+          And clippy passes with -D warnings
+    flows: []
+    certainty: assumed
+    status: done
+closeout:
+  tickets_completed: [SKP-G001, SKP-G002, SKP-G003, SKP-G004, SKP-G005, SKP-G006, SKP-G007, SKP-G008]
+  tickets_deferred: []
+  points_completed: 9
+  spec_patches: []
+  changelog_entries: []
+  candidate_terms: []
+  routed_upstream: []
+  follow_ups: []
+  settled: []

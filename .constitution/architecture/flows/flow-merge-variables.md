@@ -1,3 +1,11 @@
+---
+job: JOB-01
+capabilities: [CAP-003]
+boundaries: [BND-02]
+view: sequence
+certainty: assumed
+assumption: Migrated from the markdown flow. Not yet exercised by an integration test in this pass.
+---
 # Flow: Merge Group-Level Variables
 
 **PRD Capability:** TC-3 — Merge group-level variables with per-skill variables (skill wins) before rendering each template.
