@@ -140,6 +140,24 @@ fn skill_ref_helper_validates_and_renders_with_harness_pattern() {
     let project_dir = tmp.path().to_path_buf();
     let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
 
+    // User harness overrides replace the full definition; isolate this one in the copy.
+    fs::create_dir_all(project_dir.join("harnesses")).unwrap();
+    fs::write(
+        project_dir.join("harnesses/opencode.yaml"),
+        r#"
+id: opencode
+name: OpenCode Custom
+capabilities:
+  supports_subagent: false
+paths:
+  project_scope_path: .opencode/skills
+  user_scope_path: .config/opencode/skills
+  skill_filename: SKILL.md
+skill_ref_pattern: "@{name}"
+"#,
+    )
+    .unwrap();
+
     // `gamma`'s template calls `{{ skill_ref("other") }}` — validate must accept the
     // registered helper rather than reporting it as an undefined variable.
     bin(home_tmp.path())
@@ -148,7 +166,7 @@ fn skill_ref_helper_validates_and_renders_with_harness_pattern() {
         .assert()
         .success();
 
-    // build must render it through the harness's skill_ref_pattern (`/{name}` for claude)
+    // Build uses both Claude's default pattern and the project override's custom pattern.
     bin(home_tmp.path())
         .current_dir(&project_dir)
         .arg("build")
@@ -160,6 +178,12 @@ fn skill_ref_helper_validates_and_renders_with_harness_pattern() {
     assert!(
         gamma_claude.contains("Ref: /other"),
         "rendered skill_ref should use the harness pattern, got: {gamma_claude}"
+    );
+    let gamma_opencode =
+        fs::read_to_string(project_dir.join("dist/opencode/gamma/SKILL.md")).unwrap();
+    assert!(
+        gamma_opencode.contains("Ref: @other"),
+        "rendered skill_ref should use the user harness pattern, got: {gamma_opencode}"
     );
 }
 

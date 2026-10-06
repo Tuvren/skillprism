@@ -14,13 +14,6 @@
 
 use minijinja::Environment;
 
-/// Names of every custom Jinja2 helper function registered by [`register_helpers`].
-///
-/// This is the single source of truth for the helper allow-list: `register_helpers`
-/// registers these names, and `validator::variables` treats them as builtins, so the
-/// registered helpers and the validator's allow-list can never drift apart.
-pub const HELPER_FUNCTIONS: &[&str] = &["skill_ref"];
-
 /// Registers custom Jinja2 helper functions into the rendering environment, and
 /// configures rendering options shared by every render call site.
 ///
@@ -51,7 +44,9 @@ fn make_skill_ref(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::types::HELPER_FUNCTIONS;
     use minijinja::Environment;
+    use std::collections::BTreeSet;
 
     #[test]
     fn skill_ref_uses_default_pattern_when_unset() {
@@ -79,16 +74,15 @@ mod tests {
 
     #[test]
     fn helper_functions_constant_matches_registration() {
+        let builtin_env = Environment::new();
+        let builtins: BTreeSet<&str> = builtin_env.globals().map(|(name, _)| name).collect();
         let mut env = Environment::new();
         register_helpers(&mut env, None);
-        let registered: std::collections::BTreeSet<&str> =
-            env.globals().map(|(name, _)| name).collect();
-        for name in HELPER_FUNCTIONS {
-            assert!(
-                registered.contains(name),
-                "`{name}` is listed in HELPER_FUNCTIONS but register_helpers does not register it"
-            );
-        }
+        let registered: BTreeSet<&str> = env.globals().map(|(name, _)| name).collect();
+        // Exclude MiniJinja's own globals so extra custom helpers also fail this check.
+        let helpers: BTreeSet<&str> = registered.difference(&builtins).copied().collect();
+        let expected: BTreeSet<&str> = HELPER_FUNCTIONS.iter().copied().collect();
+        assert_eq!(helpers, expected);
     }
 
     #[test]

@@ -12,13 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-mod error;
-mod harness;
-mod project;
-mod template;
-
-pub use error::*;
-#[allow(unused_imports)]
-pub use harness::*;
-pub use project::*;
-pub use template::*;
+/// Names of every custom Jinja2 helper function registered by the engine.
+///
+/// The validator treats these names as builtins and reserves them against variable
+/// shadowing. An engine test verifies that helper registration adds exactly this set
+/// of names to `MiniJinja`'s default globals.
+pub const HELPER_FUNCTIONS: &[&str] = &["skill_ref"];

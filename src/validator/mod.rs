@@ -71,14 +71,14 @@ pub enum ValidationError {
         detail: String,
     },
 
-    /// A skill.yaml variable name collides with a built-in context field.
+    /// A skill.yaml variable name collides with a built-in context field or helper.
     #[error(
-        "[{skill}] {harness}: Variable `{variable_name}` collides with a built-in field of the same name"
+        "[{skill}] {harness}: Variable `{variable_name}` collides with a built-in field or helper function of the same name"
     )]
     #[diagnostic(help(
-        "`{variable_name}` is populated from skill.yaml's own metadata and inserted into \
-         the template context before variables — a variable of the same name silently \
-         overwrites it. Rename the variable in skill.yaml (or its harnesses override)."
+        "Built-in context fields and helper functions are reserved. A variable named \
+         `{variable_name}` shadows the field or helper function. Rename the variable \
+         in skill.yaml (or its overrides block)."
     ))]
     ReservedVariableName {
         skill: String,
@@ -491,6 +491,35 @@ mod tests {
                 ))
                 .count(),
             1
+        );
+        assert!(outcome.valid.is_empty());
+    }
+
+    #[test]
+    fn reserved_helper_name_collected() {
+        let registry = HarnessRegistry::with_builtins();
+        let mut vars = BTreeMap::new();
+        vars.insert(
+            "skill_ref".to_string(),
+            yaml_serde::Value::String("hello".into()),
+        );
+        let (_dir, skill) = test_skill("shadowed", "{{ skill_ref(\"other\") }}", vars);
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+
+        let outcome = Validator::validate(vec![pair]);
+
+        assert_eq!(outcome.errors.len(), 1);
+        assert!(matches!(
+            &outcome.errors[0],
+            ValidationError::ReservedVariableName { variable_name, .. }
+            if variable_name == "skill_ref"
+        ));
+        assert!(
+            outcome.errors[0]
+                .help()
+                .unwrap()
+                .to_string()
+                .contains("helper functions")
         );
         assert!(outcome.valid.is_empty());
     }
