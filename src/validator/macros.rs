@@ -91,6 +91,16 @@ mod tests {
     }
 
     #[test]
+    fn helper_function_calls_are_ignored() {
+        let errors = check_macros(
+            "{{ skill_ref(\"other\") }}",
+            Path::new("t.j2"),
+            &empty_macros(),
+        );
+        assert!(errors.is_empty());
+    }
+
+    #[test]
     fn undefined_macro_reported() {
         let errors = check_macros("{{ harness.missing }}", Path::new("t.j2"), &empty_macros());
         assert_eq!(errors.len(), 1);

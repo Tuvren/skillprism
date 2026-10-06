@@ -14,19 +14,38 @@
 
 use minijinja::Environment;
 
+/// Names of every custom Jinja2 helper function registered by [`register_helpers`].
+///
+/// This is the single source of truth for the helper allow-list: `register_helpers`
+/// registers these names, and `validator::variables` treats them as builtins, so the
+/// registered helpers and the validator's allow-list can never drift apart.
+pub const HELPER_FUNCTIONS: &[&str] = &["skill_ref"];
+
 /// Registers custom Jinja2 helper functions into the rendering environment, and
 /// configures rendering options shared by every render call site.
-pub fn register_helpers(env: &mut Environment) {
+///
+/// `skill_ref_pattern` is the current harness's `skill_ref_pattern` (e.g. `"/{name}"`).
+/// The `skill_ref` helper substitutes `{name}` in that pattern; when the harness has no
+/// pattern, it falls back to `"/{name}"`.
+pub fn register_helpers(env: &mut Environment, skill_ref_pattern: Option<&str>) {
     // MiniJinja defaults to Jinja2's `keep_trailing_newline=False`, silently dropping
     // the final newline of every rendered file. Markdown/source files are
     // conventionally newline-terminated, so without this every skillprism build would
     // strip the trailing newline its own source template ended with.
     env.set_keep_trailing_newline(true);
-    env.add_function("skill_ref", skill_ref);
+    env.add_function("skill_ref", make_skill_ref(skill_ref_pattern));
 }
 
-fn skill_ref(name: &str) -> String {
-    format!("/{name}")
+/// Placeholder token inside a harness's `skill_ref_pattern` that the helper replaces
+/// with the referenced skill's name.
+const NAME_PLACEHOLDER: &str = "{name}";
+
+/// Builds the `skill_ref` helper bound to one harness's `skill_ref_pattern`.
+fn make_skill_ref(
+    skill_ref_pattern: Option<&str>,
+) -> impl Fn(&str) -> String + Send + Sync + 'static {
+    let pattern = skill_ref_pattern.unwrap_or("/{name}").to_string();
+    move |name: &str| pattern.replace(NAME_PLACEHOLDER, name)
 }
 
 #[cfg(test)]
@@ -35,15 +54,9 @@ mod tests {
     use minijinja::Environment;
 
     #[test]
-    fn skill_ref_formats_correctly() {
-        assert_eq!(skill_ref("my-agent"), "/my-agent");
-        assert_eq!(skill_ref("test"), "/test");
-    }
-
-    #[test]
-    fn skill_ref_works_in_template() {
+    fn skill_ref_uses_default_pattern_when_unset() {
         let mut env = Environment::new();
-        register_helpers(&mut env);
+        register_helpers(&mut env, None);
         env.add_template("t.j2", "{{ skill_ref(name) }}").unwrap();
         let tmpl = env.get_template("t.j2").unwrap();
         let result = tmpl
@@ -53,9 +66,35 @@ mod tests {
     }
 
     #[test]
+    fn skill_ref_uses_harness_pattern() {
+        let mut env = Environment::new();
+        register_helpers(&mut env, Some("@{name}"));
+        env.add_template("t.j2", "{{ skill_ref(name) }}").unwrap();
+        let tmpl = env.get_template("t.j2").unwrap();
+        let result = tmpl
+            .render(minijinja::context! { name => "other" })
+            .unwrap();
+        assert_eq!(result, "@other");
+    }
+
+    #[test]
+    fn helper_functions_constant_matches_registration() {
+        let mut env = Environment::new();
+        register_helpers(&mut env, None);
+        let registered: std::collections::BTreeSet<&str> =
+            env.globals().map(|(name, _)| name).collect();
+        for name in HELPER_FUNCTIONS {
+            assert!(
+                registered.contains(name),
+                "`{name}` is listed in HELPER_FUNCTIONS but register_helpers does not register it"
+            );
+        }
+    }
+
+    #[test]
     fn trailing_newline_in_source_template_is_preserved() {
         let mut env = Environment::new();
-        register_helpers(&mut env);
+        register_helpers(&mut env, None);
         env.add_template("t.j2", "# {{ name }}\n").unwrap();
         let tmpl = env.get_template("t.j2").unwrap();
         let result = tmpl.render(minijinja::context! { name => "test" }).unwrap();

@@ -71,7 +71,7 @@ fn full_build_pipeline() {
         .assert();
     assert.success();
 
-    // 2 skills × 2 harnesses = 4 output files
+    // 3 skills × 2 harnesses = 6 output files (alpha and beta are spot-checked below)
     for skill in &["alpha", "beta"] {
         for harness in &["claude", "opencode"] {
             let output_path = project_dir.join(format!("dist/{harness}/{skill}/SKILL.md"));
@@ -131,6 +131,35 @@ fn full_build_pipeline() {
     assert!(
         manifest_content.ends_with(']'),
         "manifest should be a JSON array"
+    );
+}
+
+#[test]
+fn skill_ref_helper_validates_and_renders_with_harness_pattern() {
+    let tmp = copy_fixture("valid");
+    let project_dir = tmp.path().to_path_buf();
+    let home_tmp = TempDir::with_prefix("skillprism_home_").unwrap();
+
+    // `gamma`'s template calls `{{ skill_ref("other") }}` — validate must accept the
+    // registered helper rather than reporting it as an undefined variable.
+    bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("validate")
+        .assert()
+        .success();
+
+    // build must render it through the harness's skill_ref_pattern (`/{name}` for claude)
+    bin(home_tmp.path())
+        .current_dir(&project_dir)
+        .arg("build")
+        .arg("--force")
+        .assert()
+        .success();
+
+    let gamma_claude = fs::read_to_string(project_dir.join("dist/claude/gamma/SKILL.md")).unwrap();
+    assert!(
+        gamma_claude.contains("Ref: /other"),
+        "rendered skill_ref should use the harness pattern, got: {gamma_claude}"
     );
 }
 

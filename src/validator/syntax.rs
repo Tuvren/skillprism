@@ -35,6 +35,12 @@ mod tests {
     }
 
     #[test]
+    fn helper_function_call_parses() {
+        let result = check_syntax("{{ skill_ref(\"other\") }}", Path::new("helper.j2"));
+        assert!(result.is_ok());
+    }
+
+    #[test]
     fn invalid_syntax_reports_error() {
         let result = check_syntax("Hello {{ name }", Path::new("test.j2"));
         assert!(result.is_err());

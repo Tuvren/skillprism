@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- **`skill_ref` template helper** — `skillprism validate` and `skillprism build` no longer reject templates that call the registered `skill_ref` helper as an `Undefined template variable`, and `skill_ref(name)` now renders the current harness's `skill_ref_pattern` (falling back to `/{name}`) instead of hardcoding `/{name}`.
+
 ## v0.2.0 — 2026-07-26
 
 ### Dual Product Model & Breaking Changes

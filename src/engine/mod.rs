@@ -25,7 +25,7 @@ use crate::registry::ManifestDef;
 use crate::resolver::ResolvedPair;
 
 pub use context::build_context;
-pub use helpers::register_helpers;
+pub use helpers::{HELPER_FUNCTIONS, register_helpers};
 
 /// Output produced by rendering a skill template through a harness.
 #[derive(Debug, Clone)]
@@ -89,7 +89,7 @@ impl Engine {
         let ctx = build_context(pair);
 
         let mut env = minijinja::Environment::new();
-        register_helpers(&mut env);
+        register_helpers(&mut env, pair.harness.skill_ref_pattern.as_deref());
 
         let name = pair.skill.template_path.to_string_lossy();
         env.add_template_owned(name.to_string(), content)
@@ -127,7 +127,7 @@ impl Engine {
             return Ok(None);
         };
         let ctx = build_context(pair);
-        render_manifest(manifest, &ctx)
+        render_manifest(manifest, &ctx, pair.harness.skill_ref_pattern.as_deref())
             .map(Some)
             .map_err(|e| render_error_from_minijinja(pair, "(manifest)", &e))
     }
@@ -165,7 +165,7 @@ fn render_sidecars(
 
     for def in &pair.harness.sidecars {
         let mut env = minijinja::Environment::new();
-        register_helpers(&mut env);
+        register_helpers(&mut env, pair.harness.skill_ref_pattern.as_deref());
         env.add_template_owned(def.filename.clone(), def.template.clone())
             .map_err(|e| format!("{}: {e}", def.filename))?;
 
@@ -190,9 +190,10 @@ fn render_sidecars(
 fn render_manifest(
     manifest: &ManifestDef,
     ctx: &BTreeMap<String, minijinja::Value>,
+    skill_ref_pattern: Option<&str>,
 ) -> Result<String, minijinja::Error> {
     let mut env = minijinja::Environment::new();
-    register_helpers(&mut env);
+    register_helpers(&mut env, skill_ref_pattern);
     env.add_template_owned("manifest_tmpl", manifest.template.clone())?;
     let tmpl = env.get_template("manifest_tmpl")?;
     tmpl.render(ctx)
@@ -279,6 +280,65 @@ mod tests {
         let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
         let entry = Engine::render_manifest_entry(&pair).unwrap();
         assert!(entry.is_none());
+    }
+
+    #[test]
+    fn skill_ref_uses_harness_pattern_in_rendered_skill() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) = create_skill_with_template(
+            "ref-skill",
+            "Ref: {{ skill_ref(\"other\") }}",
+            BTreeMap::new(),
+        );
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        pair.harness.skill_ref_pattern = Some("@{name}".to_string());
+        let output = Engine::render(&pair).unwrap();
+        assert_eq!(output.skill_content, "Ref: @other");
+    }
+
+    #[test]
+    fn skill_ref_falls_back_to_slash_pattern_when_harness_pattern_unset() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) = create_skill_with_template(
+            "ref-skill",
+            "Ref: {{ skill_ref(\"other\") }}",
+            BTreeMap::new(),
+        );
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        pair.harness.skill_ref_pattern = None;
+        let output = Engine::render(&pair).unwrap();
+        assert_eq!(output.skill_content, "Ref: /other");
+    }
+
+    #[test]
+    fn skill_ref_uses_harness_pattern_in_manifest_entry() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) =
+            create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        pair.harness.skill_ref_pattern = Some("@{name}".to_string());
+        let entry = Engine::render_manifest_entry(&pair).unwrap().unwrap();
+        assert!(
+            entry.contains("@test-agent"),
+            "manifest should use the harness skill_ref_pattern, got: {entry}"
+        );
+    }
+
+    #[test]
+    fn skill_ref_uses_harness_pattern_in_sidecar() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) =
+            create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        pair.harness.skill_ref_pattern = Some("@{name}".to_string());
+        pair.harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "ref.txt".to_string(),
+            template: "{{ skill_ref(skill_name) }}".to_string(),
+            output_dir: None,
+        }];
+        let output = Engine::render(&pair).unwrap();
+        assert_eq!(output.sidecars.len(), 1);
+        assert_eq!(output.sidecars[0].content, "@test-agent");
     }
 
     #[test]

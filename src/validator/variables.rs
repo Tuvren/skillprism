@@ -17,6 +17,7 @@ use std::path::Path;
 
 use minijinja::Environment;
 
+use crate::engine::HELPER_FUNCTIONS;
 use crate::types::SKILL_METADATA_FIELDS;
 
 /// Checks that all template variables are defined in skill.yaml or built-in.
@@ -55,20 +56,22 @@ pub fn check_variables(
 
 fn is_builtin(name: &str) -> bool {
     let root = name.split('.').next().unwrap();
-    matches!(
-        root,
-        "loop"
-            | "self"
-            | "kwargs"
-            | "varargs"
-            | "namespace"
-            | "super"
-            | "g"
-            | "harness"
-            | "_"
-            | "skill_name"
-            | "skill_description"
-    ) || SKILL_METADATA_FIELDS.contains(&root)
+    HELPER_FUNCTIONS.contains(&root)
+        || matches!(
+            root,
+            "loop"
+                | "self"
+                | "kwargs"
+                | "varargs"
+                | "namespace"
+                | "super"
+                | "g"
+                | "harness"
+                | "_"
+                | "skill_name"
+                | "skill_description"
+        )
+        || SKILL_METADATA_FIELDS.contains(&root)
 }
 
 /// Checks that no skill.yaml variable name collides with a built-in context field.
@@ -103,6 +106,30 @@ pub struct UndefinedVariable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn helper_function_not_reported_as_undefined() {
+        let vars = BTreeMap::new();
+        let errors = check_variables("Ref: {{ skill_ref(\"other\") }}", Path::new("t.j2"), &vars);
+        let names: Vec<&str> = errors.iter().map(|e| e.variable_name.as_str()).collect();
+        assert!(
+            names.is_empty(),
+            "registered helper functions must not be reported as undefined, got: {names:?}"
+        );
+    }
+
+    #[test]
+    fn undefined_variable_reported_alongside_helper_function() {
+        let vars = BTreeMap::new();
+        let errors = check_variables(
+            "{{ skill_ref(name) }} {{ not_defined }}",
+            Path::new("t.j2"),
+            &vars,
+        );
+        let mut names: Vec<&str> = errors.iter().map(|e| e.variable_name.as_str()).collect();
+        names.sort_unstable();
+        assert_eq!(names, vec!["name", "not_defined"]);
+    }
 
     #[test]
     fn defined_variable_passes() {
