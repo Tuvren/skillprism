@@ -25,7 +25,7 @@ use crate::registry::ManifestDef;
 use crate::resolver::ResolvedPair;
 
 pub use context::build_context;
-pub use helpers::{HELPER_FUNCTIONS, register_helpers};
+pub use helpers::register_helpers;
 
 /// Output produced by rendering a skill template through a harness.
 #[derive(Debug, Clone)]

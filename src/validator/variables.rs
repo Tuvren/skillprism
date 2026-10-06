@@ -17,8 +17,7 @@ use std::path::Path;
 
 use minijinja::Environment;
 
-use crate::engine::HELPER_FUNCTIONS;
-use crate::types::SKILL_METADATA_FIELDS;
+use crate::types::{HELPER_FUNCTIONS, SKILL_METADATA_FIELDS};
 
 /// Checks that all template variables are defined in skill.yaml or built-in.
 pub fn check_variables(
@@ -37,10 +36,12 @@ pub fn check_variables(
 
     let undeclared: HashSet<String> = template.undeclared_variables(true);
     let known: HashSet<&str> = resolved_variables.keys().map(String::as_str).collect();
+    // Derive builtins from MiniJinja so feature or version changes cannot stale a list.
+    let builtin_globals: HashSet<&str> = env.globals().map(|(name, _)| name).collect();
 
     let mut errors = Vec::new();
     for var in &undeclared {
-        if is_builtin(var) {
+        if is_builtin(var, &builtin_globals) {
             continue;
         }
         if !known.contains(var.as_str()) {
@@ -54,9 +55,10 @@ pub fn check_variables(
     errors
 }
 
-fn is_builtin(name: &str) -> bool {
+fn is_builtin(name: &str, builtin_globals: &HashSet<&str>) -> bool {
     let root = name.split('.').next().unwrap();
-    HELPER_FUNCTIONS.contains(&root)
+    builtin_globals.contains(root)
+        || HELPER_FUNCTIONS.contains(&root)
         || matches!(
             root,
             "loop"
@@ -74,12 +76,13 @@ fn is_builtin(name: &str) -> bool {
         || SKILL_METADATA_FIELDS.contains(&root)
 }
 
-/// Checks that no skill.yaml variable name collides with a built-in context field.
+/// Checks that no skill.yaml variable name collides with a built-in field or helper.
 ///
 /// `build_context` (`engine::context`) inserts `skill_name`, `skill_description`, and
 /// every `SKILL_METADATA_FIELDS` entry before skill variables, then lets variables
 /// overwrite them unconditionally — a variable named e.g. `version` or `license` would
 /// otherwise silently shadow the skill's own declared metadata with no warning.
+/// Variables also shadow helper functions, preventing templates from calling them.
 pub fn check_reserved_names(
     resolved_variables: &BTreeMap<String, yaml_serde::Value>,
 ) -> Vec<String> {
@@ -91,7 +94,9 @@ pub fn check_reserved_names(
 }
 
 fn is_reserved(name: &str) -> bool {
-    matches!(name, "skill_name" | "skill_description") || SKILL_METADATA_FIELDS.contains(&name)
+    matches!(name, "skill_name" | "skill_description")
+        || SKILL_METADATA_FIELDS.contains(&name)
+        || HELPER_FUNCTIONS.contains(&name)
 }
 
 /// A template variable that was used but not defined in skill.yaml.
@@ -106,6 +111,19 @@ pub struct UndefinedVariable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn minijinja_globals_not_reported_as_undefined() {
+        let errors = check_variables(
+            "{% for i in range(2) %}{{ i }}{% endfor %} {{ dict(a=1).a }}",
+            Path::new("t.j2"),
+            &BTreeMap::new(),
+        );
+        assert!(
+            errors.is_empty(),
+            "MiniJinja globals should pass: {errors:?}"
+        );
+    }
 
     #[test]
     fn helper_function_not_reported_as_undefined() {
