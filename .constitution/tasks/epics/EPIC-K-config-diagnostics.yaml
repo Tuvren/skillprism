@@ -54,7 +54,7 @@ tickets:
             When the user runs `skillprism validate`
             Then the command exits non-zero
             And stderr says the project config in skillprism.yaml has an unknown field `name`
-            And stderr gives line 1 and a column
+            And stderr gives the line and column when the parser reports a location
             And stderr does not contain "Invalid YAML"
 
           Scenario: Missing required skillprism field in skill.yaml
@@ -74,7 +74,7 @@ tickets:
             When the user runs `skillprism validate`
             Then stderr says the YAML in skillprism.yaml does not parse and gives line 3 and the column
 
-        Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed"; the valid path is unchanged.
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed". This probe is a regression check only; it does not exercise the new diagnostics. The behavior proof is the automated tests.
     flows: [flow-validate, flow-fail-on-error]
     certainty: assumed
     status: planned
@@ -116,7 +116,7 @@ tickets:
             When the user runs `skillprism validate`
             Then stderr shows the skillprism.yaml line containing `name:` with a label under it
 
-        Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed".
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed". This probe is a regression check only; it does not exercise the graphical reporter. The behavior proof is the automated tests.
     flows: [flow-fail-on-error, flow-validate]
     certainty: assumed
     status: planned
@@ -124,7 +124,7 @@ tickets:
     title: Remove the stale name field from the quickstart and record the fix in CHANGELOG
     type: Chore
     effort: 1
-    depends_on: []
+    depends_on: [SKP-K001, SKP-K002]
     scope:
       in:
         - site/content/docs/quickstart.md
@@ -133,9 +133,9 @@ tickets:
       command: hugo --gc --minify -s site
       expected: "exit 0; the quickstart skillprism.yaml example has no top-level name field"
     stop_conditions:
-      - "STOP if another docs page shows a skillprism.yaml field that ProjectConfig rejects and fixing it would change more than the example blocks; list it in the closeout follow_ups instead; don't improvise."
+      - "STOP if a stale project-config example appears outside quickstart.md; record it as a closeout follow-up. K003 owns only site/content/docs/quickstart.md and CHANGELOG.md; don't improvise."
     description: >-
-      site/content/docs/quickstart.md shows `name: my-skills` in skillprism.yaml, which 0.2.0 rejects (CHANGELOG.md documents the removal). Remove it so the example matches what the binary accepts, and check the other site/content/docs pages' skillprism.yaml examples for the same drift (fix in place only when the fix is limited to the example block). Add a "Fixed" entry referencing #31 under an Unreleased section at the top of CHANGELOG.md, creating that section if it does not exist, covering the clearer diagnostics, the graphical reporter, and the quickstart correction.
+      site/content/docs/quickstart.md shows `name: my-skills` in skillprism.yaml, which 0.2.0 rejects (CHANGELOG.md documents the removal). Remove it so the example matches what the binary accepts. K003 owns only site/content/docs/quickstart.md and CHANGELOG.md. Any further stale project-config examples found outside quickstart.md become closeout follow-ups; do not edit those pages in this ticket. Add a "Fixed" entry referencing #31 under an Unreleased section at the top of CHANGELOG.md, creating that section if it does not exist, covering the clearer diagnostics from SKP-K001, the graphical reporter from SKP-K002, and the quickstart correction.
     acceptance:
       mode: gherkin
       evidence: |

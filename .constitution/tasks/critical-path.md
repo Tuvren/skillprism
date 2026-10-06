@@ -26,10 +26,10 @@ Epics planned from issues. They run whenever the user chooses, outside the depen
 
 | Epic | Source | Open points | Owns | Conflicts with |
 | :--- | :--- | :--- | :--- | :--- |
-| EPIC-J Honor the documented init project harness default outside a TTY | github#33 | 3 | `src/cli.rs`, `tests/integration.rs`, `site/content/docs/cli.md`, `site/content/docs/quickstart.md`, `README.md`, `CHANGELOG.md` | none |
+| EPIC-J Honor the documented init project harness default outside a TTY | github#33 | 3 | `src/cli.rs`, `src/scaffold/project.rs`, `tests/integration.rs`, `site/content/docs/cli.md`, `site/content/docs/quickstart.md`, `README.md`, `CHANGELOG.md` | none |
 | EPIC-K Distinguish config schema errors from YAML syntax errors and ship graphical diagnostics | github#31 | 8 | `src/types/error.rs`, `src/loader`, `src/registry/mod.rs`, `src/main.rs`, `src/cli.rs`, `Cargo.toml`, `Cargo.lock`, `tests/integration.rs`, `tests/fixtures`, `site/content/docs/quickstart.md`, `CHANGELOG.md` | none |
-| EPIC-L YAML-safe frontmatter rendering and JSON-safe built-in manifests | github#34 | 14 | `src/engine`, `src/validator`, `src/cli.rs`, `src/types/error.rs`, `src/router/manifest.rs`, `src/builtin_harnesses`, `src/scaffold/skill.rs`, `src/scaffold/project.rs`, `examples`, `tests`, `site/content/docs`, `README.md`, `CHANGELOG.md` | none |
-| EPIC-M Test, version, and publish the JSON Schemas for skillprism.yaml, skill.yaml, and harness definitions | github#32 | 11 | `schemas`, `tests/schemas.rs`, `Cargo.toml`, `Cargo.lock`, `site/hugo.toml`, `site/content/docs`, `src/scaffold`, `examples`, `tests/fixtures`, `README.md`, `CHANGELOG.md` | none |
+| EPIC-L YAML-safe frontmatter rendering and JSON-safe built-in manifests | github#34 | 14 | `src/engine`, `src/validator`, `src/cli.rs`, `src/types/error.rs`, `src/router/manifest.rs`, `src/router/mod.rs`, `src/builtin_harnesses`, `src/scaffold/skill.rs`, `src/scaffold/project.rs`, `examples`, `tests`, `site/content/docs`, `README.md`, `CHANGELOG.md`, `Cargo.toml`, `Cargo.lock` | none |
+| EPIC-M Test, version, and publish the JSON Schemas for skillprism.yaml, skill.yaml, and harness definitions | github#32 | 11 | `schemas`, `tests/schemas.rs`, `Cargo.toml`, `Cargo.lock`, `site/hugo.toml`, `site/content/docs`, `src/scaffold`, `src/types/project.rs`, `src/loader/project.rs`, `src/registry/types.rs`, `examples`, `tests/fixtures`, `README.md`, `CHANGELOG.md` | none |
 
 ## Build order
 
@@ -51,8 +51,8 @@ An arrow points from a prerequisite to the epic that depends on it, so it reads 
 A dependency-respecting listing, not a chain: `needs` names a ticket's own `depends_on` inside its epic, and a ticket without one has no in-epic dependency. Readiness is epic-level: a ticket finished on an unmerged branch satisfies no other epic's dependency until the containing PR merges.
 
 - **EPIC-J:** SKP-J001, SKP-J002 (needs SKP-J001)
-- **EPIC-K:** SKP-K001, SKP-K002 (needs SKP-K001), SKP-K003
-- **EPIC-L:** SKP-L001, SKP-L002 (needs SKP-L001), SKP-L003 (needs SKP-L001, SKP-L002), SKP-L004
+- **EPIC-K:** SKP-K001, SKP-K002 (needs SKP-K001), SKP-K003 (needs SKP-K001, SKP-K002)
+- **EPIC-L:** SKP-L001, SKP-L002 (needs SKP-L001), SKP-L003 (needs SKP-L001, SKP-L002), SKP-L004, SKP-L005 (deferred; needs SKP-L003)
 - **EPIC-M:** SKP-M001, SKP-M002 (needs SKP-M001), SKP-M003 (needs SKP-M002), SKP-M004 (needs SKP-M002)
 
 ## Concurrency mechanics

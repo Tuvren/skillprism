@@ -7,6 +7,7 @@ depends_on: []
 scope:
   paths:
     - src/cli.rs
+    - src/scaffold/project.rs
     - tests/integration.rs
     - site/content/docs/cli.md
     - site/content/docs/quickstart.md
@@ -14,7 +15,7 @@ scope:
     - CHANGELOG.md
   tech_spec_patchable:
     - .constitution/tech-spec/contracts/cli.meta.yaml
-estimated_diff_lines: 180
+estimated_diff_lines: 190
 tickets:
   - id: SKP-J001
     title: Fall back to claude,opencode when init project runs without -H outside a TTY
@@ -24,17 +25,16 @@ tickets:
     scope:
       in:
         - src/cli.rs
+        - src/scaffold/project.rs
         - tests/integration.rs
-      out:
-        - src/scaffold
     verification:
       command: cargo test
       expected: "exit 0; the non-TTY init project test now asserts success with the claude and opencode harnesses instead of the usage error"
     stop_conditions:
-      - "STOP if honoring the default requires changing the scaffold module's own defaulting or the interactive MultiSelect prompt; don't improvise."
+      - "STOP if honoring the default requires changing scaffold_project's behavior or the interactive MultiSelect prompt; the only edit in src/scaffold/project.rs is correcting the doc comment that claims an empty harness list defaults to claude and opencode. Don't improvise."
       - "STOP if any other command in src/cli.rs relies on the non-interactive usage error for init project (for example a distribution path that shells into it); don't improvise."
     description: >-
-      `skillprism init project <name>` without `-H` currently fails with a usage error when stdin or stdout is not a terminal, while `--help` advertises "(default: claude, opencode)". Make the non-interactive path apply that documented default: when no harnesses are given and the session is not interactive, scaffold the project with claude and opencode and print one stderr line naming the harnesses that were applied and how to choose others with `-H`. Interactive behavior is unchanged: a terminal session still shows the harness multi-select prompt and still rejects an empty selection. An explicit `-H` list still wins in both modes. Keep the default list in one place so the help text, the fallback, and the scaffold cannot disagree; the help text for `-H` states that the default applies when not prompted. Replace the unit test run_init_project_non_tty_without_harnesses_fails_with_usage_error with one that asserts the default is applied, and add a binary-level test in tests/integration.rs that runs `init project` with piped stdin and checks the generated skillprism.yaml lists claude and opencode. Alternative considered (not planned): keep the error and change the help text to "(default: claude, opencode; interactive only)"; the issue reporter and the epic lead both prefer a real default because scripts, CI, and agents are first-class callers.
+      `skillprism init project <name>` without `-H` currently fails with a usage error when stdin or stdout is not a terminal, while `--help` advertises "(default: claude, opencode)". The scaffold does not apply that default: src/scaffold/project.rs only has a doc comment ("When harnesses is empty, defaults to claude and opencode") while scaffold_project writes whatever list it is given. Put the fallback in src/cli.rs as one constant. When no harnesses are given and the session is not interactive, that constant supplies claude and opencode, the command prints one stderr line naming the harnesses that were applied and how to choose others with `-H`, and cli.rs passes that list into scaffold_project. Interactive behavior is unchanged: a terminal session still shows the harness multi-select prompt and still rejects an empty selection. An explicit `-H` list still wins in both modes. The constant is the single source for the fallback; the `-H` help text states that same default and that it applies when no prompt is shown. Correct the stale doc comment on scaffold_project so it no longer claims a default; do not change scaffold behavior. Replace the unit test run_init_project_non_tty_without_harnesses_fails_with_usage_error with one that asserts the default is applied, and add a binary-level test in tests/integration.rs that runs `init project` with piped stdin and checks the generated skillprism.yaml lists claude and opencode. No architecture flow covers init or scaffolding, so this ticket's flows list is empty; that gap is routed to Stage 2. Alternative considered (not planned): keep the error and change the help text to "(default: claude, opencode; interactive only)"; the issue reporter and the epic lead both prefer a real default because scripts, CI, and agents are first-class callers.
     acceptance:
       mode: gherkin
       evidence: |
@@ -55,6 +55,8 @@ tickets:
           Scenario: Help text matches behavior
             When the user runs `skillprism init project --help`
             Then the `-H, --harnesses` line states the claude, opencode default and that it applies when no prompt is shown
+
+        No live_probe: guidelines declare no init-project recipe, and this plan must not invent one. The gap is routed to Stage 3 (specifying-technical-implementation). The behavior proof is the automated tests.
     flows: []
     certainty: assumed
     status: planned
