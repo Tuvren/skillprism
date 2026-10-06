@@ -1,0 +1,93 @@
+id: J
+name: Honor the documented init project harness default outside a TTY
+kind: out_of_band
+source: github#33
+capabilities: [CAP-013]
+depends_on: []
+scope:
+  paths:
+    - src/cli.rs
+    - tests/integration.rs
+    - site/content/docs/cli.md
+    - site/content/docs/quickstart.md
+    - README.md
+    - CHANGELOG.md
+  tech_spec_patchable:
+    - .constitution/tech-spec/contracts/cli.meta.yaml
+estimated_diff_lines: 180
+tickets:
+  - id: SKP-J001
+    title: Fall back to claude,opencode when init project runs without -H outside a TTY
+    type: Feature
+    effort: 2
+    depends_on: []
+    scope:
+      in:
+        - src/cli.rs
+        - tests/integration.rs
+      out:
+        - src/scaffold
+    verification:
+      command: cargo test
+      expected: "exit 0; the non-TTY init project test now asserts success with the claude and opencode harnesses instead of the usage error"
+    stop_conditions:
+      - "STOP if honoring the default requires changing the scaffold module's own defaulting or the interactive MultiSelect prompt; don't improvise."
+      - "STOP if any other command in src/cli.rs relies on the non-interactive usage error for init project (for example a distribution path that shells into it); don't improvise."
+    description: >-
+      `skillprism init project <name>` without `-H` currently fails with a usage error when stdin or stdout is not a terminal, while `--help` advertises "(default: claude, opencode)". Make the non-interactive path apply that documented default: when no harnesses are given and the session is not interactive, scaffold the project with claude and opencode and print one stderr line naming the harnesses that were applied and how to choose others with `-H`. Interactive behavior is unchanged: a terminal session still shows the harness multi-select prompt and still rejects an empty selection. An explicit `-H` list still wins in both modes. Keep the default list in one place so the help text, the fallback, and the scaffold cannot disagree; the help text for `-H` states that the default applies when not prompted. Replace the unit test run_init_project_non_tty_without_harnesses_fails_with_usage_error with one that asserts the default is applied, and add a binary-level test in tests/integration.rs that runs `init project` with piped stdin and checks the generated skillprism.yaml lists claude and opencode. Alternative considered (not planned): keep the error and change the help text to "(default: claude, opencode; interactive only)"; the issue reporter and the epic lead both prefer a real default because scripts, CI, and agents are first-class callers.
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Feature: init project default harnesses
+          Scenario: Non-interactive run without -H applies the documented default
+            Given stdin is not a terminal
+            When the user runs `skillprism init project demo`
+            Then the command exits 0
+            And demo/skillprism.yaml lists exactly the harnesses claude and opencode
+            And stderr names claude and opencode as the applied default and mentions `-H`
+
+          Scenario: Explicit -H overrides the default
+            Given stdin is not a terminal
+            When the user runs `skillprism init project demo -H codex`
+            Then the command exits 0
+            And demo/skillprism.yaml lists exactly the harness codex
+
+          Scenario: Help text matches behavior
+            When the user runs `skillprism init project --help`
+            Then the `-H, --harnesses` line states the claude, opencode default and that it applies when no prompt is shown
+    flows: []
+    certainty: assumed
+    status: planned
+  - id: SKP-J002
+    title: Align CLI docs, quickstart, README, and CHANGELOG with the non-interactive default
+    type: Chore
+    effort: 1
+    depends_on: [SKP-J001]
+    scope:
+      in:
+        - site/content/docs/cli.md
+        - site/content/docs/quickstart.md
+        - README.md
+        - CHANGELOG.md
+    verification:
+      command: hugo --gc --minify -s site
+      expected: "exit 0 with no build errors or warnings about the edited pages"
+    stop_conditions:
+      - "STOP if a docs page describes init project behavior that SKP-J001 did not implement; don't improvise."
+    description: >-
+      Update the `init project` entries in site/content/docs/cli.md (around the `--harnesses` row), README.md (the init section near line 217), and site/content/docs/quickstart.md so each says the claude, opencode default applies whenever no interactive prompt is shown, and that a terminal session prompts instead. Add a "Fixed" entry referencing #33 under an Unreleased section at the top of CHANGELOG.md, creating that section if it does not exist yet.
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Feature: init project docs match the binary
+          Scenario: Docs state when the default applies
+            Given the docs build succeeds with `hugo --gc --minify -s site`
+            When a reader opens the CLI reference, the quickstart, and the README init section
+            Then each says `-H` defaults to claude, opencode when no prompt is shown
+            And none says the flag is required in non-interactive mode
+          Scenario: CHANGELOG records the fix
+            When a reader opens CHANGELOG.md
+            Then the Unreleased section has a Fixed entry for the init project default referencing #33
+    flows: []
+    certainty: settled
+    status: planned

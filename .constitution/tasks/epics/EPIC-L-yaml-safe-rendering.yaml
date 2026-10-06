@@ -1,0 +1,205 @@
+id: L
+name: YAML-safe frontmatter rendering and JSON-safe built-in manifests
+kind: out_of_band
+source: github#34
+capabilities: [CAP-001, CAP-005, CAP-006, CAP-012]
+depends_on: [K]
+scope:
+  paths:
+    - src/engine
+    - src/validator
+    - src/cli.rs
+    - src/types/error.rs
+    - src/router/manifest.rs
+    - src/builtin_harnesses
+    - src/scaffold/skill.rs
+    - src/scaffold/project.rs
+    - examples
+    - tests
+    - site/content/docs
+    - README.md
+    - CHANGELOG.md
+  out_of_scope:
+    - src/distribution
+  tech_spec_patchable:
+    - .constitution/tech-spec/adrs/ADR-0002-minijinja.md
+    - .constitution/tech-spec/guidelines.md
+estimated_diff_lines: 1400
+tickets:
+  - id: SKP-L001
+    title: Add a yaml_str template filter that emits a quoted YAML scalar
+    type: Feature
+    effort: 3
+    depends_on: []
+    scope:
+      in:
+        - src/engine
+        - src/validator
+    verification:
+      command: cargo test
+      expected: "exit 0; engine unit tests cover the filter on strings with colon-space, double quotes, single quotes, backslashes, leading indicators, newlines, and non-string values"
+    stop_conditions:
+      - "STOP if the validator's undefined-name checks reject a registered filter and fixing that requires redesigning the validator's macro or variable model; don't improvise."
+      - "STOP if producing a correct YAML scalar needs a new dependency beyond yaml_serde and minijinja; don't improvise."
+    description: >-
+      Register a MiniJinja filter, `yaml_str` (final name may be `yaml` if the worker finds a clash; record the choice), available in SKILL.md templates, sidecar templates, and manifest templates alike. It turns any value into a YAML double-quoted scalar that a YAML 1.2 parser reads back as exactly the original string, escaping double quotes, backslashes, control characters, and newlines; non-string scalars are stringified first. Authors write `description: {{ skill_description | yaml_str }}`. Rendering stays non-escaping by default: the epic deliberately does not auto-quote interpolations inside frontmatter, because authors who already wrote `description: "{{ skill_description }}"` would get double quoting. The validator accepts templates that use the filter. Alternative noted in the issue and not planned: automatic YAML-context escaping inside the frontmatter fence.
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Feature: yaml_str filter
+          Scenario Outline: Values round-trip through YAML
+            Given a skill whose description is <value>
+            And a SKILL.md template with `description: {{ skill_description | yaml_str }}` in its frontmatter
+            When the engine renders the skill for the claude harness
+            Then parsing the rendered frontmatter as YAML yields description equal to <value>
+            Examples:
+              | value                                                              |
+              | Router: use mode X. See also: reference docs. Say "hello" and use `gh` CLI. |
+              | it's a 'quoted' value                                              |
+              | back\slash and a # hash                                            |
+              | - starts with a dash                                               |
+              | line one\nline two                                                 |
+          Scenario: The validator accepts the filter
+            Given a skill template that uses `| yaml_str`
+            When the user runs `skillprism validate`
+            Then validation passes
+    flows: [flow-compile-template, flow-validate]
+    certainty: assumed
+    status: planned
+  - id: SKP-L002
+    title: Move scaffold, examples, fixtures, and docs to the yaml_str filter for frontmatter values
+    type: Chore
+    effort: 3
+    depends_on: [SKP-L001]
+    scope:
+      in:
+        - src/scaffold/skill.rs
+        - src/scaffold/project.rs
+        - examples
+        - tests
+        - site/content/docs
+        - README.md
+    verification:
+      command: cargo test
+      expected: "exit 0; tests/examples.rs and the scaffold tests still pass, and `hugo --gc --minify -s site` exits 0"
+    stop_conditions:
+      - "STOP if an example or fixture's rendered output changes in a way other than the frontmatter quoting; don't improvise."
+    description: >-
+      Every place that teaches or generates `description: {{ skill_description }}` (and the same pattern for other string frontmatter fields) switches to the filter: the `init skill` and `init project` scaffold templates, examples/skills/*/SKILL.md, examples/README.md, the test fixtures' SKILL.md.j2 templates where frontmatter interpolates strings, README.md (around line 100), and the docs pages quickstart.md, templating.md, spec-compliance.md, skill-yaml.md, concepts.md, and harnesses.md. templating.md gains a short section explaining why frontmatter values need the filter, showing the issue's failing description and the fixed template, and noting that a hand-quoted `"{{ ... }}"` breaks on embedded double quotes. Update scaffold and example assertions that match the old template text.
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: validate-examples
+      evidence: |
+        Feature: generated and documented templates are YAML-safe
+          Scenario: A scaffolded skill survives a hostile description
+            Given a project created with `skillprism init project demo -H claude`
+            And its sample skill's description set to `Router: use mode X. Say "hello" ok`
+            When the user runs `skillprism build`
+            Then dist/claude/sample/SKILL.md frontmatter parses as YAML
+            And its description equals the skill.yaml description exactly
+          Scenario: Docs teach the filter
+            When a reader opens templating.md and quickstart.md
+            Then every frontmatter example interpolating a string uses `| yaml_str`
+
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed" with the migrated example templates.
+    flows: [flow-compile-template, flow-build-project]
+    certainty: settled
+    status: planned
+  - id: SKP-L003
+    title: Parse rendered SKILL.md frontmatter in build and validate and fail with a field-naming diagnostic
+    type: Feature
+    effort: 5
+    depends_on: [SKP-L001, SKP-L002]
+    scope:
+      in:
+        - src/engine
+        - src/validator
+        - src/cli.rs
+        - src/types/error.rs
+        - tests
+        - CHANGELOG.md
+    verification:
+      command: cargo test
+      expected: "exit 0; integration tests cover build and validate failing on the issue's repro and passing once the filter is applied"
+    stop_conditions:
+      - "STOP if validate cannot render templates without writing output or without changing the order of the existing syntax, variable, and macro checks; don't improvise."
+      - "STOP if the check would reject a currently passing example, fixture, or built-in harness output after SKP-L002; list the case instead of loosening the check."
+      - "STOP if the shared Engine::render change alters the behavior of add or update in src/distribution beyond surfacing the same diagnostic; don't improvise."
+    description: >-
+      validate today checks only the template source; build writes whatever the render produces. After a SKILL.md is rendered for a harness, read its leading frontmatter (the block between the opening `---` fence on the first line and the next `---` line), if present, and parse it as YAML; it must be a mapping. If it fails, both build and validate report an error and exit non-zero; build writes nothing for that skill, and validate renders in memory for this check without writing. The diagnostic names the skill, the harness, the source template, the frontmatter field whose rendered value broke parsing when it can be determined, the line in the rendered output, and suggests `{{ <expr> | yaml_str }}`. Errors are collected for every skill and harness pair, not short-circuited, following the validator's accumulate-errors rule. Skills without frontmatter are unaffected. Because add and update reuse Engine::render, they surface the same diagnostic; no other change to src/distribution is in scope. Add a "Fixed" entry referencing #34 under an Unreleased section at the top of CHANGELOG.md (create the section if absent) for the yaml_str filter and the rendered-frontmatter check.
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: validate-examples
+      evidence: |
+        Feature: rendered frontmatter must be valid YAML
+          Scenario: validate catches the issue's repro
+            Given a skill.yaml with description `Router: use mode X. See also: reference docs. Say "hello" and use `gh` CLI.`
+            And a SKILL.md with `description: {{ skill_description }}` in its frontmatter
+            When the user runs `skillprism validate`
+            Then the command exits non-zero
+            And stderr names the skill, the harness, the field `description`, and suggests `| yaml_str`
+
+          Scenario: build refuses to write invalid frontmatter
+            Given the same project
+            When the user runs `skillprism build`
+            Then the command exits non-zero and dist/ has no SKILL.md for that skill
+
+          Scenario: The filter fixes it
+            Given the template uses `description: {{ skill_description | yaml_str }}`
+            When the user runs `skillprism validate` and then `skillprism build`
+            Then both exit 0 and the rendered description round-trips exactly
+
+          Scenario: All failures are reported together
+            Given two skills with broken rendered frontmatter
+            When the user runs `skillprism validate`
+            Then stderr reports both skills
+
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed"; the examples' rendered frontmatter parses for every configured harness.
+    flows: [flow-validate, flow-build-project, flow-fail-on-error, flow-compile-template]
+    certainty: assumed
+    status: planned
+  - id: SKP-L004
+    title: Make built-in JSON manifest templates escape values and reject invalid manifest JSON
+    type: Feature
+    effort: 3
+    depends_on: []
+    scope:
+      in:
+        - src/builtin_harnesses
+        - src/router/manifest.rs
+        - src/engine
+        - src/types/error.rs
+        - tests
+        - CHANGELOG.md
+    verification:
+      command: cargo test
+      expected: "exit 0; a build test with a description containing double quotes, a backslash, and a newline produces claude and codex manifests that parse as JSON with the exact description"
+    stop_conditions:
+      - "STOP if fixing the templates requires changing the harness definition shape in schemas/harness-schema.json; don't improvise."
+      - "STOP if a user harness override that hand-quotes `\"{{ ... }}\"` would start failing and there is no diagnostic that tells the author how to fix it; don't improvise."
+    description: >-
+      The claude and codex built-in harnesses render manifest entries as `"description": "{{ skill_description }}"` inside JSON, so a description with a double quote, backslash, or newline produces invalid JSON, and manifests are aggregated by string concatenation without ever being parsed. Change the built-in manifest templates (all five built-ins audited; today claude.yaml and codex.yaml) to emit values with MiniJinja's `tojson` filter instead of hand-quoted interpolation. After aggregation, parse each manifest as JSON before writing; on failure report the harness, the manifest path, and the JSON error, and suggest `| tojson` for user-defined harness manifests. Add a "Fixed" entry referencing #34 under an Unreleased section at the top of CHANGELOG.md (create the section if absent) for the manifest fix.
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: validate-examples
+      evidence: |
+        Feature: manifests are valid JSON
+          Scenario: Hostile description in a built-in manifest
+            Given a skill whose description is `Say "hello" \ then` followed by a newline and `more`
+            When the user runs `skillprism build` for the claude and codex harnesses
+            Then each generated manifest parses as JSON
+            And the manifest entry's description equals the skill.yaml description exactly
+
+          Scenario: A user harness with a broken manifest template fails loudly
+            Given a harnesses/custom.yaml whose manifest entry template hand-quotes `"{{ skill_description }}"`
+            And a skill whose description contains a double quote
+            When the user runs `skillprism build`
+            Then the command exits non-zero and stderr names the harness, the manifest, and suggests `| tojson`
+
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed".
+    flows: [flow-generate-manifest, flow-builtin-harness]
+    certainty: assumed
+    status: planned

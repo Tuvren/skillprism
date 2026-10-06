@@ -1,0 +1,152 @@
+id: K
+name: Distinguish config schema errors from YAML syntax errors and ship graphical diagnostics
+kind: out_of_band
+source: github#31
+capabilities: [CAP-006, CAP-012]
+depends_on: [J]
+scope:
+  paths:
+    - src/types/error.rs
+    - src/loader
+    - src/registry/mod.rs
+    - src/main.rs
+    - src/cli.rs
+    - Cargo.toml
+    - Cargo.lock
+    - tests/integration.rs
+    - tests/fixtures
+    - site/content/docs/quickstart.md
+    - CHANGELOG.md
+  tech_spec_patchable:
+    - .constitution/tech-spec/adrs/ADR-0007-miette.md
+    - .constitution/tech-spec/guidelines.md
+    - .constitution/tech-spec/stack.yaml
+estimated_diff_lines: 900
+tickets:
+  - id: SKP-K001
+    title: Split YAML syntax errors from config schema errors with field names and real locations
+    type: Feature
+    effort: 5
+    depends_on: []
+    scope:
+      in:
+        - src/types/error.rs
+        - src/loader
+        - src/registry/mod.rs
+        - tests/integration.rs
+        - tests/fixtures
+    verification:
+      command: cargo test
+      expected: "exit 0; new loader unit tests and CLI integration tests cover unknown field, missing required field, wrong type, and malformed YAML in both skillprism.yaml and skill.yaml"
+    stop_conditions:
+      - "STOP if separating the two error kinds requires replacing yaml_serde or changing what the loader accepts (deny_unknown_fields, the required skillprism field, the legacy harnesses: migration error); don't improvise."
+      - "STOP if yaml_serde exposes no line and column for deserialization errors on a path this ticket needs; record which paths lack a location and keep the file-level message there instead of inventing a line."
+    description: >-
+      Today every failure to load skillprism.yaml, skill.yaml, or a harness override YAML is reported as ProjectError::YamlParse with the headline "Invalid YAML in <path>:<line>", the serde reason buried in help, the column dropped, line 0 for value-conversion errors, and line 1 hardcoded for the skillprism manifest version checks. Replace that single variant with distinct diagnostics: one for YAML that does not parse (syntax), and one for YAML that parses but does not match the expected shape (schema), with the schema case naming the file and the offending field and what is wrong with it: unknown field (listing the accepted fields when serde provides them), missing required field, or wrong type or value. Both carry the real line and column when the parser reports one and a miette source span label over the offending text where the location is known; when no location exists, the message is file-level and shows no line number rather than a fake one. The skillprism version checks in validate_skillprism_manifest_version name the skillprism field and point at its line when present, or say it is missing. The legacy `harnesses:` migration error keeps its own wording. Apply the same split to the harness override loader in src/registry/mod.rs. The headline text must read correctly in the current non-fancy output too, because SKP-K002 changes the reporter separately. Add fixtures and CLI integration tests that run `skillprism validate` against a project with an unknown top-level `name:` field and against a skill.yaml missing `skillprism:` and assert stderr names the field and does not say "Invalid YAML".
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: validate-examples
+      evidence: |
+        Feature: config diagnostics name the real problem
+          Scenario: Unknown field in skillprism.yaml
+            Given a project whose skillprism.yaml has a top-level `name: my-skills` line on line 1
+            When the user runs `skillprism validate`
+            Then the command exits non-zero
+            And stderr says the project config in skillprism.yaml has an unknown field `name`
+            And stderr gives line 1 and a column
+            And stderr does not contain "Invalid YAML"
+
+          Scenario: Missing required skillprism field in skill.yaml
+            Given a skill whose skill.yaml has name and description but no `skillprism:` field
+            When the user runs `skillprism validate`
+            Then stderr says skill.yaml is missing the required field `skillprism`
+            And stderr names the skill.yaml path
+            And stderr does not contain "Invalid YAML" and does not claim line 1
+
+          Scenario: Wrong type is a schema error, not a syntax error
+            Given a skill.yaml where `variables` is a string
+            When the user runs `skillprism validate`
+            Then stderr names the field `variables` and the expected shape, with its line when the parser reports one
+
+          Scenario: Real syntax errors still say so
+            Given a skillprism.yaml with an unclosed flow sequence on line 3
+            When the user runs `skillprism validate`
+            Then stderr says the YAML in skillprism.yaml does not parse and gives line 3 and the column
+
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed"; the valid path is unchanged.
+    flows: [flow-validate, flow-fail-on-error]
+    certainty: assumed
+    status: planned
+  - id: SKP-K002
+    title: Enable the miette graphical reporter in the shipped binary
+    type: Feature
+    effort: 2
+    depends_on: [SKP-K001]
+    scope:
+      in:
+        - Cargo.toml
+        - Cargo.lock
+        - src/main.rs
+        - src/cli.rs
+        - tests/integration.rs
+    verification:
+      command: cargo build --release --locked
+      expected: "exit 0 after Cargo.lock is updated in the same change; `cargo test` and `cargo clippy -- -D warnings` also pass"
+    stop_conditions:
+      - "STOP if the miette fancy feature set raises the minimum Rust version above the 1.85 pin in rust-toolchain.toml or adds a dependency that fails `cargo build --release --locked` on the release targets; don't improvise."
+      - "STOP if the graphical reporter emits ANSI escapes or Unicode box drawing into piped stderr with no way to disable it via NO_COLOR or terminal detection; don't improvise."
+    description: >-
+      Every command prints errors with `{e:?}` on a miette Report, and miette is built with only its derive feature, so users see the raw `Diagnostic { message: ... }` debug form plus the "install miette with the fancy feature" note. Enable miette's graphical reporter in the binary (the `fancy-no-backtrace` feature is the recommended choice, since skillprism doesn't need backtraces; `fancy` is the alternative) so the existing `{e:?}` sites print the headline, help, and source snippet with labels from SKP-K001. Configure the hook once at startup if needed so piped stderr and NO_COLOR get plain, uncolored text and terminals get color; error printing call sites stay as they are unless the hook requires otherwise. The feature change is a code decision for the closeout (dependency kind), not a stack.yaml version change. Update CLI integration tests that matched the debug form so they assert on the message text instead.
+    acceptance:
+      mode: gherkin
+      supplementary: [live_probe]
+      recipe: validate-examples
+      evidence: |
+        Feature: graphical diagnostics
+          Scenario: Errors render as a report, not a debug struct
+            Given a project whose skillprism.yaml has an unknown field `name`
+            When the user runs `skillprism validate` with stderr piped
+            Then stderr does not contain "Diagnostic {" or "install miette with the `fancy` feature"
+            And stderr contains the headline from SKP-K001 and its help text
+            And stderr contains no ANSI escape sequences when NO_COLOR is set
+
+          Scenario: Source snippet where a location is known
+            Given the same project
+            When the user runs `skillprism validate`
+            Then stderr shows the skillprism.yaml line containing `name:` with a label under it
+
+        Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed".
+    flows: [flow-fail-on-error, flow-validate]
+    certainty: assumed
+    status: planned
+  - id: SKP-K003
+    title: Remove the stale name field from the quickstart and record the fix in CHANGELOG
+    type: Chore
+    effort: 1
+    depends_on: []
+    scope:
+      in:
+        - site/content/docs/quickstart.md
+        - CHANGELOG.md
+    verification:
+      command: hugo --gc --minify -s site
+      expected: "exit 0; the quickstart skillprism.yaml example has no top-level name field"
+    stop_conditions:
+      - "STOP if another docs page shows a skillprism.yaml field that ProjectConfig rejects and fixing it would change more than the example blocks; list it in the closeout follow_ups instead; don't improvise."
+    description: >-
+      site/content/docs/quickstart.md shows `name: my-skills` in skillprism.yaml, which 0.2.0 rejects (CHANGELOG.md documents the removal). Remove it so the example matches what the binary accepts, and check the other site/content/docs pages' skillprism.yaml examples for the same drift (fix in place only when the fix is limited to the example block). Add a "Fixed" entry referencing #31 under an Unreleased section at the top of CHANGELOG.md, creating that section if it does not exist, covering the clearer diagnostics, the graphical reporter, and the quickstart correction.
+    acceptance:
+      mode: gherkin
+      evidence: |
+        Feature: quickstart config matches the binary
+          Scenario: The quickstart skillprism.yaml loads
+            Given the skillprism.yaml example from the quickstart page written into a fresh project with the quickstart's sample skill
+            When the user runs `skillprism validate` in that project
+            Then the command exits 0
+          Scenario: Docs build
+            When `hugo --gc --minify -s site` runs
+            Then it exits 0
+    flows: [flow-validate]
+    certainty: settled
+    status: planned
