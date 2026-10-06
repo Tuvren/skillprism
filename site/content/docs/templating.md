@@ -119,7 +119,7 @@ skillprism registers one custom helper:
 
 | Function | Description | Example |
 |----------|-------------|---------|
-| `skill_ref(name)` | Formats a skill reference for the current harness | `{{ skill_ref(skill_name) }}` → `/my-agent` |
+| `skill_ref(name)` | Formats a skill reference using the current harness's `skill_ref_pattern` (falls back to `/{name}`) | `{{ skill_ref(skill_name) }}` → `/my-agent` |
 
 ## Gotchas
 
