@@ -1,0 +1,12 @@
+owner: SKP-K001
+mode: gherkin
+produced:
+  date: "2026-10-07"
+  commit: e93ae5b
+  command: "cargo run --quiet -- validate examples"
+files:
+  - path: validate-examples.log
+    sha256: ff08e36af65a4fd32ea09b30b1b74ef07f5b8fe6b226c77ba5659e87342d46d7
+    bytes: 1335
+    role: log
+pass_criteria: "The validate-examples live-verification recipe prints 'Validation passed' (regression check only; the new diagnostics are proven by the integration tests)."

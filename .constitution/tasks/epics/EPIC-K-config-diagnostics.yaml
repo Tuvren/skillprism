@@ -77,7 +77,7 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed". This probe is a regression check only; it does not exercise the new diagnostics. The behavior proof is the automated tests.
     flows: [flow-validate, flow-fail-on-error]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-K002
     title: Enable the miette graphical reporter in the shipped binary
     type: Feature
