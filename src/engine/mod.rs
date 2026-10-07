@@ -295,7 +295,6 @@ mod tests {
             (yaml_serde::Value::Number(42.into()), "42"),
             (yaml_serde::Value::Number((-7).into()), "-7"),
             (yaml_serde::Value::Number(1.5.into()), "1.5"),
-            (yaml_serde::Value::Null, "none"),
         ];
         let registry = HarnessRegistry::with_builtins();
         for (value, expected) in cases {
@@ -309,6 +308,57 @@ mod tests {
             assert_eq!(output.skill_content, format!("value: \"{expected}\"\n"));
             let parsed: yaml_serde::Value = yaml_serde::from_str(&output.skill_content).unwrap();
             assert_eq!(parsed["value"].as_str(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn yaml_str_undefined_optional_field_parses_as_null() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) = create_skill_with_template(
+            "yaml-null",
+            "---\nlicense: {{ license | yaml_str }}\nbare_license: {{ license }}\n---\nBody\n",
+            BTreeMap::new(),
+        );
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        assert!(build_context(&pair)["license"].is_undefined());
+        let output = Engine::render(&pair).unwrap();
+        assert_eq!(
+            output.skill_content,
+            "---\nlicense: null\nbare_license: \n---\nBody\n"
+        );
+        let frontmatter = output
+            .skill_content
+            .strip_prefix("---\n")
+            .unwrap()
+            .split_once("\n---\n")
+            .unwrap()
+            .0;
+        let parsed: yaml_serde::Value = yaml_serde::from_str(frontmatter).unwrap();
+        assert_eq!(parsed["license"], yaml_serde::Value::Null);
+        assert_eq!(parsed["license"], parsed["bare_license"]);
+    }
+
+    #[test]
+    fn yaml_str_none_parses_as_null() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) = create_skill_with_template(
+            "yaml-null",
+            "value: {{ value | yaml_str }}\n",
+            BTreeMap::from([("value".to_string(), yaml_serde::Value::Null)]),
+        );
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        assert!(build_context(&pair)["value"].is_none());
+        // Exercise a YAML filename too: null must not be autoescaped into "null".
+        pair.harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "config.yaml".to_string(),
+            template: "value: {{ value | yaml_str }}\n".to_string(),
+            output_dir: None,
+        }];
+        let output = Engine::render(&pair).unwrap();
+        for content in [&output.skill_content, &output.sidecars[0].content] {
+            assert_eq!(content, "value: null\n");
+            let parsed: yaml_serde::Value = yaml_serde::from_str(content).unwrap();
+            assert_eq!(parsed["value"], yaml_serde::Value::Null);
         }
     }
 
