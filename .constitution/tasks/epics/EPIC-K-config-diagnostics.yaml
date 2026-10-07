@@ -119,7 +119,10 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` still prints "Validation passed". This probe is a regression check only; it does not exercise the graphical reporter. The behavior proof is the automated tests.
     flows: [flow-fail-on-error, flow-validate]
     certainty: assumed
-    status: planned
+    deviations:
+      - files: [src/types/error.rs]
+        justification: "The M1 re-review found the ConfigSchema help text pointed at repository-relative docs/ paths that installed users cannot open. The lead folded the one-line URL fix into M2 instead of a separate fix milestone; only the help string changed."
+    status: done
   - id: SKP-K003
     title: Remove the stale name field from the quickstart and record the fix in CHANGELOG
     type: Chore
@@ -149,4 +152,4 @@ tickets:
             Then it exits 0
     flows: [flow-validate]
     certainty: settled
-    status: planned
+    status: done

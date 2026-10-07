@@ -2,7 +2,7 @@ owner: SKP-K001
 mode: gherkin
 produced:
   date: "2026-10-07"
-  commit: e93ae5b
+  commit: "e93ae5b"
   command: "cargo run --quiet -- validate examples"
 files:
   - path: validate-examples.log
