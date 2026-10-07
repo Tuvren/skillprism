@@ -303,19 +303,34 @@ pub mod schema_contract {
             .retain(|field, _| required.contains(field.as_str()));
         assert!(validator.is_valid(&minimal));
         assert!(accepts(&minimal), "schema-valid minimal sample must load");
+        // A non-integral float probes number widening without the documented
+        // integral-float gap, which has dedicated tests in the loader/registry.
+        let probes = [
+            json!("probe"),
+            json!(1),
+            json!(1.5),
+            json!({"probe": "value"}),
+            json!(["probe"]),
+            json!(true),
+            Value::Null,
+        ];
         for field in fields {
             let mut optional = minimal.clone();
             optional[*field] = sample[*field].clone();
             assert!(validator.is_valid(&optional));
             assert!(accepts(&optional), "schema-valid field {field} must load");
 
-            let mut null = sample.clone();
-            null[*field] = Value::Null;
-            if validator.is_valid(&null) {
-                assert!(accepts(&null), "schema-valid null for {field} must load");
-                optional[*field] = Value::Null;
-                assert!(validator.is_valid(&optional));
-                assert!(accepts(&optional), "schema-valid optional null must load");
+            for base in [sample, &minimal] {
+                for value in &probes {
+                    let mut probe = base.clone();
+                    probe[*field] = value.clone();
+                    if validator.is_valid(&probe) {
+                        assert!(
+                            accepts(&probe),
+                            "schema-valid value {value} for {field} must load: {probe}"
+                        );
+                    }
+                }
             }
 
             // Maps fail string coercion too, unlike plain numbers or booleans.

@@ -245,6 +245,24 @@ mod tests {
     }
 
     #[test]
+    fn harness_schema_rejects_out_of_range_lengths() {
+        let schema = schema();
+        let validator =
+            jsonschema::draft202012::new(&schema["properties"]["capabilities"]).unwrap();
+        let overflow: Value = serde_json::from_str("18446744073709551616").unwrap();
+        for field in ["name_max_length", "description_max_length"] {
+            let mut value = json!({"supports_subagent": false});
+            value[field] = json!(u64::MAX);
+            assert!(validator.is_valid(&value), "maximum length for {field}");
+            value[field] = overflow.clone();
+            assert!(
+                !validator.is_valid(&value),
+                "out-of-range length for {field} must be schema-invalid"
+            );
+        }
+    }
+
+    #[test]
     fn harness_schema_documents_integral_float_length_limitation() {
         let schema = schema();
         let validator = jsonschema::draft202012::new(&schema).unwrap();

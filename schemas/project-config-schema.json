@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tuvren.github.io/skillprism/schema/v1/skillprism.json",
   "title": "skillprism.yaml",
-  "description": "Project-level configuration file for skillprism (skillprism.yaml). Determines which harnesses to build for and where skills live. Matches ProjectConfig in src/types/project.rs. Unknown fields are rejected. harnesses defaults to an empty list when omitted. This schema describes the recommended strict shape; the loader also coerces plain scalars to strings (for example, skills_dir: 2024) and accepts bare keys for string fields.",
+  "description": "Project-level configuration file for skillprism (skillprism.yaml). Determines which harnesses to build for and where skills live. Matches ProjectConfig in src/types/project.rs. Unknown fields are rejected. harnesses defaults to an empty list when omitted. This schema describes the recommended strict shape; the loader also coerces plain scalars to strings (for example, skills_dir: 2024) and accepts bare keys (null) for string, list, and map fields.",
   "type": "object",
   "properties": {
     "harnesses": {

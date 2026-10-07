@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://tuvren.github.io/skillprism/schema/v1/harness.json",
   "title": "Harness Definition",
-  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected outside macro function objects. This schema describes the recommended strict shape; the loader also coerces plain scalars to strings (for example, version: 1.0) and accepts bare keys for string fields.",
+  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected outside macro function objects. This schema describes the recommended strict shape; the loader also coerces plain scalars to strings (for example, version: 1.0) and accepts bare keys (null) for string, list, and map fields.",
   "type": "object",
   "required": ["id", "name", "capabilities", "paths"],
   "properties": {
@@ -39,12 +39,14 @@
         "name_max_length": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 18446744073709551615,
           "description": "Maximum allowed skill name length. Known limitation: integral floats such as 64.0 pass the schema but the YAML loader rejects them; use an integer without a decimal point.",
           "default": 64
         },
         "description_max_length": {
           "type": "integer",
           "minimum": 0,
+          "maximum": 18446744073709551615,
           "description": "Maximum allowed description length. Known limitation: integral floats such as 1024.0 pass the schema but the YAML loader rejects them; use an integer without a decimal point.",
           "default": 1024
         },
