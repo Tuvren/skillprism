@@ -60,6 +60,24 @@ fn assert_valid(path: &Path, schema: &Validator) {
     assert!(errors.is_empty(), "{}: {errors:?}", path.display());
 }
 
+fn assert_modeline(path: &Path, schema_name: &str) {
+    let schema: Value = serde_json::from_str(
+        &fs::read_to_string(root().join("schemas").join(schema_name)).unwrap(),
+    )
+    .unwrap();
+    let expected = format!(
+        "# yaml-language-server: $schema={}",
+        schema["$id"].as_str().unwrap()
+    );
+    let content = fs::read_to_string(path).unwrap();
+    assert_eq!(
+        content.lines().next(),
+        Some(expected.as_str()),
+        "{}",
+        path.display()
+    );
+}
+
 fn config_files(dir: &Path) -> Vec<PathBuf> {
     let mut files = Vec::new();
     for entry in fs::read_dir(dir).unwrap() {
@@ -173,15 +191,31 @@ fn scaffold_output_matches_schemas() {
         ],
     );
     let project = temp.path().join("schema-project");
+    assert_modeline(
+        &project.join("skillprism.yaml"),
+        "project-config-schema.json",
+    );
     assert_valid(
         &project.join("skillprism.yaml"),
         &validator("project-config-schema.json"),
     );
     let skill = validator("skill-schema.json");
+    assert_modeline(
+        &project.join("skills/sample/skill.yaml"),
+        "skill-schema.json",
+    );
     assert_valid(&project.join("skills/sample/skill.yaml"), &skill);
     init(&project, &["init", "skill", "schema-skill"]);
+    assert_modeline(
+        &project.join("skills/schema-skill/skill.yaml"),
+        "skill-schema.json",
+    );
     assert_valid(&project.join("skills/schema-skill/skill.yaml"), &skill);
     init(&project, &["init", "harness", "schema-harness"]);
+    assert_modeline(
+        &project.join("harnesses/schema-harness.yaml"),
+        "harness-schema.json",
+    );
     assert_valid(
         &project.join("harnesses/schema-harness.yaml"),
         &validator("harness-schema.json"),

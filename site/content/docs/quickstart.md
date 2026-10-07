@@ -33,11 +33,14 @@ my-skills/
 With the default harnesses or a terminal selection of `claude` and `opencode`, the generated `skillprism.yaml` configures these targets:
 
 ```yaml
+# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skillprism.json
 harnesses:
   - claude
   - opencode
 skills_dir: skills
 ```
+
+The first-line comment links the [project configuration schema](https://tuvren.github.io/skillprism/schema/v1/skillprism.json) for editor completion and field validation. Install the [VS Code YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to read the modeline; in [JetBrains IDEs](https://www.jetbrains.com/help/idea/yaml.html), select the schema URL through **JSON Schema Mappings**.
 
 ## 2. Add a real skill
 
@@ -50,6 +53,7 @@ This scaffolds `skills/dice-roller/` with a spec-compliant template. Edit the tw
 **`skills/dice-roller/skill.yaml`:**
 
 ```yaml
+# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skill.json
 skillprism: '1'
 name: dice-roller
 description: >-

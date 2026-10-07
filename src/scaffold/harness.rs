@@ -16,6 +16,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use super::HARNESS_SCHEMA_URL;
+
 /// Scaffolds a new custom harness definition YAML in the harnesses/ directory.
 pub fn scaffold_harness(project_root: &Path, name: &str) -> io::Result<()> {
     if name.contains('/') || name.contains('\\') || name.contains("..") {
@@ -31,7 +33,8 @@ pub fn scaffold_harness(project_root: &Path, name: &str) -> io::Result<()> {
     fs::write(
         harnesses_dir.join(format!("{name}.yaml")),
         format!(
-            "# {name} Harness Definition\n# Edit the values below to configure your custom harness.\n\n\
+            "# yaml-language-server: $schema={HARNESS_SCHEMA_URL}\n\
+            # {name} Harness Definition\n# Edit the values below to configure your custom harness.\n\n\
             id: {name}\n\
             name: {name}\n\
             capabilities:\n  \
@@ -65,6 +68,13 @@ mod tests {
         assert!(harness_file.exists());
 
         let content = fs::read_to_string(&harness_file).unwrap();
+        let modeline = format!("# yaml-language-server: $schema={HARNESS_SCHEMA_URL}");
+        assert_eq!(content.lines().next(), Some(modeline.as_str()));
+        let mut registry = crate::registry::HarnessRegistry::with_builtins();
+        registry
+            .load_user_overrides(&project_root.join("harnesses"))
+            .unwrap();
+        assert_eq!(registry.resolve("my-custom").unwrap().id, "my-custom");
         assert!(content.contains("id: my-custom"));
         assert!(content.contains("name: my-custom"));
         assert!(content.contains("capabilities:"));

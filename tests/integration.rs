@@ -605,6 +605,73 @@ fn config_diagnostics_nested_missing_fields_have_no_label() {
 }
 
 #[test]
+fn scaffold_modelines_preserve_validation_building_and_installation() {
+    let tmp = TempDir::new().unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo", "-H", "claude"])
+        .assert()
+        .success();
+    let project = tmp.path().join("demo");
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("validate")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Validation passed"));
+    for args in [["init", "skill", "extra"], ["init", "harness", "custom"]] {
+        bin(tmp.path())
+            .current_dir(&project)
+            .args(args)
+            .assert()
+            .success();
+    }
+    let config_path = project.join("skillprism.yaml");
+    let config = fs::read_to_string(&config_path).unwrap();
+    fs::write(
+        config_path,
+        config.replace("  - claude\n", "  - claude\n  - custom\n"),
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("validate")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Validation passed"));
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("build")
+        .assert()
+        .success();
+    for harness in ["claude", "custom"] {
+        for skill in ["sample", "extra"] {
+            assert!(
+                project
+                    .join(format!("dist/{harness}/{skill}/SKILL.md"))
+                    .exists()
+            );
+        }
+    }
+    bin(tmp.path())
+        .current_dir(&project)
+        .args([
+            "add", "./", "--target", "project", "-H", "claude", "--force",
+        ])
+        .assert()
+        .success();
+    for skill in ["sample", "extra"] {
+        let installed =
+            fs::read_to_string(project.join(format!(".claude/skills/{skill}/SKILL.md"))).unwrap();
+        assert!(
+            installed.starts_with(&format!("---\nname: \"{skill}\"\n")),
+            "{installed}"
+        );
+        assert!(!installed.contains("{{"), "{installed}");
+    }
+}
+
+#[test]
 fn init_project_non_tty_without_harnesses_applies_default() {
     let tmp = TempDir::new().unwrap();
     let assertion = bin(tmp.path())

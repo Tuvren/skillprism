@@ -16,6 +16,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use super::SKILL_SCHEMA_URL;
+
 /// Scaffolds a new skill directory with a starter skill.yaml, a spec-compliant
 /// SKILL.md template (YAML frontmatter + body), and standard asset directories
 /// with deletable placeholder content (references/, scripts/, assets/).
@@ -61,7 +63,8 @@ pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
     fs::write(
         target_dir.join("skill.yaml"),
         format!(
-            "skillprism: '1'\n\
+            "# yaml-language-server: $schema={SKILL_SCHEMA_URL}\n\
+             skillprism: '1'\n\
              name: {name}\n\
              description: >-\n  \
              TODO: Describe what this skill does AND when to use it. Include trigger\n  \
@@ -140,6 +143,11 @@ mod tests {
         assert!(skill_dir.join("scripts").is_dir());
 
         let yaml = fs::read_to_string(skill_dir.join("skill.yaml")).unwrap();
+        let modeline = format!("# yaml-language-server: $schema={SKILL_SCHEMA_URL}");
+        assert_eq!(yaml.lines().next(), Some(modeline.as_str()));
+        let model = crate::loader::ProjectLoader::load(project_root).unwrap();
+        assert_eq!(model.skills.len(), 1);
+        assert_eq!(model.skills[0].name, "my-skill");
         assert!(yaml.contains("skillprism: '1'"));
         assert!(yaml.contains("my-skill"));
 
