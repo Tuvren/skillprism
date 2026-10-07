@@ -243,7 +243,7 @@ fn home_dir() -> Result<PathBuf, RouterError> {
 /// The harness schema has no base field, so this is selected by harness id.
 /// The returned directory is the allowed base, including when it is not under
 /// `$HOME`. Every other harness stays relative to `$HOME`.
-fn user_scope_anchor(harness: &HarnessDefinition) -> Result<PathBuf, RouterError> {
+pub fn user_scope_anchor(harness: &HarnessDefinition) -> Result<PathBuf, RouterError> {
     if harness.id == "opencode" {
         xdg_config_home()
     } else {
@@ -251,7 +251,7 @@ fn user_scope_anchor(harness: &HarnessDefinition) -> Result<PathBuf, RouterError
     }
 }
 
-fn xdg_config_home() -> Result<PathBuf, RouterError> {
+pub fn xdg_config_home() -> Result<PathBuf, RouterError> {
     if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
         if !xdg.is_empty() {
             return Ok(PathBuf::from(xdg));
