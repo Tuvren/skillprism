@@ -2,13 +2,15 @@
 
 ## Unreleased
 
+## v0.4.0 — 2026-10-07
+
 ### Added
 
 - **Distribution flags** — `add --all` installs every discovered skill and skips prompts. When the project harness list is non-empty, or `-H` / `-a` is set, those choose the targets and `--all` does not select every built-in harness. When neither is set, prompts are skipped and every built-in harness is selected. `remove --all` skips the confirmation prompt. `-y` / `--yes` skips prompts, and `-a` / `--agent` selects harnesses. `claude-code` and `droid` select Claude and Factory unless a user harness is registered with that exact id.
 
 ### Changed
 
-- **Live install directories** — OpenCode, Factory, and Pi project skills install into `.agents/skills/`. Pi's user skills install into `~/.agents/skills/`. OpenCode's user skills install into `$XDG_CONFIG_HOME/opencode/skills/` (`~/.config/opencode/skills/` when `XDG_CONFIG_HOME` is unset).
+- **Live install directories (breaking)** — OpenCode, Factory, and Pi project skills install into `.agents/skills/`. Pi user skills install into `~/.agents/skills/`. OpenCode user skills install into `$XDG_CONFIG_HOME/opencode/skills/` (`~/.config/opencode/skills/` when `XDG_CONFIG_HOME` is unset). Claude, Codex, and Factory user directories stay the same. `update` writes the new directories and leaves the previous copies in place. `remove` still deletes a recorded skill directory under `.opencode/skills/`, `.factory/skills/`, `.pi/skills/`, `~/.pi/agent/skills/`, or `~/.config/opencode/skills/` when that OpenCode user directory is no longer active. Remove the skill, then add it again, to leave only the new directory.
 
 ## v0.3.0 — 2026-10-07
 

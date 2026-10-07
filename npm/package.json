@@ -1,6 +1,6 @@
 {
   "name": "skillprism",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Distribution CLI with per-harness templating for agent skills",
   "type": "module",
   "bin": {
