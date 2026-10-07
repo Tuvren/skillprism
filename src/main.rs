@@ -27,7 +27,8 @@ mod types;
 mod validator;
 
 fn plain_diagnostics(stderr_is_terminal: bool, no_color: Option<&std::ffi::OsStr>) -> bool {
-    !stderr_is_terminal || no_color.is_some_and(|value| !value.is_empty())
+    // Match miette's supports-color detection: NO_COLOR disables color when present except "0".
+    !stderr_is_terminal || no_color.is_some_and(|value| value != "0")
 }
 
 fn diagnostic_options(plain: bool) -> miette::MietteHandlerOpts {
@@ -116,13 +117,18 @@ mod tests {
     }
 
     #[test]
-    fn empty_no_color_is_unset_and_nonempty_values_select_plain_diagnostics() {
+    fn no_color_selects_plain_diagnostics_when_present_except_zero() {
         assert!(!plain_diagnostics(true, None));
-        assert!(!plain_diagnostics(true, Some(OsStr::new(""))));
-        for value in ["0", "1", " "] {
+        assert!(!plain_diagnostics(true, Some(OsStr::new("0"))));
+        for value in ["", "1", " "] {
             assert!(plain_diagnostics(true, Some(OsStr::new(value))));
         }
-        for no_color in [None, Some(OsStr::new("")), Some(OsStr::new("1"))] {
+        for no_color in [
+            None,
+            Some(OsStr::new("")),
+            Some(OsStr::new("0")),
+            Some(OsStr::new("1")),
+        ] {
             assert!(plain_diagnostics(false, no_color));
         }
     }
