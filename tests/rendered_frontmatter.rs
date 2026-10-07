@@ -255,6 +255,69 @@ fn build_checks_string_fields_supplied_by_yaml_merges() {
 }
 
 #[test]
+fn build_rejects_non_string_description_from_chained_yaml_merges() {
+    let dir = project(
+        "---\nname: sample\nbase: &base {description: [x]}\nmid: &mid {<<: *base, other: 1}\n<<: *mid\n---\n",
+    );
+    let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    for expected in [
+        "description",
+        "YAML string",
+        "resolving YAML merges",
+        "yaml_str",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
+    assert_no_skill_output(dir.path(), "sample");
+}
+
+#[test]
+fn build_accepts_literal_quoted_merge_key() {
+    let dir = project("---\nname: sample\ndescription: safe\n\"<<\": hello\n---\n");
+    bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn build_accepts_invalid_nested_merges_and_discards_partial_merge_results() {
+    for template in [
+        "---\nname: sample\ndescription: safe\nmetadata: {<<: 5}\n---\n",
+        "---\nname: sample\ndefaults: &d {description: [x]}\n<<: *d\nmetadata: {<<: 5}\n---\n",
+    ] {
+        let dir = project(template);
+        bin(dir.path())
+            .args(["build", "--force"])
+            .assert()
+            .success();
+    }
+}
+
+#[test]
+fn build_labels_merged_bad_description_at_the_top_level_merge_key() {
+    for (bom, newline, key) in [("", "\n", "<<"), ("\u{feff}", "\r\n", "\"<<\"")] {
+        let dir = project(&format!(
+            "{bom}---{newline}name: sample{newline}base: &base {{description: [x]}}{newline}mid: &mid{newline}  <<: *base{newline}{key}: *mid{newline}---{newline}"
+        ));
+        let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        for expected in [
+            "field `description`",
+            "frontmatter line 5",
+            "rendered line 6",
+            "rendered claude/SKILL.md:6:1",
+            "rendered codex/SKILL.md:6:1",
+            "invalid rendered frontmatter value",
+        ] {
+            assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+        }
+        assert_no_skill_output(dir.path(), "sample");
+    }
+}
+
+#[test]
 fn build_diagnostic_uses_the_harness_skill_filename() {
     let dir = project("---\nname: sample\ndescription: 123\n---\n");
     fs::write(dir.path().join("skillprism.yaml"), "harnesses: [custom]\n").unwrap();

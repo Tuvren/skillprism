@@ -106,7 +106,7 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
         ));
     }
 
-    let mut value: Value = yaml_serde::from_str(frontmatter).map_err(|error| {
+    let value: Value = yaml_serde::from_str(frontmatter).map_err(|error| {
         let location = error.location();
         let line = location.as_ref().map_or(1, yaml_serde::Location::line);
         let field = block_field_at(frontmatter, line);
@@ -151,26 +151,22 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
         )
     })?;
 
-    value.apply_merge().map_err(|error| {
-        diagnostic(
-            pair,
-            rendered,
-            start,
-            1,
-            Some("<<"),
-            error.to_string(),
-            FailureKind::Value,
-        )
-    })?;
+    let merged = resolve_merges(&value);
+    let effective = merged.as_ref().unwrap_or(&value);
     // The location-preserving parse above checks explicit fields; merges can
     // supply additional fields that must satisfy the same string requirement.
     for field in ["name", "description"] {
-        if value.get(field).is_some_and(|value| !value.is_string()) {
+        if effective.get(field).is_some_and(|value| !value.is_string()) {
+            let (offset, line) = if value.get(field).is_none() {
+                merge_location(frontmatter).unwrap_or((0, 1))
+            } else {
+                (0, 1)
+            };
             return Err(diagnostic(
                 pair,
                 rendered,
-                start,
-                1,
+                start + offset,
+                line,
                 Some(field),
                 format!("{field}: expected a YAML string after resolving YAML merges"),
                 FailureKind::Value,
@@ -178,6 +174,36 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
         }
     }
     Ok(())
+}
+
+// Merge resolution is only input to the string check. Errors or exhaustion
+// discard the clone, including any partial mutations made by apply_merge.
+fn resolve_merges(value: &Value) -> Option<Value> {
+    let mut merged = value.clone();
+    for _ in 0..16 {
+        merged.apply_merge().ok()?;
+        if merged.get("<<").is_none() {
+            return Some(merged);
+        }
+    }
+    None
+}
+
+fn merge_location(frontmatter: &str) -> Option<(usize, usize)> {
+    let mut offset = 0;
+    for (line, text) in frontmatter.split_inclusive('\n').enumerate() {
+        if !text.starts_with(char::is_whitespace)
+            && text.split_once(':').is_some_and(|(key, _)| {
+                yaml_serde::from_str::<Value>(key)
+                    .ok()
+                    .is_some_and(|key| key.as_str() == Some("<<"))
+            })
+        {
+            return Some((offset, line + 1));
+        }
+        offset += text.len();
+    }
+    None
 }
 
 fn is_fence(line: &str) -> bool {
