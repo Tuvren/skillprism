@@ -68,7 +68,7 @@ tickets:
         - The schema required list equals the fields the loader requires, not only the serde-required set. skillprism is required because validate_skillprism_manifest_version rejects a skill.yaml that omits it, even though SkillYamlRaw.skillprism is optional in serde.
     flows: [flow-validate, flow-builtin-harness, flow-override-harness, flow-merge-variables]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-M002
     title: Give the schemas absolute versioned $id URLs and publish them from the docs site
     type: Feature
