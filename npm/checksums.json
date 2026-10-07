@@ -1,4 +1,19 @@
 {
+  "0.3.0": {
+    "aarch64-apple-darwin": "sha256:fb9497989db3d77a4b6190bae01c1b6030d3453250684bb0923cd0171fcd78af",
+    "x86_64-apple-darwin": "sha256:99b7c6d2cf11013e9e2d16efdf03b43721df18173833f252b72d1a3606044018",
+    "x86_64-unknown-linux-gnu": "sha256:b67594bad5409daad846b2df5b45a643be54faf26d130961fd3d220db914ce05"
+  },
+  "0.2.0": {
+    "aarch64-apple-darwin": "sha256:61d3b1b7c61708403a752708e975263eb08b64e11030b5f55d91715012d28054",
+    "x86_64-apple-darwin": "sha256:ee088d48c26fcaf9688b9212c055de6dd8e77e7e25f569a5eea7c4af2b9ac5ba",
+    "x86_64-unknown-linux-gnu": "sha256:97177294f01bc1af294237062d428a38236fb024f354840cd20f55c976c1bbb2"
+  },
+  "0.1.2": {
+    "aarch64-apple-darwin": "sha256:2a391779e74797533b2f776c00dcb43926c499fbb69958239a7ddd45b8940d6a",
+    "x86_64-apple-darwin": "sha256:730e73f7a0c95b0c55bcb96dcb7d9c48d5d8098905ffb53b85e91ff56adbb67f",
+    "x86_64-unknown-linux-gnu": "sha256:8d0594dc53c29d1572e8225ad1025dc9be0c35c3abef58c920effa8b557595d4"
+  },
   "0.1.1": {
     "x86_64-unknown-linux-gnu": "sha256:75b96f9bdf80195d6764c647f153900111a2b0e78daa265199f73db2d7f2cd04",
     "x86_64-apple-darwin": "sha256:5d0afa29df211b28ad84028fefb72fc1ffeac846bfff6e30b615fa802ac8af4d",
