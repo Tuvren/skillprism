@@ -143,11 +143,23 @@ fn hand_quoted_custom_manifest_fails_before_any_write_or_diff() {
         vec!["build", "--diff"],
     ] {
         let dir = project();
+        let good_skill = dir.path().join("skills/good-skill");
+        fs::create_dir_all(&good_skill).unwrap();
+        fs::write(
+            good_skill.join("skill.yaml"),
+            "skillprism: '1'\nname: good-skill\ndescription: safe\n",
+        )
+        .unwrap();
+        fs::copy(
+            dir.path().join("skills/sample/SKILL.md"),
+            good_skill.join("SKILL.md"),
+        )
+        .unwrap();
         custom_harness(dir.path(), r#"{"description": "{{ skill_description }}"}"#);
         let assertion = bin(dir.path()).args(&flags).assert().code(1);
         let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
         for expected in [
-            "custom",
+            "[sample] custom:",
             "dist/custom/.custom/index.json",
             "JSON",
             "line",
@@ -157,6 +169,13 @@ fn hand_quoted_custom_manifest_fails_before_any_write_or_diff() {
         ] {
             assert!(stderr.contains(expected), "missing {expected}: {stderr}");
         }
+        let rendered_entry = format!(r#"{{"description": "{DESCRIPTION}"}}"#);
+        let reason = serde_json::from_str::<serde_json::Value>(&rendered_entry)
+            .unwrap_err()
+            .to_string();
+        assert_eq!(stderr.matches(&reason).count(), 1, "{stderr}");
+        assert!(!stderr.contains("[good-skill]"), "{stderr}");
+        assert!(!stderr.contains("format: json"), "{stderr}");
         assert!(!stderr.contains("\u{1b}["), "{stderr}");
         assert!(!dir.path().join("dist").exists(), "{flags:?} wrote output");
         assert!(

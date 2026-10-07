@@ -441,6 +441,7 @@ fn execute_build_pipeline(
             {
                 let path = path.map_err(miette::Report::new)?;
                 manifest_entries.push(ManifestEntry {
+                    skill: pair.skill.name.clone(),
                     harness: pair.harness.id.clone(),
                     path,
                     content: entry,

@@ -256,6 +256,9 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed". This probe is a regression check only; it does not exercise manifest JSON. The behavior proof is the automated tests.
     flows: [flow-generate-manifest, flow-builtin-harness]
     certainty: assumed
+    deviations:
+      - files: [src/cli.rs]
+        justification: "The M3 milestone review found manifest-entry rendering ran inside the build write loop, so a manifest error could leave a partial build; plan amendment (2026-10-06) added src/cli.rs to M4 so manifest rendering and the JSON check run before any write. src/cli.rs is in the epic's scope.paths but not in SKP-L004's scope.in."
     status: done
   - id: SKP-L005
     title: Check rendered frontmatter during validate

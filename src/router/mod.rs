@@ -34,14 +34,14 @@ pub use write::*;
 /// Errors that occur during file writing or diffing in the router.
 #[derive(Debug, Diagnostic, Error)]
 pub enum RouterError {
-    /// An aggregated harness manifest contains invalid JSON.
-    #[error("{harness}: Invalid JSON in manifest `{path}`: {source}")]
+    /// A rendered manifest entry or aggregated harness manifest contains invalid JSON.
+    #[error("[{skill}] {harness}: Invalid JSON in manifest `{path}`")]
     #[diagnostic(help(
         "Use the tojson filter for interpolated values in custom harness manifest templates, \
-         without surrounding quotes (for example, {{{{ skill_description | tojson }}}}). \
-         Remove the unsupported `format: json` key from the manifest definition."
+         without surrounding quotes (for example, {{{{ skill_description | tojson }}}})."
     ))]
     ManifestJson {
+        skill: String,
         harness: String,
         path: String,
         #[source]
@@ -126,6 +126,8 @@ pub enum RouterError {
 /// A single manifest entry produced by rendering a skill through a harness.
 #[derive(Debug, Clone)]
 pub struct ManifestEntry {
+    /// The skill whose rendering produced this entry.
+    pub skill: String,
     /// The harness whose template produced this entry.
     pub harness: String,
     /// The resolved path where the manifest file should be written.
@@ -607,11 +609,13 @@ mod tests {
         let manifest_path = dir.join("plugin.json");
         let entries = vec![
             ManifestEntry {
+                skill: "skill-a".to_string(),
                 harness: "claude".to_string(),
                 path: manifest_path.clone(),
                 content: r#"{"name":"skill-a"}"#.to_string(),
             },
             ManifestEntry {
+                skill: "skill-b".to_string(),
                 harness: "claude".to_string(),
                 path: manifest_path.clone(),
                 content: r#"{"name":"skill-b"}"#.to_string(),
@@ -643,11 +647,13 @@ mod tests {
         let invalid_path = manifest_dir.join("z-invalid.json");
         let entries = [
             ManifestEntry {
+                skill: "good-skill".to_string(),
                 harness: "claude".to_string(),
                 path: manifest_dir.join("a-valid.json"),
                 content: r#"{"name":"sample"}"#.to_string(),
             },
             ManifestEntry {
+                skill: "sample".to_string(),
                 harness: "custom".to_string(),
                 path: invalid_path.clone(),
                 content: r#"{"description":"Say "hello""}"#.to_string(),
@@ -668,13 +674,15 @@ mod tests {
         for error in errors {
             match error.unwrap() {
                 RouterError::ManifestJson {
+                    skill,
                     harness,
                     path,
                     source,
                 } => {
+                    assert_eq!(skill, "sample");
                     assert_eq!(harness, "custom");
                     assert_eq!(path, invalid_path.to_string_lossy());
-                    assert!(source.line() > 0);
+                    assert_eq!(source.line(), 1);
                     assert!(source.column() > 0);
                 }
                 error => panic!("unexpected diagnostic: {error:?}"),
@@ -915,6 +923,7 @@ mod tests {
         fs::write(&manifest_path, r#"[{"name":"old-skill"}]"#).unwrap();
 
         let entries = vec![ManifestEntry {
+            skill: "new-skill".to_string(),
             harness: "claude".to_string(),
             path: manifest_path,
             content: r#"{"name":"new-skill"}"#.to_string(),

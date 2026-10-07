@@ -21,14 +21,26 @@ use super::{ManifestEntry, RouterError};
 pub(super) fn aggregate_manifests(
     entries: &[ManifestEntry],
 ) -> Result<BTreeMap<PathBuf, String>, RouterError> {
+    for entry in entries {
+        serde_json::from_str::<serde_json::Value>(&entry.content).map_err(|source| {
+            RouterError::ManifestJson {
+                skill: entry.skill.clone(),
+                harness: entry.harness.clone(),
+                path: entry.path.to_string_lossy().into_owned(),
+                source,
+            }
+        })?;
+    }
     group_manifest_entries(entries)
         .into_iter()
         .map(|(path, group)| {
             let content = aggregate_json_entries(&group);
             serde_json::from_str::<serde_json::Value>(&content).map_err(|source| {
+                let skills: BTreeSet<_> = group.iter().map(|entry| entry.skill.as_str()).collect();
                 let harnesses: BTreeSet<_> =
                     group.iter().map(|entry| entry.harness.as_str()).collect();
                 RouterError::ManifestJson {
+                    skill: skills.into_iter().collect::<Vec<_>>().join(", "),
                     harness: harnesses.into_iter().collect::<Vec<_>>().join(", "),
                     path: path.to_string_lossy().into_owned(),
                     source,
