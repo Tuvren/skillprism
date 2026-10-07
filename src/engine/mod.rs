@@ -159,11 +159,14 @@ fn render_error_from_minijinja(
 }
 
 fn fmt_minijinja_error(err: &minijinja::Error) -> String {
-    let kind = format!("{}", err.kind());
+    let description = err.detail().map_or_else(
+        || err.kind().to_string(),
+        |detail| format!("{}: {detail}", err.kind()),
+    );
     if let Some(line) = err.line() {
-        format!("{kind} at line {line}")
+        format!("{description} at line {line}")
     } else {
-        kind
+        description
     }
 }
 

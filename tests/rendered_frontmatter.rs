@@ -170,6 +170,113 @@ fn build_checks_bom_prefixed_frontmatter_and_accepts_yaml_str() {
 }
 
 #[test]
+fn build_checks_opening_fences_with_trailing_spaces_and_tabs() {
+    for (bom, newline, suffix) in [
+        ("", "\n", " "),
+        ("", "\n", "\t"),
+        ("\u{feff}", "\r\n", " \t"),
+    ] {
+        let dir = project(&format!(
+            "{bom}---{suffix}{newline}name: sample{newline}description: invalid: YAML{newline}---{newline}"
+        ));
+        let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        for expected in [
+            "description",
+            "mapping values",
+            "yaml_str",
+            "rendered line 3",
+        ] {
+            assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+        }
+        assert_no_skill_output(dir.path(), "sample");
+    }
+}
+
+#[test]
+fn build_accepts_closing_fences_with_trailing_spaces_and_tabs() {
+    for (bom, newline, suffix) in [
+        ("", "\n", " "),
+        ("", "\n", "\t"),
+        ("\u{feff}", "\r\n", " \t"),
+    ] {
+        let dir = project(&format!(
+            "{bom}---{newline}name: sample{newline}description: safe{newline}---{suffix}{newline}Body{newline}"
+        ));
+        bin(dir.path())
+            .args(["build", "--force"])
+            .assert()
+            .success();
+    }
+}
+
+#[test]
+fn build_reports_yaml_str_collection_rejection_detail() {
+    let dir = project(
+        "---\nname: sample\ndescription: safe\narguments: {{ arguments | yaml_str }}\n---\n",
+    );
+    let config = dir.path().join("skills/sample/skill.yaml");
+    let mut content = fs::read_to_string(&config).unwrap();
+    content.push_str("arguments: [one, two]\n");
+    fs::write(config, content).unwrap();
+    let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    assert!(
+        stderr.contains("yaml_str only accepts scalar values; leave list fields unfiltered"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("at line 4"), "{stderr}");
+    assert_no_skill_output(dir.path(), "sample");
+}
+
+#[test]
+fn build_checks_string_fields_supplied_by_yaml_merges() {
+    for field in ["name", "description"] {
+        for merge in ["*d", "[*d]"] {
+            let dir = project(&format!(
+                "---\ndefaults: &d\n  {field}: 123\n<<: {merge}\n---\n"
+            ));
+            let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+            let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+            for expected in [field, "YAML string", "resolving YAML merges", "yaml_str"] {
+                assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+            }
+            assert_no_skill_output(dir.path(), "sample");
+        }
+    }
+    // Explicit strings override non-string defaults under YAML merge semantics.
+    let dir = project(
+        "---\ndefaults: &d {name: 123, description: false}\n<<: *d\nname: sample\ndescription: safe\n---\n",
+    );
+    bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn build_diagnostic_uses_the_harness_skill_filename() {
+    let dir = project("---\nname: sample\ndescription: 123\n---\n");
+    fs::write(dir.path().join("skillprism.yaml"), "harnesses: [custom]\n").unwrap();
+    let harnesses = dir.path().join("harnesses");
+    fs::create_dir(&harnesses).unwrap();
+    fs::write(
+        harnesses.join("custom.yaml"),
+        "id: custom\nname: Custom\nversion: '1'\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .custom/skills\n  user_scope_path: .custom/skills\n  skill_filename: GUIDE.md\n",
+    )
+    .unwrap();
+    let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    for expected in [
+        "Invalid rendered GUIDE.md frontmatter",
+        "rendered custom/GUIDE.md:3:",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
+    assert!(!dir.path().join("dist/custom/sample").exists());
+}
+
+#[test]
 fn build_rejects_non_string_name_and_description() {
     for field in ["name", "description"] {
         for value in ["null", "~", "123", "true", "false", "[]", "{}"] {
@@ -211,14 +318,34 @@ fn build_reports_every_broken_skill_and_harness_pair() {
 
 #[test]
 fn build_requires_a_mapping_and_closed_frontmatter() {
-    for template in [
-        "---\n[]\n---\n",
-        "---\nscalar\n---\n",
-        "---\n---\n",
-        "---\nname: sample\n",
+    for (template, help, label) in [
+        (
+            "---\n[]\n---\n",
+            "Add a YAML mapping",
+            "expected a YAML frontmatter mapping",
+        ),
+        (
+            "---\nscalar\n---\n",
+            "Add a YAML mapping",
+            "expected a YAML frontmatter mapping",
+        ),
+        (
+            "---\n---\n",
+            "Add a YAML mapping",
+            "expected a YAML frontmatter mapping",
+        ),
+        (
+            "---\nname: sample\n",
+            "Add a closing --- fence",
+            "frontmatter starts here but has no closing fence",
+        ),
     ] {
         let dir = project(template);
-        bin(dir.path()).args(["build", "--force"]).assert().code(1);
+        let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        assert!(stderr.contains(help), "{stderr}");
+        assert!(stderr.contains(label), "{stderr}");
+        assert!(!stderr.contains("yaml_str"), "{stderr}");
         assert_no_skill_output(dir.path(), "sample");
     }
 }

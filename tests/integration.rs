@@ -114,6 +114,11 @@ fn documentation_frontmatter_strings_use_yaml_str() {
             "site/content/docs/quickstart.md",
             "read site/content/docs/quickstart.md",
         ),
+        (
+            "site/content/docs/spec-compliance.md",
+            "read site/content/docs/spec-compliance.md",
+        ),
+        ("examples/README.md", "read examples/README.md"),
     ] {
         let content = fs::read_to_string(project_root().join(page)).expect(read_error);
         let mut lines = content.lines().enumerate();

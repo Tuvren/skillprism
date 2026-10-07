@@ -111,4 +111,4 @@ paths:
 
 `build` aggregates all rendered skills for that harness into a single manifest file at the configured path.
 
-Apply the `tojson` filter to each interpolated string value without surrounding quotes. It escapes quotes, backslashes, and newlines. Build rejects invalid manifest JSON before writing any output and reports the harness, manifest path, and JSON error. If you migrate a hand-quoted template, remove the surrounding quotes and the unsupported `format: json` key.
+Apply the `tojson` filter to each interpolated string value without surrounding quotes. It escapes quotes, backslashes, and newlines. Build rejects invalid manifest JSON before writing any output and reports the skill, harness, manifest path, and JSON error. If you migrate a hand-quoted template, remove the surrounding quotes and the unsupported `format: json` key.

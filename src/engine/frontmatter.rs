@@ -25,23 +25,55 @@ use crate::resolver::ResolvedPair;
 /// Invalid frontmatter in a rendered skill, with locations in the generated text.
 #[derive(Debug, Diagnostic, Error)]
 #[error(
-    "[{skill}] {harness}: Invalid rendered SKILL.md frontmatter{field} from template `{template}` at frontmatter line {line} (rendered line {rendered_line}): {detail}"
+    "[{skill}] {harness}: Invalid rendered {filename} frontmatter{field} from template `{template}` at frontmatter line {line} (rendered line {rendered_line}): {detail}"
 )]
-#[diagnostic(help(
-    "Apply the | yaml_str filter to frontmatter string values, for example: description: {{{{ skill_description | yaml_str }}}}. The frontmatter must be a YAML mapping between --- fences."
-))]
+#[diagnostic(help("{help}"))]
 pub struct FrontmatterError {
     skill: String,
     harness: String,
+    filename: String,
     template: String,
     field: String,
     line: usize,
     rendered_line: usize,
     detail: String,
+    help: &'static str,
+    label: &'static str,
     #[source_code]
     src: NamedSource<String>,
-    #[label("invalid rendered frontmatter value")]
+    #[label("{label}")]
     span: Option<SourceSpan>,
+}
+
+#[derive(Clone, Copy)]
+enum FailureKind {
+    Value,
+    MissingFence,
+    Mapping,
+}
+
+impl FailureKind {
+    const fn help(self) -> &'static str {
+        match self {
+            Self::Value => {
+                "Apply the | yaml_str filter to frontmatter string values, for example: description: {{ skill_description | yaml_str }}."
+            }
+            Self::MissingFence => {
+                "Add a closing --- fence after the YAML frontmatter and before the body. A body that starts with a --- horizontal rule needs frontmatter first."
+            }
+            Self::Mapping => {
+                "Add a YAML mapping between the --- frontmatter fences, for example: name: sample and description: A sample skill on separate lines."
+            }
+        }
+    }
+
+    const fn label(self) -> &'static str {
+        match self {
+            Self::Value => "invalid rendered frontmatter value",
+            Self::MissingFence => "frontmatter starts here but has no closing fence",
+            Self::Mapping => "expected a YAML frontmatter mapping",
+        }
+    }
 }
 
 pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<FrontmatterError>> {
@@ -70,10 +102,11 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
             1,
             None,
             "Missing closing --- frontmatter fence".to_owned(),
+            FailureKind::MissingFence,
         ));
     }
 
-    let value: Value = yaml_serde::from_str(frontmatter).map_err(|error| {
+    let mut value: Value = yaml_serde::from_str(frontmatter).map_err(|error| {
         let location = error.location();
         let line = location.as_ref().map_or(1, yaml_serde::Location::line);
         let field = block_field_at(frontmatter, line);
@@ -84,6 +117,7 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
             line,
             field.as_deref(),
             error.to_string(),
+            FailureKind::Value,
         )
     })?;
     if !value.is_mapping() {
@@ -94,6 +128,7 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
             1,
             None,
             "Frontmatter must be a YAML mapping".to_owned(),
+            FailureKind::Mapping,
         ));
     }
 
@@ -112,13 +147,43 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
             location.as_ref().map_or(1, yaml_serde::Location::line),
             field,
             detail,
+            FailureKind::Value,
         )
     })?;
+
+    value.apply_merge().map_err(|error| {
+        diagnostic(
+            pair,
+            rendered,
+            start,
+            1,
+            Some("<<"),
+            error.to_string(),
+            FailureKind::Value,
+        )
+    })?;
+    // The location-preserving parse above checks explicit fields; merges can
+    // supply additional fields that must satisfy the same string requirement.
+    for field in ["name", "description"] {
+        if value.get(field).is_some_and(|value| !value.is_string()) {
+            return Err(diagnostic(
+                pair,
+                rendered,
+                start,
+                1,
+                Some(field),
+                format!("{field}: expected a YAML string after resolving YAML merges"),
+                FailureKind::Value,
+            ));
+        }
+    }
     Ok(())
 }
 
 fn is_fence(line: &str) -> bool {
-    line.trim_end_matches(['\r', '\n']) == "---"
+    line.trim_end_matches(['\r', '\n'])
+        .trim_end_matches([' ', '\t'])
+        == "---"
 }
 
 fn diagnostic(
@@ -128,6 +193,7 @@ fn diagnostic(
     line: usize,
     field: Option<&str>,
     detail: String,
+    kind: FailureKind,
 ) -> Box<FrontmatterError> {
     let span = rendered
         .get(offset..)
@@ -135,13 +201,19 @@ fn diagnostic(
     Box::new(FrontmatterError {
         skill: pair.skill.name.clone(),
         harness: pair.harness.id.clone(),
+        filename: pair.harness.paths.skill_filename.clone(),
         template: pair.skill.template_path.to_string_lossy().into_owned(),
         field: field.map_or_else(String::new, |field| format!(" field `{field}`")),
         line,
         rendered_line: line + 1,
         detail,
+        help: kind.help(),
+        label: kind.label(),
         src: NamedSource::new(
-            format!("rendered {}/SKILL.md", pair.harness.id),
+            format!(
+                "rendered {}/{}",
+                pair.harness.id, pair.harness.paths.skill_filename
+            ),
             rendered.to_owned(),
         ),
         span,
