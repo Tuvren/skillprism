@@ -140,7 +140,7 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed" with the migrated example templates. This probe is a regression check only; it does not exercise a hostile description. The behavior proof is the automated tests.
     flows: [flow-compile-template, flow-build-project]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-L003
     title: Parse rendered SKILL.md frontmatter after Engine::render and fail the build with a field-naming diagnostic
     type: Feature
