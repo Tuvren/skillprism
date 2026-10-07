@@ -23,6 +23,18 @@ fn project_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf()
 }
 
+fn collect_markdown(dir: &Path, pages: &mut Vec<PathBuf>) {
+    for entry in fs::read_dir(dir).unwrap_or_else(|error| panic!("read {}: {error}", dir.display()))
+    {
+        let path = entry.unwrap().path();
+        if path.is_dir() {
+            collect_markdown(&path, pages);
+        } else if path.extension().is_some_and(|ext| ext == "md") {
+            pages.push(path);
+        }
+    }
+}
+
 fn fixtures_dir() -> PathBuf {
     project_root().join("tests/fixtures")
 }
@@ -105,22 +117,11 @@ fn documentation_frontmatter_strings_use_yaml_str() {
         "required_capabilities",
     ];
 
-    for (page, read_error) in [
-        (
-            "site/content/docs/templating.md",
-            "read site/content/docs/templating.md",
-        ),
-        (
-            "site/content/docs/quickstart.md",
-            "read site/content/docs/quickstart.md",
-        ),
-        (
-            "site/content/docs/spec-compliance.md",
-            "read site/content/docs/spec-compliance.md",
-        ),
-        ("examples/README.md", "read examples/README.md"),
-    ] {
-        let content = fs::read_to_string(project_root().join(page)).expect(read_error);
+    let mut pages = vec![project_root().join("examples/README.md")];
+    collect_markdown(&project_root().join("site/content/docs"), &mut pages);
+    for page in pages {
+        let content = fs::read_to_string(&page)
+            .unwrap_or_else(|error| panic!("read {}: {error}", page.display()));
         let mut lines = content.lines().enumerate();
         while let Some((_, line)) = lines.next() {
             let line = line.trim_start();
@@ -146,8 +147,9 @@ fn documentation_frontmatter_strings_use_yaml_str() {
                     let name = expression.split(['|', '}']).next().unwrap_or("").trim();
                     assert!(
                         NON_STRING_FIELDS.contains(&name),
-                        "{page}:{}: frontmatter string interpolation needs yaml_str: {line}",
-                        line_number + 1
+                        "{}:{line_number}: frontmatter string interpolation needs yaml_str: {line}",
+                        page.display(),
+                        line_number = line_number + 1
                     );
                 }
             }
@@ -259,7 +261,7 @@ fn quickstart_project_config_validates_with_sample_skill() {
         .args(["init", "project", "my-skills", "-H", "claude,opencode"])
         .assert()
         .success();
-    let quickstart = include_str!("../site/content/docs/quickstart.md");
+    let quickstart = include_str!("../site/content/docs/tutorials/compile-a-skill.md");
     let config = quickstart
         .split_once("```yaml\n")
         .expect("quickstart must contain the project config YAML block")
@@ -268,7 +270,7 @@ fn quickstart_project_config_validates_with_sample_skill() {
         .expect("quickstart project config YAML block must have a closing fence")
         .0;
     fs::write(project.join("skillprism.yaml"), config).unwrap();
-    let skill = project.join("skills/dice-roller");
+    let skill = project.join("skills/sample");
     fs::create_dir_all(&skill).unwrap();
     let skill_config = quickstart
         .split("```yaml\n")
@@ -294,7 +296,6 @@ fn quickstart_project_config_validates_with_sample_skill() {
         .success()
         .stdout(
             predicate::str::contains("ok: sample")
-                .and(predicate::str::contains("ok: dice-roller"))
                 .and(predicate::str::contains("Validation passed")),
         );
 }

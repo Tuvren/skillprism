@@ -16,9 +16,9 @@ const browser = await puppeteer.launch({
 });
 
 const shots = [
-  { name: "docs-desktop", path: "/docs/quickstart/", w: 1280, h: 160 },
-  { name: "docs-mobile", path: "/docs/quickstart/", w: 390, h: 120 },
-  { name: "docs-full", path: "/docs/quickstart/", w: 1280, h: 800, full: true },
+  { name: "docs-desktop", path: "/docs/tutorials/compile-a-skill/", w: 1280, h: 160 },
+  { name: "docs-mobile", path: "/docs/tutorials/compile-a-skill/", w: 390, h: 120 },
+  { name: "docs-full", path: "/docs/tutorials/compile-a-skill/", w: 1280, h: 800, full: true },
 ];
 
 for (const shot of shots) {

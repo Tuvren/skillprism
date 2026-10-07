@@ -12,10 +12,10 @@ mkdirSync(out, { recursive: true });
 const widths = [1280, 1440, 1920] as const;
 const pages = [
   { slug: "home", path: "/" },
-  { slug: "quickstart", path: "/docs/quickstart/" },
-  { slug: "cli", path: "/docs/cli/" },
-  { slug: "comparison", path: "/docs/comparison/" },
-  { slug: "harnesses", path: "/docs/harnesses/" },
+  { slug: "tutorial", path: "/docs/tutorials/compile-a-skill/" },
+  { slug: "cli", path: "/docs/reference/cli/" },
+  { slug: "skills-cli", path: "/docs/explanation/skills-cli/" },
+  { slug: "harness", path: "/docs/reference/harness/" },
 ] as const;
 
 type LayoutIssue = { page: string; check: string; detail: string };

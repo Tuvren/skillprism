@@ -1,8 +1,9 @@
 <aside class="docs-sidebar" id="docs-sidebar" aria-label="Documentation navigation">
   <nav class="sidebar-nav">
     {{ $current := .RelPermalink }}
-    {{ $groups := slice "Get started" "Authoring" "Reference" "Guides" }}
-    {{ $pages := .CurrentSection.RegularPages.ByWeight }}
+    {{ $groups := slice "Tutorials" "How-to guides" "Reference" "Explanation" }}
+    {{ $docs := site.GetPage "/docs" }}
+    {{ $pages := $docs.RegularPagesRecursive.ByWeight }}
     {{ range $groups }}
       {{ $group := . }}
       {{ $groupPages := where $pages "Params.group" $group }}

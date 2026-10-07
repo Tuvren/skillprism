@@ -218,7 +218,7 @@ fn invalid_custom_manifest_preserves_existing_output_with_force() {
 
 #[test]
 fn docs_manifest_example_builds_and_round_trips_json() {
-    let docs = include_str!("../site/content/docs/harnesses.md");
+    let docs = include_str!("../site/content/docs/reference/harness.md");
     let example = docs
         .split_once("### Manifests")
         .unwrap()

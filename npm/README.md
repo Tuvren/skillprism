@@ -6,26 +6,20 @@
 
 > Distribution CLI with per-harness templating for AI agent skills.
 
-`skillprism` compiles skill templates (`SKILL.md`) for multiple AI agent runtimes (like Claude Code, Codex, Opencode) based on a unified configuration, validates them against schema requirements, and manages remote skill installations.
-
 ## Table of Contents
 
 - [Background](#background)
 - [Install](#install)
 - [Usage](#usage)
-  - [CLI Commands](#cli-commands)
-  - [Environment Variables](#environment-variables)
 - [Maintainers](#maintainers)
 - [Contributing](#contributing)
 - [License](#license)
 
 ## Background
 
-AI agents (like Claude Code, Codex, and others) use specialized "skills" to perform complex workspace actions. However, different agent environments require slightly different markdown formats, trigger keywords, and system guidelines.
+This npm package is a thin launcher. When you run it, it detects your operating system and architecture, downloads the native binary from the official GitHub release, checks the checksum, caches the binary locally, and forwards every argument to that binary.
 
-`skillprism` bridges this gap. It implements the [Agent Skills specification](https://agentskills.io/specification) to let you write skills once using a templating engine (MiniJinja) and compile them dynamically for all target environments. It also manages the discovery, lifecycle, and updates of third-party skills cloned from remote Git repositories.
-
-This npm package acts as a thin launcher wrapper. When run, it automatically detects your operating system and architecture, downloads the verified native binary from the official release, caches it locally, and forwards all arguments directly.
+What the commands do is documented at [tuvren.github.io/skillprism/docs](https://tuvren.github.io/skillprism/docs/). The command reference is the [CLI reference](https://tuvren.github.io/skillprism/docs/reference/cli/).
 
 ## Install
 
@@ -44,61 +38,22 @@ npm install -g skillprism
 You can run it directly without global installation:
 
 ```sh
-npx skillprism <command>
+npx skillprism --help
 ```
 
 ## Usage
 
-Initialize a project, scaffold a skill, and build your compiled outputs.
-
-### CLI Commands
-
-#### 1. Initialize a new project
 ```sh
-skillprism init project my-skills
-cd my-skills
+skillprism --help
 ```
 
-#### 2. Scaffold a new skill
-```sh
-skillprism init skill my-new-agent
-```
-This generates:
-- `skills/my-new-agent/skill.yaml` (metadata & custom variables)
-- `skills/my-new-agent/SKILL.md` (MiniJinja template)
+`npx skillprism` works the same way without a global install. Replace `--help` with any skillprism command.
 
-#### 3. Compile and Build
-```sh
-skillprism build
-```
-This renders your skill templates and outputs the harness-compliant files into their respective folders (e.g. `.claude/skills/`, `.agents/skills/`).
-
-To preview changes without writing files:
-```sh
-skillprism build --diff
-```
-
-#### 4. Validate Skills
-Validate the templates, variables, and spec conformance without writing files:
-```sh
-skillprism validate
-```
-
-#### 5. Install Remote Skills
-Add skills directly from Git repositories or GitHub/GitLab shorthands:
-```sh
-skillprism add owner/repo
-```
-
-#### 6. List and Remove Skills
-```sh
-skillprism list
-skillprism remove <skill-name>
-```
+To compile a skill for the first time, follow [Create a skill and compile it](https://tuvren.github.io/skillprism/docs/tutorials/compile-a-skill/). Flags and subcommands are in the [CLI reference](https://tuvren.github.io/skillprism/docs/reference/cli/).
 
 ### Environment Variables
 
-- `SKILLPRISM_VERSION`: Pin a specific version of the native binary (e.g. `0.1.1`). Defaults to the latest release.
+- `SKILLPRISM_VERSION`: Pin a specific version of the native binary (e.g. `0.4.0`). Defaults to the latest release.
 - `SKILLPRISM_SKIP_CHECKSUM`: Set to `1` to bypass tarball checksum validation (intended only for local testing).
 
 ## Maintainers

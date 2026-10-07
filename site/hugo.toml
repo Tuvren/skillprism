@@ -25,7 +25,7 @@ target = "static/schema/v1/harness.json"
 
 [[menus.main]]
 name = "Docs"
-pageRef = "/docs/quickstart"
+pageRef = "/docs/"
 identifier = "docs"
 weight = 10
 

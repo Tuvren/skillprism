@@ -43,17 +43,15 @@ looks like).
 
 ## Building
 
+The steps for this directory are in [Build the examples](https://tuvren.github.io/skillprism/docs/how-to/build-the-examples/).
+
 ```bash
 cd examples
-skillprism build --target dist
+skillprism build
 find dist -type f | sort
 ```
 
-Use `--target dist` here, **not** plain `skillprism build`. The default `--target
-project` writes live `.claude/` and `.agents/` directories straight into
-`examples/` — those are not gitignored (only `dist/` is, via the repo's root
-`.gitignore`), so a plain build would leave generated output sitting in your working
-tree as untracked files.
+`skillprism build` writes compiled output under `dist/`. That directory is gitignored from the repository root, so the build does not leave live `.claude/` or `.agents/` trees in `examples/`.
 
 Expect a `[resolve] skipped: ...` warning on stderr for each of the two
 `mcp-builder`/`opencode` and `mcp-builder`/`codex` pairs, then a successful build with
@@ -64,10 +62,10 @@ skills) and `dist/codex/.agents/marketplace.json` (references `webapp-testing` a
 `quickstart`, not the skipped `mcp-builder`). `opencode` gets no manifest at all
 (`requires_manifest: false` in its harness definition). Note the asymmetry: rendered
 skill files land at `dist/<harness>/<skill>/SKILL.md` (`project_scope_path` is dropped
-entirely under `--target dist` — `src/router/paths.rs::resolve_skill_path`), while
+for the dist output `skillprism build` writes; see `src/router/paths.rs::resolve_skill_path`), while
 manifests land at `dist/<harness>/<manifest_scope_path>/<filename>` (the scope path
-*is* applied — `src/router/paths.rs::resolve_manifest_path`). That's pre-existing,
-deliberate `Dist` behavior, not a bug in this example.
+is applied; see `src/router/paths.rs::resolve_manifest_path`). That's pre-existing,
+deliberate dist behavior, not a bug in this example.
 
 ## Attribution
 
@@ -79,6 +77,9 @@ Agent Skills repository: <https://github.com/anthropics/skills>, pinned at commi
 `35414756ca55738e050562e272a6bbc6273aa926`. Both source skills are licensed under the
 Apache License, Version 2.0, © Anthropic, PBC — see each skill's `metadata.source` /
 `metadata.upstream_license` field in its `skill.yaml`.
+
+`pdf`, `docx`, `pptx`, and `xlsx` from that upstream repository are not included.
+Their license forbids copying them.
 
 Changes made when porting:
 - Each skill's single `SKILL.md` was split into skillprism's canonical

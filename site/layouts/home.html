@@ -13,13 +13,12 @@
       <em>Any harness.</em>
     </h1>
     <p class="hero-lede">
-      Write a skill once. skillprism installs from Git, templates with MiniJinja,
-      and emits a compliant <code>SKILL.md</code> for every harness you configure.
-      No forked copies. No drift.
+      Write a skill once. skillprism compiles a <code>SKILL.md</code> for each
+      agent you use, then installs it in the directory that agent already reads.
     </p>
     <div class="hero-actions">
-      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-primary">Quickstart</a>
-      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-secondary">Docs</a>
+      <a href="{{ "docs/tutorials/compile-a-skill/" | relLangURL }}" class="btn btn-primary">Tutorial</a>
+      <a href="{{ "docs/" | relLangURL }}" class="btn btn-secondary">Docs</a>
     </div>
   </div>
 
@@ -41,37 +40,34 @@
 
 <section class="section section-flow">
   <header class="section-intro">
-    <h2>From repo to every harness path</h2>
-    <p>Three commands. One compile path. Order matters because each step feeds the next.</p>
+    <h2>From one skill to every agent</h2>
+    <p>Write the skill, compile it, then install it where the agent reads.</p>
   </header>
   <ol class="flow">
     <li class="flow-step">
-      <span class="flow-cmd">skillprism add</span>
-      <h3>Install</h3>
-      <p>Pull a skill repo, detect its format, and render once per harness.</p>
-    </li>
-    <li class="flow-step">
       <span class="flow-cmd">skill.yaml + SKILL.md</span>
-      <h3>Author</h3>
-      <p>Metadata in YAML. Body as a MiniJinja template. One source tree.</p>
+      <h3>Write</h3>
+      <p>Name and description in <code>skill.yaml</code>. Instructions in <code>SKILL.md</code>.</p>
     </li>
     <li class="flow-step">
       <span class="flow-cmd">skillprism build</span>
       <h3>Compile</h3>
-      <p>Write harness-native files to the paths each client already watches.</p>
+      <p>Write one <code>SKILL.md</code> per agent under <code>dist/</code>. Nothing is installed yet.</p>
+    </li>
+    <li class="flow-step">
+      <span class="flow-cmd">skillprism add</span>
+      <h3>Install</h3>
+      <p>Put the skill in the project or user directory that Claude, Codex, OpenCode, Factory, or Pi reads.</p>
     </li>
   </ol>
 </section>
 
 <section class="section section-demo">
   <div class="demo-copy">
-    <h2>Manage remote skills like packages</h2>
+    <h2>Install a skill from Git</h2>
     <p>
-      Installed skills live in a local state file. Updates run a cheap
-      <code>git ls-remote</code> check before pulling.
-    </p>
-    <p class="demo-note">
-      State: <code>~/.config/skillprism/installed.yaml</code>
+      Point <code>add</code> at a GitHub repository. List what is installed,
+      update it when the repository changes, or remove it.
     </p>
   </div>
   <div class="terminal" role="region" aria-label="CLI commands">
@@ -96,7 +92,7 @@
 <section class="section section-targets">
   <header class="section-intro">
     <h2>One compile, many destinations</h2>
-    <p>Configure the harnesses you need in <code>skillprism.yaml</code>. Each gets its own paths, macros, and output layout.</p>
+    <p>Name the agents in <code>skillprism.yaml</code>. Each compiled skill is written for that agent.</p>
   </header>
   <div class="targets-config" role="region" aria-label="Example harness configuration">
     <pre><code>harnesses:
@@ -110,15 +106,15 @@
   <div class="spec-card">
     <h2>Compliant by construction</h2>
     <p>
-      Every render includes the <code>name</code> and <code>description</code> frontmatter
+      Each compiled skill includes the <code>name</code> and <code>description</code>
       the <a href="{{ .Site.Params.spec }}">Agent Skills specification</a> requires.
-      <code>skillprism validate</code> checks format, length, and emptiness before write.
+      <code>skillprism validate</code> checks that text before anything is written.
     </p>
     <dl class="spec-dl">
       <div><dt>frontmatter</dt><dd>name · description</dd></div>
       <div><dt>validate</dt><dd>format · length · empty</dd></div>
-      <div><dt>render</dt><dd>MiniJinja · once per harness</dd></div>
-      <div><dt>output</dt><dd>SKILL.md · sidecars · manifests</dd></div>
+      <div><dt>compile</dt><dd>once per agent</dd></div>
+      <div><dt>output</dt><dd>SKILL.md</dd></div>
     </dl>
   </div>
 </section>
@@ -126,12 +122,12 @@
 <section class="section section-close">
   <div class="close-card">
     <h2>Compile your first project</h2>
-    <pre class="close-commands"><code><span class="p">$</span> cargo install --path .
+    <pre class="close-commands"><code><span class="p">$</span> npm install -g skillprism
 <span class="p">$</span> skillprism init project my-skills
 <span class="p">$</span> cd my-skills &amp;&amp; skillprism build</code></pre>
     <div class="hero-actions">
-      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-primary">Quickstart</a>
-      <a href="{{ "docs/quickstart/" | relLangURL }}" class="btn btn-secondary">Docs</a>
+      <a href="{{ "docs/tutorials/compile-a-skill/" | relLangURL }}" class="btn btn-primary">Tutorial</a>
+      <a href="{{ "docs/" | relLangURL }}" class="btn btn-secondary">Docs</a>
     </div>
   </div>
 </section>
