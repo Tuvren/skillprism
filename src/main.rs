@@ -70,7 +70,7 @@ mod tests {
     use miette::ReportHandler;
 
     use super::{diagnostic_options, plain_diagnostics};
-    use crate::types::ProjectError;
+    use crate::types::{ConfigKind, ProjectError};
 
     struct RenderedDiagnostic {
         handler: miette::MietteHandler,
@@ -86,32 +86,33 @@ mod tests {
     #[test]
     fn diagnostic_help_urls_stay_intact_in_terminal_and_plain_modes() {
         for plain in [false, true] {
-            let diagnostic = ProjectError::config_schema(
-                Path::new("skillprism.yaml"),
-                "name: my-skills\n",
-                "unknown field `name`".to_owned(),
-                None,
-            );
-            let handler = diagnostic_options(plain)
-                .force_graphical(true)
-                .width(80)
-                .build();
-            let rendered = format!(
-                "{:?}",
-                RenderedDiagnostic {
-                    handler,
-                    diagnostic
+            for kind in [ConfigKind::Project, ConfigKind::Skill, ConfigKind::Harness] {
+                let diagnostic = ProjectError::config_schema(
+                    kind,
+                    Path::new("skillprism.yaml"),
+                    "name: my-skills\n",
+                    "unknown field `name`".to_owned(),
+                    None,
+                );
+                let handler = diagnostic_options(plain)
+                    .force_graphical(true)
+                    .width(80)
+                    .build();
+                let rendered = format!(
+                    "{:?}",
+                    RenderedDiagnostic {
+                        handler,
+                        diagnostic
+                    }
+                );
+                assert!(
+                    rendered.contains(&kind.to_string()),
+                    "plain={plain}: {rendered}"
+                );
+                if plain {
+                    assert!(rendered.is_ascii(), "{rendered}");
+                    assert!(!rendered.contains('\u{1b}'), "{rendered}");
                 }
-            );
-            for url in [
-                "https://tuvren.github.io/skillprism/docs/quickstart/",
-                "https://tuvren.github.io/skillprism/docs/skill-yaml/",
-            ] {
-                assert!(rendered.contains(url), "plain={plain}: {rendered}");
-            }
-            if plain {
-                assert!(rendered.is_ascii(), "{rendered}");
-                assert!(!rendered.contains('\u{1b}'), "{rendered}");
             }
         }
     }

@@ -16,10 +16,14 @@ use std::path::Path;
 
 use serde::{Deserialize, de::DeserializeOwned};
 
-use crate::types::ProjectError;
+use crate::types::{ConfigKind, ProjectError};
 
 /// Preserve direct deserialization semantics, classifying only rejected input.
-pub fn deserialize<T: DeserializeOwned>(content: &str, path: &Path) -> Result<T, ProjectError> {
+pub fn deserialize<T: DeserializeOwned>(
+    content: &str,
+    path: &Path,
+    kind: ConfigKind,
+) -> Result<T, ProjectError> {
     yaml_serde::from_str(content).map_err(|error| {
         // Validate syntax across the document stream. A valid multi-document
         // stream is a schema error because configs require a single document.
@@ -28,30 +32,80 @@ pub fn deserialize<T: DeserializeOwned>(content: &str, path: &Path) -> Result<T,
                 return ProjectError::yaml_syntax(path, content, &syntax);
             }
         }
-        ProjectError::config_schema(path, content, error.to_string(), error.location())
+        ProjectError::config_schema(kind, path, content, error.to_string(), error.location())
     })
 }
 
 /// Value conversion remains authoritative; a second parse supplies diagnostic metadata only.
 pub(super) fn from_value<T: DeserializeOwned>(
-    value: yaml_serde::Value,
+    value: &yaml_serde::Value,
     content: &str,
     path: &Path,
+    field_path: impl FnOnce(&yaml_serde::Value, &str) -> Option<String>,
 ) -> Result<T, ProjectError> {
-    yaml_serde::from_value(value).map_err(|error| {
+    yaml_serde::from_value(value.clone()).map_err(|error| {
         // Direct parsing can coerce scalars that Value conversion rejects. Never
         // replace the authoritative reason with an unrelated later failure.
+        let reason = error.to_string();
         let located_error = yaml_serde::from_str::<T>(content)
             .err()
-            .filter(|located| located.to_string().contains(&error.to_string()))
-            .unwrap_or(error);
-        ProjectError::config_schema(
-            path,
-            content,
-            located_error.to_string(),
-            located_error.location(),
-        )
+            .filter(|located| located.to_string().contains(&reason));
+        let (message, position) = located_error.map_or_else(
+            || {
+                let message = field_path(value, &reason)
+                    .map_or_else(|| reason.clone(), |field| format!("{field}: {reason}"));
+                (message, None)
+            },
+            |located| (located.to_string(), located.location()),
+        );
+        ProjectError::config_schema(ConfigKind::Skill, path, content, message, position)
     })
+}
+
+pub(super) fn failing_field<'a, T: serde::de::DeserializeOwned>(
+    value: &'a yaml_serde::Value,
+    reason: &str,
+) -> Option<(&'a str, &'a yaml_serde::Value)> {
+    let map = value.as_mapping()?;
+    for (key, value) in map {
+        // Reuse the actual struct's field types only after rejection, so these
+        // probes cannot change acceptance or replace the first schema failure.
+        let probe =
+            yaml_serde::Value::Mapping(std::iter::once((key.clone(), value.clone())).collect());
+        if yaml_serde::from_value::<T>(probe)
+            .err()
+            .is_some_and(|error| error.to_string() == reason)
+        {
+            return Some((key.as_str()?, value));
+        }
+    }
+    None
+}
+
+pub(super) fn failing_entry<'a, T: serde::de::DeserializeOwned>(
+    value: &'a yaml_serde::Value,
+    reason: &str,
+) -> Option<(&'a str, &'a yaml_serde::Value)> {
+    value.as_mapping()?.iter().find_map(|(key, value)| {
+        yaml_serde::from_value::<T>(value.clone())
+            .err()
+            .filter(|error| error.to_string() == reason)
+            .and_then(|_| Some((key.as_str()?, value)))
+    })
+}
+
+pub(super) fn string_entry_path(value: &yaml_serde::Value, reason: &str) -> Option<String> {
+    value.as_sequence().map_or_else(
+        || failing_entry::<String>(value, reason).map(|(key, _)| format!(".{key}")),
+        |sequence| {
+            sequence.iter().enumerate().find_map(|(index, value)| {
+                yaml_serde::from_value::<String>(value.clone())
+                    .err()
+                    .filter(|error| error.to_string() == reason)
+                    .map(|_| format!("[{index}]"))
+            })
+        },
+    )
 }
 
 /// Locate a manifest version value using the parser, including quoted and flow-style keys.
@@ -63,6 +117,7 @@ pub(super) fn manifest_version_location(content: &str) -> Option<yaml_serde::Loc
     }
     yaml_serde::from_str::<Probe>(content)
         .err()
+        .filter(is_probe_rejection)
         .and_then(|error| error.location())
 }
 
@@ -75,6 +130,7 @@ pub(super) fn legacy_harnesses_location(content: &str) -> Option<yaml_serde::Loc
     }
     yaml_serde::from_str::<Probe>(content)
         .err()
+        .filter(is_probe_rejection)
         .and_then(|error| error.location())
 }
 
@@ -82,7 +138,15 @@ pub(super) fn legacy_harnesses_location(content: &str) -> Option<yaml_serde::Loc
 pub(super) fn root_location(content: &str) -> Option<yaml_serde::Location> {
     yaml_serde::from_str::<RejectValue>(content)
         .err()
+        .filter(is_probe_rejection)
         .and_then(|error| error.location())
+}
+
+fn is_probe_rejection(error: &yaml_serde::Error) -> bool {
+    // Earlier failures (for example complex mapping keys) did not reach our value.
+    error
+        .to_string()
+        .contains("expected a valid manifest value")
 }
 
 struct RejectValue;
@@ -122,8 +186,12 @@ mod tests {
             ),
             ("name: demo\n", false, "Check field names and value types"),
         ] {
-            let error =
-                deserialize::<ProjectConfig>(content, Path::new("skillprism.yaml")).unwrap_err();
+            let error = deserialize::<ProjectConfig>(
+                content,
+                Path::new("skillprism.yaml"),
+                ConfigKind::Project,
+            )
+            .unwrap_err();
             assert_eq!(matches!(error, ProjectError::YamlSyntax { .. }), syntax);
             assert_eq!(matches!(error, ProjectError::ConfigSchema { .. }), !syntax);
             let help = error.help().expect("config diagnostics must provide help");
@@ -136,10 +204,41 @@ mod tests {
     }
 
     #[test]
+    fn config_diagnostics_probes_ignore_errors_before_requested_field() {
+        let prefix = "? [complex, key]\n: hello\n";
+        assert!(
+            manifest_version_location(&format!("{prefix}skillprism: '2'\n")).is_none(),
+            "a complex key must not label the manifest version"
+        );
+        assert!(
+            legacy_harnesses_location(&format!("{prefix}harnesses: {{}}\n")).is_none(),
+            "a complex key must not label the legacy field"
+        );
+        assert!(manifest_version_location("name: demo\n").is_none());
+        assert!(legacy_harnesses_location("skillprism: '1'\n").is_none());
+        assert_eq!(
+            manifest_version_location("skillprism: '2'\n")
+                .unwrap()
+                .column(),
+            13
+        );
+        assert_eq!(
+            legacy_harnesses_location("skillprism: '1'\nharnesses: {}\n")
+                .unwrap()
+                .line(),
+            2
+        );
+    }
+
+    #[test]
     fn config_diagnostics_duplicate_mapping_keys_are_yaml_syntax_errors() {
         let content = "harnesses: [claude]\nharnesses: [codex]\n";
-        let error =
-            deserialize::<ProjectConfig>(content, Path::new("skillprism.yaml")).unwrap_err();
+        let error = deserialize::<ProjectConfig>(
+            content,
+            Path::new("skillprism.yaml"),
+            ConfigKind::Project,
+        )
+        .unwrap_err();
         assert!(matches!(error, ProjectError::YamlSyntax { .. }), "{error}");
         assert!(
             error
@@ -154,8 +253,12 @@ mod tests {
         use miette::Diagnostic;
 
         let content = "harnesses: [claude]\n---\nharnesses: [codex]\n";
-        let error =
-            deserialize::<ProjectConfig>(content, Path::new("skillprism.yaml")).unwrap_err();
+        let error = deserialize::<ProjectConfig>(
+            content,
+            Path::new("skillprism.yaml"),
+            ConfigKind::Project,
+        )
+        .unwrap_err();
         assert!(
             matches!(error, ProjectError::ConfigSchema { .. }),
             "{error}"

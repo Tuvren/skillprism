@@ -17,7 +17,7 @@ mod types;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::types::ProjectError;
+use crate::types::{ConfigKind, ProjectError};
 pub use types::*;
 
 /// Registry of known harness definitions, supporting builtins and user overrides.
@@ -78,7 +78,8 @@ impl HarnessRegistry {
                         path: path.to_string_lossy().to_string(),
                         source: e,
                     })?;
-                let def: HarnessDefinition = crate::loader::deserialize_config(&content, &path)?;
+                let def: HarnessDefinition =
+                    crate::loader::deserialize_config(&content, &path, ConfigKind::Harness)?;
                 let id = def.id.clone();
                 self.builtins.remove(&id);
                 self.user_overrides.insert(id, def);
@@ -183,9 +184,10 @@ mod tests {
             let message = error.to_string();
             assert!(message.contains("custom.yaml"), "{message}");
             assert!(message.contains(reason), "{message}");
-            assert!(message.contains("column"), "{message}");
+            let has_location = !reason.starts_with("missing field");
+            assert_eq!(message.contains("column"), has_location, "{message}");
             assert!(!message.contains("Invalid YAML"), "{message}");
-            assert!(error.labels().unwrap().next().is_some());
+            assert_eq!(error.labels().unwrap().next().is_some(), has_location);
             assert!(error.source_code().is_some());
             assert!(registry.all_ids().is_empty());
         }

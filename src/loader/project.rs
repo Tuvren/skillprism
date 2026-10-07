@@ -15,7 +15,10 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::types::{HarnessOverride, ProjectConfig, ProjectError, ProjectModel, SkillModel};
+use super::yaml::{failing_entry, failing_field, string_entry_path};
+use crate::types::{
+    ConfigKind, HarnessOverride, ProjectConfig, ProjectError, ProjectModel, SkillModel,
+};
 
 /// Loads a skillprism project from disk, discovering all skills.
 pub struct ProjectLoader;
@@ -45,7 +48,7 @@ impl ProjectLoader {
             },
         })?;
 
-        super::yaml::deserialize(&content, path)
+        super::yaml::deserialize(&content, path, ConfigKind::Project)
     }
 
     fn discover_skills(
@@ -295,9 +298,26 @@ fn merge_variables(
 }
 
 fn parse_skill_config(content: &str, path: &Path) -> Result<SkillYamlRaw, ProjectError> {
-    let raw = super::yaml::deserialize(content, path)?;
+    let raw = super::yaml::deserialize(content, path, ConfigKind::Skill)?;
     validate_skillprism_manifest_version(&raw, path, content)?;
-    super::yaml::from_value(raw, content, path)
+    super::yaml::from_value(&raw, content, path, skill_field_path)
+}
+
+fn skill_field_path(value: &yaml_serde::Value, reason: &str) -> Option<String> {
+    let (field, value) = failing_field::<SkillYamlRaw>(value, reason)?;
+    let nested = match field {
+        "overrides" => {
+            let (harness, value) = failing_entry::<HarnessOverrideRaw>(value, reason)?;
+            let (field, value) = failing_field::<HarnessOverrideRaw>(value, reason)?;
+            let entry = string_entry_path(value, reason).unwrap_or_default();
+            format!(".{harness}.{field}{entry}")
+        }
+        "metadata" | "arguments" | "disallowed-tools" | "paths" | "required-capabilities" => {
+            string_entry_path(value, reason).unwrap_or_default()
+        }
+        _ => String::new(),
+    };
+    Some(format!("{field}{nested}"))
 }
 
 fn validate_skillprism_manifest_version(
@@ -307,6 +327,7 @@ fn validate_skillprism_manifest_version(
 ) -> Result<(), ProjectError> {
     let yaml_serde::Value::Mapping(map) = raw else {
         return Err(ProjectError::config_schema(
+            ConfigKind::Skill,
             path,
             content,
             "skill.yaml must contain a top-level YAML mapping".to_owned(),
@@ -317,6 +338,7 @@ fn validate_skillprism_manifest_version(
         let message = "the `harnesses:` block in skill.yaml has been renamed to `overrides:` \
                        in skillprism 0.2.0; please update your skill.yaml to use `overrides:`";
         return Err(ProjectError::config_schema(
+            ConfigKind::Skill,
             path,
             content,
             message.to_owned(),
@@ -328,6 +350,7 @@ fn validate_skillprism_manifest_version(
             let message = "missing required field `skillprism`; either add `skillprism: '1'` \
                            to declare skillprism-format, or remove skill.yaml to declare plain-format.";
             return Err(ProjectError::config_schema(
+                ConfigKind::Skill,
                 path,
                 content,
                 message.to_owned(),
@@ -348,6 +371,7 @@ fn validate_skillprism_manifest_version(
         Some(_) => "the `skillprism:` field must be a quoted string or integer".to_owned(),
     };
     Err(ProjectError::config_schema(
+        ConfigKind::Skill,
         path,
         content,
         message,
@@ -540,11 +564,32 @@ mod tests {
             assert!(matches!(error, ProjectError::ConfigSchema { .. }));
             let message = error.to_string();
             assert!(
-                message.contains("invalid type: integer `42`, expected a string"),
+                message.contains("name: invalid type: integer `42`, expected a string"),
                 "{message}"
             );
             assert!(!message.contains("line"), "{message}");
             assert!(error.labels().unwrap().next().is_none());
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_quoted_scalar_spans_include_closing_quote() {
+        use miette::Diagnostic;
+
+        for token in [
+            "\"a b\"",
+            "'1,2'",
+            "\"a \\\"b\\\"\"",
+            "'it''s a,b'",
+            "\"café []\"",
+        ] {
+            let content = format!("skillprism: '1'\nvariables: {token}\n");
+            let error = parse_skill_config(&content, Path::new("skill.yaml")).unwrap_err();
+            let label = error.labels().unwrap().next().unwrap();
+            assert_eq!(
+                &content[label.offset()..label.offset() + label.len()],
+                token
+            );
         }
     }
 
