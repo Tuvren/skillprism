@@ -99,11 +99,10 @@ If your harness needs a manifest file (a JSON index of all skills), define it:
 
 ```yaml
 manifest:
-  format: json
   template: |
     {
-      "name": "{{ skill_name }}",
-      "description": "{{ skill_description }}"
+      "name": {{ skill_name | tojson }},
+      "description": {{ skill_description | tojson }}
     }
 paths:
   manifest_scope_path: .my-agent
@@ -111,3 +110,5 @@ paths:
 ```
 
 skillprism aggregates all rendered skills for that harness into a single manifest file at the configured path when building or installing.
+
+Apply the `tojson` filter to each interpolated string value without surrounding quotes. It escapes quotes, backslashes, and newlines. Build rejects invalid manifest JSON before writing any output and reports the harness, manifest path, and JSON error. If you migrate a hand-quoted template, remove the surrounding quotes and the unsupported `format: json` key.

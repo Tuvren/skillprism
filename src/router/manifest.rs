@@ -12,19 +12,38 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::path::PathBuf;
 
+use super::{ManifestEntry, RouterError};
+
+/// Aggregates and validates every manifest before any output is written or diffed.
+pub(super) fn aggregate_manifests(
+    entries: &[ManifestEntry],
+) -> Result<BTreeMap<PathBuf, String>, RouterError> {
+    group_manifest_entries(entries)
+        .into_iter()
+        .map(|(path, group)| {
+            let content = aggregate_json_entries(&group);
+            serde_json::from_str::<serde_json::Value>(&content).map_err(|source| {
+                let harnesses: BTreeSet<_> =
+                    group.iter().map(|entry| entry.harness.as_str()).collect();
+                RouterError::ManifestJson {
+                    harness: harnesses.into_iter().collect::<Vec<_>>().join(", "),
+                    path: path.to_string_lossy().into_owned(),
+                    source,
+                }
+            })?;
+            Ok((path, content))
+        })
+        .collect()
+}
+
 /// Groups manifest entries by their resolved file path.
-pub(super) fn group_manifest_entries(
-    entries: &[crate::router::ManifestEntry],
-) -> BTreeMap<PathBuf, Vec<String>> {
-    let mut grouped: BTreeMap<PathBuf, Vec<String>> = BTreeMap::new();
+fn group_manifest_entries(entries: &[ManifestEntry]) -> BTreeMap<PathBuf, Vec<&ManifestEntry>> {
+    let mut grouped: BTreeMap<PathBuf, Vec<&ManifestEntry>> = BTreeMap::new();
     for entry in entries {
-        grouped
-            .entry(entry.path.clone())
-            .or_default()
-            .push(entry.content.clone());
+        grouped.entry(entry.path.clone()).or_default().push(entry);
     }
     grouped
 }
@@ -33,7 +52,7 @@ pub(super) fn group_manifest_entries(
 ///
 /// Each entry is expected to be a JSON object string.
 /// The result is a JSON array containing all entries.
-pub(super) fn aggregate_json_entries(entries: &[String]) -> String {
+fn aggregate_json_entries(entries: &[&ManifestEntry]) -> String {
     if entries.is_empty() {
         return "[]".to_string();
     }
@@ -43,7 +62,7 @@ pub(super) fn aggregate_json_entries(entries: &[String]) -> String {
         if i > 0 {
             result.push_str(",\n");
         }
-        for line in entry.lines() {
+        for line in entry.content.lines() {
             result.push_str("  ");
             result.push_str(line);
             result.push('\n');

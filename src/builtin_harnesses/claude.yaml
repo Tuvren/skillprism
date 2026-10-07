@@ -20,9 +20,9 @@ skill_ref_pattern: /{name}
 manifest:
   template: |
     {
-      "name": "{{ skill_name }}",
-      "description": "{{ skill_description }}",
-      "skill_ref": "{{ skill_ref(skill_name) }}"
+      "name": {{ skill_name | tojson }},
+      "description": {{ skill_description | tojson }},
+      "skill_ref": {{ skill_ref(skill_name) | tojson }}
     }
 macros:
   hints:

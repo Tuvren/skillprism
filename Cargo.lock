@@ -691,6 +691,7 @@ dependencies = [
  "minijinja",
  "predicates",
  "serde",
+ "serde_json",
  "sha2",
  "similar",
  "tempfile",

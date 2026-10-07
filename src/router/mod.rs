@@ -34,6 +34,20 @@ pub use write::*;
 /// Errors that occur during file writing or diffing in the router.
 #[derive(Debug, Diagnostic, Error)]
 pub enum RouterError {
+    /// An aggregated harness manifest contains invalid JSON.
+    #[error("{harness}: Invalid JSON in manifest `{path}`: {source}")]
+    #[diagnostic(help(
+        "Use the tojson filter for interpolated values in custom harness manifest templates, \
+         without surrounding quotes (for example, {{{{ skill_description | tojson }}}}). \
+         Remove the unsupported `format: json` key from the manifest definition."
+    ))]
+    ManifestJson {
+        harness: String,
+        path: String,
+        #[source]
+        source: serde_json::Error,
+    },
+
     /// Failed to write a rendered file to disk.
     #[error("[{skill}] {harness}: Failed to write `{path}`")]
     #[diagnostic(help("{detail}"))]
@@ -112,6 +126,8 @@ pub enum RouterError {
 /// A single manifest entry produced by rendering a skill through a harness.
 #[derive(Debug, Clone)]
 pub struct ManifestEntry {
+    /// The harness whose template produced this entry.
+    pub harness: String,
     /// The resolved path where the manifest file should be written.
     pub path: PathBuf,
     /// The rendered content of this entry (e.g., a JSON object).
@@ -282,10 +298,15 @@ impl Router {
         })
     }
 
+    /// Validates all aggregated manifests before the build writes any files.
+    pub fn validate_manifests(entries: &[ManifestEntry]) -> Result<(), RouterError> {
+        manifest::aggregate_manifests(entries).map(|_| ())
+    }
+
     /// Writes aggregated manifest files from collected per-skill entries.
     ///
-    /// For JSON-format manifests, entries are aggregated into a JSON array.
-    /// Manifests are grouped by unique (resolved path) — each group produces one file.
+    /// Entries are aggregated into a JSON array, grouped by resolved path.
+    /// All groups must parse as JSON before any manifest is written.
     pub fn write_aggregated_manifests(
         entries: &[ManifestEntry],
         force: bool,
@@ -295,14 +316,13 @@ impl Router {
     ) -> Result<Vec<PathBuf>, RouterError> {
         let mut written = Vec::new();
 
-        let grouped = manifest::group_manifest_entries(entries);
+        let grouped = manifest::aggregate_manifests(entries)?;
 
-        for (path, group) in &grouped {
+        for (path, aggregated) in &grouped {
             if !overwrite::resolve_overwrite(path, force, skip_all, overwrite_all, skipped)? {
                 continue;
             }
-            let aggregated = manifest::aggregate_json_entries(group);
-            atomic_write(path, &aggregated).map_err(|e| RouterError::WriteError {
+            atomic_write(path, aggregated).map_err(|e| RouterError::WriteError {
                 skill: "manifest".to_string(),
                 harness: "aggregated".to_string(),
                 path: path.to_string_lossy().to_string(),
@@ -372,22 +392,22 @@ impl Router {
     }
 
     /// Computes diff entries for aggregated manifest files.
-    pub fn diff_manifests(entries: &[ManifestEntry]) -> Vec<DiffEntry> {
-        let grouped = manifest::group_manifest_entries(entries);
+    /// Returns an error if any aggregated manifest contains invalid JSON.
+    pub fn diff_manifests(entries: &[ManifestEntry]) -> Result<Vec<DiffEntry>, RouterError> {
+        let grouped = manifest::aggregate_manifests(entries)?;
         let mut result = Vec::new();
 
-        for (path, group) in &grouped {
-            let aggregated = manifest::aggregate_json_entries(group);
+        for (path, aggregated) in &grouped {
             let existing = diff::read_existing(path);
             let diff_output =
-                diff::compute_diff(existing.as_deref(), &aggregated, &path.to_string_lossy());
+                diff::compute_diff(existing.as_deref(), aggregated, &path.to_string_lossy());
             result.push(DiffEntry {
                 path: path.clone(),
                 diff: diff_output,
             });
         }
 
-        result
+        Ok(result)
     }
 
     fn write_sidecars(
@@ -587,10 +607,12 @@ mod tests {
         let manifest_path = dir.join("plugin.json");
         let entries = vec![
             ManifestEntry {
+                harness: "claude".to_string(),
                 path: manifest_path.clone(),
                 content: r#"{"name":"skill-a"}"#.to_string(),
             },
             ManifestEntry {
+                harness: "claude".to_string(),
                 path: manifest_path.clone(),
                 content: r#"{"name":"skill-b"}"#.to_string(),
             },
@@ -612,6 +634,53 @@ mod tests {
         assert!(content.contains("skill-b"));
         assert!(content.starts_with('['));
         assert!(content.ends_with(']'));
+    }
+
+    #[test]
+    fn invalid_manifest_prevents_all_manifest_writes_and_diffs() {
+        let dir = tempfile::tempdir().unwrap();
+        let manifest_dir = dir.path().join("manifests");
+        let invalid_path = manifest_dir.join("z-invalid.json");
+        let entries = [
+            ManifestEntry {
+                harness: "claude".to_string(),
+                path: manifest_dir.join("a-valid.json"),
+                content: r#"{"name":"sample"}"#.to_string(),
+            },
+            ManifestEntry {
+                harness: "custom".to_string(),
+                path: invalid_path.clone(),
+                content: r#"{"description":"Say "hello""}"#.to_string(),
+            },
+        ];
+        let errors = [
+            Router::validate_manifests(&entries).err(),
+            Router::write_aggregated_manifests(
+                &entries,
+                true,
+                &mut false,
+                &mut false,
+                &mut Vec::new(),
+            )
+            .err(),
+            Router::diff_manifests(&entries).err(),
+        ];
+        for error in errors {
+            match error.unwrap() {
+                RouterError::ManifestJson {
+                    harness,
+                    path,
+                    source,
+                } => {
+                    assert_eq!(harness, "custom");
+                    assert_eq!(path, invalid_path.to_string_lossy());
+                    assert!(source.line() > 0);
+                    assert!(source.column() > 0);
+                }
+                error => panic!("unexpected diagnostic: {error:?}"),
+            }
+        }
+        assert!(!manifest_dir.exists());
     }
 
     #[test]
@@ -833,7 +902,7 @@ mod tests {
 
     #[test]
     fn diff_manifests_empty_entries() {
-        let diffs = Router::diff_manifests(&[]);
+        let diffs = Router::diff_manifests(&[]).unwrap();
         assert!(diffs.is_empty());
     }
 
@@ -846,11 +915,12 @@ mod tests {
         fs::write(&manifest_path, r#"[{"name":"old-skill"}]"#).unwrap();
 
         let entries = vec![ManifestEntry {
+            harness: "claude".to_string(),
             path: manifest_path,
             content: r#"{"name":"new-skill"}"#.to_string(),
         }];
 
-        let diffs = Router::diff_manifests(&entries);
+        let diffs = Router::diff_manifests(&entries).unwrap();
         assert_eq!(diffs.len(), 1);
         assert!(!diffs[0].diff.stats.is_new_file);
         assert!(diffs[0].diff.stats.additions > 0 || diffs[0].diff.stats.deletions > 0);

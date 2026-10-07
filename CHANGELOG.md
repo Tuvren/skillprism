@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **JSON manifest rendering** — Escape every interpolated string in the built-in Claude and Codex manifests with `tojson`, and reject invalid aggregated JSON before writing or diffing with harness, path, and parser diagnostics. Fixes [#34](https://github.com/tuvren/skillprism/issues/34).
 - **YAML frontmatter rendering** — Add the `yaml_str` filter to quote and escape template values, and reject invalid rendered frontmatter during build with field and location diagnostics. Fixes [#34](https://github.com/tuvren/skillprism/issues/34).
 - **Configuration diagnostics** — Distinguish YAML syntax errors from schema errors, render graphical reports with help and source labels, and remove the rejected `name` field from the quickstart project configuration. Fixes [#31](https://github.com/tuvren/skillprism/issues/31).
 - **`init project` default harnesses** — Without `-H`, non-interactive runs apply the documented `claude`, `opencode` default and print how to choose other harnesses. The prompt appears only when stdin and stdout are both a terminal. Fixes [#33](https://github.com/tuvren/skillprism/issues/33).
@@ -12,6 +13,7 @@
 
 ### Changed
 
+- **Custom manifest validation (breaking)** — Hand-quoted custom manifest templates that build today fail when values contain quotes, backslashes, or newlines; migrate to the `tojson` filter without surrounding quotes and drop the unsupported `format: json` key.
 - **Rendered frontmatter validation (breaking)** — `build`, `add`, and `update` now fail when rendered `SKILL.md` frontmatter isn't a closed YAML mapping, doesn't parse (for example an unquoted value containing `: `), or has a `name` or `description` that parses as a non-string (`null`/`~`, numbers such as `123`, `true`/`false`, lists or maps; `yes` stays a string under YAML 1.2); migrate templates to the `yaml_str` filter.
 - **`init project` overwrite protection** — Project initialization refuses a target directory containing `skillprism.yaml` with a usage error, preserving the existing project files.
 - **Reserved helper function names** — A skill variable named after a skillprism helper function (currently `skill_ref`) is now rejected by `validate` as a reserved name because it shadowed the helper.

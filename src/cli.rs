@@ -433,19 +433,24 @@ fn execute_build_pipeline(
     let mut overwrite_all = false;
     let outputs = render_build_pairs(valid_pairs, verbose)?;
 
-    for (pair, output) in valid_pairs.iter().zip(&outputs) {
+    // Render and validate every manifest before writing skills, sidecars, or assets.
+    for pair in valid_pairs {
         if let Some(entry) = Engine::render_manifest_entry(pair).map_err(miette::Report::new)? {
             if let Some(path) =
                 crate::router::resolve_manifest_path(project_root, &pair.harness, target)
             {
                 let path = path.map_err(miette::Report::new)?;
                 manifest_entries.push(ManifestEntry {
+                    harness: pair.harness.id.clone(),
                     path,
                     content: entry,
                 });
             }
         }
+    }
+    Router::validate_manifests(&manifest_entries).map_err(miette::Report::new)?;
 
+    for (pair, output) in valid_pairs.iter().zip(&outputs) {
         let pair_name = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
 
         if diff {
@@ -606,7 +611,7 @@ fn handle_manifests(
     result: &mut BuildResult,
 ) -> Result<(), miette::Report> {
     if diff {
-        for entry in &Router::diff_manifests(manifest_entries) {
+        for entry in &Router::diff_manifests(manifest_entries).map_err(miette::Report::new)? {
             print_diff_entry(entry, result);
         }
     } else if !manifest_entries.is_empty() {
