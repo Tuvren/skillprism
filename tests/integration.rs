@@ -59,6 +59,117 @@ fn bin(home: &Path) -> Command {
 }
 
 #[test]
+fn graphical_diagnostics_piped_no_color() {
+    let tmp = copy_fixture("invalid-unknown-project-field");
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .env("NO_COLOR", "1")
+        .env_remove("NO_GRAPHICS")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
+        .arg("validate")
+        .assert()
+        .code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    assert!(!stderr.contains("Diagnostic {"), "{stderr}");
+    assert!(!stderr.contains("install miette"), "{stderr}");
+    assert!(stderr.contains("Invalid config in"), "{stderr}");
+    assert!(stderr.contains("unknown field `name`"), "{stderr}");
+    assert!(
+        stderr.contains("Check field names and value types"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("https://tuvren.github.io/skillprism/docs/quickstart/"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("https://tuvren.github.io/skillprism/docs/skill-yaml/"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains('\u{1b}'), "{stderr}");
+    assert!(stderr.is_ascii(), "{stderr}");
+}
+
+#[test]
+fn graphical_diagnostics_source_snippet_when_piped() {
+    let tmp = copy_fixture("invalid-unknown-project-field");
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .env_remove("NO_COLOR")
+        .env_remove("NO_GRAPHICS")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
+        .env("LANG", "en_US.UTF-8")
+        .arg("validate")
+        .assert()
+        .code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    let lines: Vec<_> = stderr.lines().collect();
+    let source_line = lines
+        .iter()
+        .position(|line| line.contains("name: my-skills"))
+        .unwrap_or_else(|| panic!("missing source snippet: {stderr}"));
+    assert!(
+        lines[source_line + 1..]
+            .iter()
+            .any(|line| line.contains("here")),
+        "missing label beneath source: {stderr}"
+    );
+    assert!(!stderr.contains('\u{1b}'), "{stderr}");
+    assert!(stderr.is_ascii(), "{stderr}");
+}
+
+#[test]
+fn quickstart_project_config_validates_with_sample_skill() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("my-skills");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "my-skills", "-H", "claude,opencode"])
+        .assert()
+        .success();
+    let quickstart = include_str!("../site/content/docs/quickstart.md");
+    let config = quickstart
+        .split_once("```yaml\n")
+        .unwrap()
+        .1
+        .split_once("\n```")
+        .unwrap()
+        .0;
+    fs::write(project.join("skillprism.yaml"), config).unwrap();
+    let skill = project.join("skills/dice-roller");
+    fs::create_dir_all(&skill).unwrap();
+    let skill_config = quickstart
+        .split("```yaml\n")
+        .nth(2)
+        .unwrap()
+        .split_once("\n```")
+        .unwrap()
+        .0;
+    fs::write(skill.join("skill.yaml"), skill_config).unwrap();
+    // The template contains a nested Bash fence, so use its closing paragraph.
+    let template = quickstart
+        .split_once("```jinja\n")
+        .unwrap()
+        .1
+        .split_once("\n```\n\nThe YAML frontmatter")
+        .unwrap()
+        .0;
+    fs::write(skill.join("SKILL.md"), template).unwrap();
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("validate")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("ok: sample")
+                .and(predicate::str::contains("ok: dice-roller"))
+                .and(predicate::str::contains("Validation passed")),
+        );
+}
+
+#[test]
 fn config_diagnostics_unknown_project_field() {
     let tmp = copy_fixture("invalid-unknown-project-field");
     bin(tmp.path())

@@ -27,6 +27,25 @@ mod types;
 mod validator;
 
 fn main() {
+    use std::io::IsTerminal;
+
+    let plain_diagnostics =
+        !std::io::stderr().is_terminal() || std::env::var_os("NO_COLOR").is_some();
+    miette::set_hook(Box::new(move |_| {
+        let options = miette::MietteHandlerOpts::new();
+        let options = if plain_diagnostics {
+            options
+                .color(false)
+                .unicode(false)
+                .terminal_links(false)
+                .wrap_lines(false)
+        } else {
+            options
+        };
+        Box::new(options.build())
+    }))
+    .expect("the diagnostic hook is installed once at startup");
+
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 && args[1] == "__generate_man" {
         if let Err(e) = cli::generate_man_page() {

@@ -33,7 +33,6 @@ my-skills/
 With the default harnesses or a terminal selection of `claude` and `opencode`, the generated `skillprism.yaml` configures these targets:
 
 ```yaml
-name: my-skills
 harnesses:
   - claude
   - opencode

@@ -47,8 +47,9 @@ pub enum ProjectError {
     /// Valid YAML does not match the configuration schema.
     #[error("Invalid config in {path}{location}: {message}")]
     #[diagnostic(help(
-        "Check field names and value types against docs/quickstart for skillprism.yaml \
-         and docs/skill-yaml for skill.yaml"
+        "Check field names and value types against \
+         https://tuvren.github.io/skillprism/docs/quickstart/ for skillprism.yaml \
+         and https://tuvren.github.io/skillprism/docs/skill-yaml/ for skill.yaml"
     ))]
     ConfigSchema {
         path: String,
