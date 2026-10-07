@@ -153,3 +153,39 @@ tickets:
     flows: [flow-validate]
     certainty: settled
     status: done
+closeout:
+  tickets_completed: [SKP-K001, SKP-K002, SKP-K003]
+  tickets_deferred: []
+  points_completed: 8
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: fixed
+      text: "EPIC-K (github#31): config errors distinguish YAML syntax from schema problems, name the field and location, and render through miette's graphical reporter; the quickstart no longer shows the rejected name field."
+  candidate_terms: []
+  routed_upstream:
+    - stage: tech-spec
+      item: "ADR-0007 should record that the shipped binary enables miette's fancy-no-backtrace reporter with a startup hook (plain ASCII when stderr is piped or NO_COLOR is set, no line wrapping), and that Diagnostic-bearing errors must be converted with miette::Report::new rather than into_diagnostic so help, labels and source code survive."
+    - stage: tech-spec
+      item: "Add a live-verification recipe that drives a failing validate (e.g. a project with an unknown skillprism.yaml field) and captures the rendered diagnostic, so diagnostics changes can carry a live_probe that exercises them."
+  follow_ups:
+    - "src/distribution/install.rs still words the missing-skillprism condition as 'skill.yaml is present but missing the `skillprism:` field', while the loader now says 'missing required field `skillprism`'. Align the add path's wording (EPIC-I's completed acceptance pins the old text)."
+    - "YAML syntax errors at end of file put the miette label as a zero-length span at EOF (yaml_serde reports the EOF position); the opening token's line appears only inside the message."
+  code_decisions:
+    - summary: "Enable miette's fancy-no-backtrace feature (miette stays 7.6.0); adds owo-colors 4.2.3, supports-color 3.0.2, supports-hyperlinks 3.2.0, supports-unicode 3.0.0, terminal_size 0.4.4, textwrap 0.16.2, unicode-linebreak 0.1.5, is_ci 1.2.0 (MSRV verified with cargo +1.85 build --release --locked)."
+      kind: dependency
+      paths: [Cargo.toml, Cargo.lock]
+      commit: "46e0449"
+    - summary: "One miette hook installed at startup in main.rs: plain ASCII without color, Unicode or hyperlinks when stderr is not a terminal or NO_COLOR is present and not \"0\" (matching supports-color); line wrapping disabled in both modes so help URLs stay intact."
+      kind: pattern
+      paths: [src/main.rs]
+      commit: "e29c6a3"
+    - summary: "Diagnostic-bearing errors are converted with map_err(miette::Report::new) in the CLI; into_diagnostic is reserved for plain std errors, because it drops help, labels and source code."
+      kind: convention
+      paths: [src/cli.rs]
+      commit: "46e0449"
+    - summary: "ProjectError::YamlParse replaced by YamlSyntax and ConfigSchema, each with the reason in the headline, real parser location when available, a 'here' source label, and help text; shared classification in src/loader/yaml.rs."
+      kind: contract_shape
+      paths: [src/types/error.rs, src/loader/yaml.rs, src/loader/project.rs, src/registry/mod.rs]
+      commit: "e93ae5b"
+  settled: []
