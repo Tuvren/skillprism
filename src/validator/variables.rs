@@ -65,7 +65,6 @@ fn is_builtin(name: &str, builtin_globals: &HashSet<&str>) -> bool {
                 | "self"
                 | "kwargs"
                 | "varargs"
-                | "namespace"
                 | "super"
                 | "g"
                 | "harness"

@@ -124,6 +124,5 @@ skillprism registers one custom helper:
 ## Gotchas
 
 - **Validation checks all branches:** `{% if %}` references are checked statically, including both branches. A macro override referenced anywhere in the template must be defined for *every* harness in `skillprism.yaml`'s `harnesses:` list — not just the one it's meaningfully different for — even if you only ever read it behind a guard.
-- **Variable name collisions:** A `variables:` entry with the same name as a built-in (`version`, `license`, etc.) silently overwrites it. `skillprism validate` catches this as a `ReservedVariableName` error.
-  Custom helper function names, including `skill_ref`, are also reserved and produce the same validation error.
+- **Variable name collisions:** A `variables:` entry with the same name as a built-in (`version`, `license`, etc.) silently overwrites it. `skillprism validate` catches this as a `ReservedVariableName` error. Custom helper function names, including `skill_ref`, are also reserved and produce the same validation error.
 - **Don't over-use `overrides:` and `variables:`:** Most skills render identically everywhere and don't need per-harness overrides at all. The scaffold defaults to showing them as commented optional examples for this reason.
