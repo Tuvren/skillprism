@@ -1,4 +1,19 @@
 entries:
+  - version: v2.1.2
+    date: 2026-10-07
+    changed:
+      - "EPIC-K Distinguish config schema errors from YAML syntax errors and ship graphical diagnostics archived: 3 tickets, 8 points, 1621 diff lines, 0 review rounds"
+    added:
+      - "Follow-up from EPIC-K: src/distribution/install.rs still words the missing-skillprism condition as 'skill.yaml is present but missing the `skillprism:` field', while the loader now says 'missing required field `skillprism`'. Align the add path's wording (EPIC-I's completed acceptance pins the old text)."
+      - "Follow-up from EPIC-K: YAML syntax errors at end of file put the miette label as a zero-length span at EOF (yaml_serde reports the EOF position); the opening token's line appears only inside the message."
+    by: reconcile
+    fixed:
+      - "EPIC-K (github#31): config errors distinguish YAML syntax from schema problems, name the field and location, and render through miette's graphical reporter; the quickstart no longer shows the rejected name field."
+    fast_lane_through: f10906a5276012282aa0ada0800d1c7d301a730f
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+      tech-spec: v1.0.2
   - version: v2.1.1
     date: 2026-10-07
     changed:

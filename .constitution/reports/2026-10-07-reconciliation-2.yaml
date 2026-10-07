@@ -1,0 +1,27 @@
+date: 2026-10-07
+commit: f10906a
+epics: [K]
+routed:
+  - stage: tech-spec
+    item: "ADR-0007 should record that the shipped binary enables miette's fancy-no-backtrace reporter with a startup hook (plain ASCII when stderr is piped or NO_COLOR is set, no line wrapping), and that Diagnostic-bearing errors must be converted with miette::Report::new rather than into_diagnostic so help, labels and source code survive."
+    from: K
+  - stage: tech-spec
+    item: "Add a live-verification recipe that drives a failing validate (e.g. a project with an unknown skillprism.yaml field) and captures the rendered diagnostic, so diagnostics changes can carry a live_probe that exercises them."
+    from: K
+  - stage: tech-spec
+    item: "code decision (dependency): Enable miette's fancy-no-backtrace feature (miette stays 7.6.0); adds owo-colors 4.2.3, supports-color 3.0.2, supports-hyperlinks 3.2.0, supports-unicode 3.0.0, terminal_size 0.4.4, textwrap 0.16.2, unicode-linebreak 0.1.5, is_ci 1.2.0 (MSRV verified with cargo +1.85 build --release --locked). [Cargo.toml, Cargo.lock] at 46e0449"
+    from: K
+  - stage: tech-spec
+    item: "code decision (pattern): One miette hook installed at startup in main.rs: plain ASCII without color, Unicode or hyperlinks when stderr is not a terminal or NO_COLOR is present and not \"0\" (matching supports-color); line wrapping disabled in both modes so help URLs stay intact. [src/main.rs] at e29c6a3"
+    from: K
+  - stage: tech-spec
+    item: "code decision (convention): Diagnostic-bearing errors are converted with map_err(miette::Report::new) in the CLI; into_diagnostic is reserved for plain std errors, because it drops help, labels and source code. [src/cli.rs] at 46e0449"
+    from: K
+  - stage: tech-spec
+    item: "code decision (contract_shape): ProjectError::YamlParse replaced by YamlSyntax and ConfigSchema, each with the reason in the headline, real parser location when available (used only when it refers to the offending field), a 'here' source label sized to the token including quoted scalars, and help text; ConfigSchema carries a ConfigKind (project, skill, harness) that selects the matching docs URL in help; missing-field errors are always file-level; scalar and map-key type errors name the field path (map keys called out as keys), recovered by diagnostic-only probes on the existing structs while from_value stays authoritative. Shared classification lives in src/loader/yaml.rs. [src/types/error.rs, src/loader/yaml.rs, src/loader/project.rs, src/registry/mod.rs] at 471869f"
+    from: K
+proposed_decisions: []
+candidate_terms: []
+stale_owners:
+  - ".constitution/evidence/SKP-K001/manifest.yaml: SKP-K001"
+  - ".constitution/evidence/SKP-K002/manifest.yaml: SKP-K002"
