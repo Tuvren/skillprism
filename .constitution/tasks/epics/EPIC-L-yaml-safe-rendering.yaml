@@ -90,7 +90,7 @@ tickets:
         - README.md
     verification:
       command: cargo test
-      expected: "exit 0; tests/examples.rs and the scaffold tests still pass, and `hugo --gc --minify -s site` exits 0"
+      expected: "exit 0; tests/examples.rs and the scaffold tests still pass. Also run `hugo --gc --minify -s site` separately and require exit 0."
     stop_conditions:
       - "STOP if an example or fixture's rendered output changes in a way other than the frontmatter quoting; don't improvise."
     description: >-
@@ -245,9 +245,9 @@ tickets:
       expected: "exit 0; validate fails on the issue's repro and on a non-string name or description, without writing output, and passes once the filter is applied"
     stop_conditions:
       - "STOP if validate cannot render templates without writing output or without changing the order of the existing syntax, variable, and macro checks; don't improvise."
-      - "STOP if flow-validate.md or ADR-0002 still define validate as parse-only; don't improvise a flow change in this ticket."
+      - "STOP if flow-validate.md or ADR-0002 still define validate as parse-only; route to a Stage 2 architecture pass, then a Stage 3 revision of ADR-0002. The epic lead must not patch ADR-0002 in-epic to unblock SKP-L005, even though EPIC-L lists it as tech_spec_patchable."
     description: >-
-      The validate-time counterpart of the rendered-frontmatter check in SKP-L003. After Stage 2 updates the architecture, validate renders each skill-harness pair in memory, without writing, and applies the same checks: leading frontmatter, if present, parses as a YAML mapping, and a present name or description parses as a YAML string (catching coercion such as yes, null, or 123) without requiring equality with the skill.yaml value. On failure, validate reports the same field-naming diagnostic as the build check, suggests the yaml_str filter, exits non-zero, and accumulates errors across every pair. Assumption: flow-validate.md and ADR-0002 currently define validate as parse-only with no engine participant; this ticket cannot execute until that architecture changes.
+      The validate-time counterpart of the rendered-frontmatter check in SKP-L003. After a Stage 2 architecture pass, then a Stage 3 revision of ADR-0002, validate renders each skill-harness pair in memory, without writing, and applies the same checks: leading frontmatter, if present, parses as a YAML mapping, and a present name or description parses as a YAML string (catching coercion such as yes, null, or 123) without requiring equality with the skill.yaml value. On failure, validate reports the same field-naming diagnostic as the build check, suggests the yaml_str filter, exits non-zero, and accumulates errors across every pair. SKP-L003's "validate does not render" scenario and its test are expected to be replaced by this ticket. Assumption: flow-validate.md has no engine participant, and ADR-0002 defines validate as parse-only; this ticket cannot execute until both upstream revisions are complete.
     acceptance:
       mode: gherkin
       evidence: |
@@ -268,4 +268,4 @@ tickets:
     flows: [flow-validate, flow-fail-on-error, flow-compile-template]
     certainty: assumed
     status: deferred
-    deferred_to: "Stage 2 architecture pass (designing-solution-architecture): flow-validate.md and ADR-0002 define validate as parse-only with no engine participant; the validate-time rendered-frontmatter check needs an architecture update before execution."
+    deferred_to: "Stage 2 architecture pass, then a Stage 3 revision of ADR-0002: flow-validate.md has no engine participant and ADR-0002 defines validate as parse-only; both upstream revisions must precede execution."
