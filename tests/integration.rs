@@ -96,7 +96,7 @@ fn validate_accepts_yaml_str_filter() {
     let tmp = copy_fixture("valid");
     fs::write(
         tmp.path().join("skills/alpha/SKILL.md.j2"),
-        "---\nname: {{ skill_name }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n",
+        "---\nname: {{ skill_name | yaml_str }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n",
     )
     .unwrap();
     bin(tmp.path())
@@ -105,6 +105,56 @@ fn validate_accepts_yaml_str_filter() {
         .assert()
         .success()
         .stdout(predicate::str::contains("Validation passed"));
+}
+
+#[test]
+fn scaffolded_skills_preserve_hostile_description_in_frontmatter() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("demo");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo", "-H", "claude"])
+        .assert()
+        .success();
+    bin(tmp.path())
+        .current_dir(&project)
+        .args(["init", "skill", "additional"])
+        .assert()
+        .success();
+
+    let description = "Router: use mode X. Say \"hello\" ok";
+    for name in ["sample", "additional"] {
+        let config_path = project.join(format!("skills/{name}/skill.yaml"));
+        let mut config: yaml_serde::Value =
+            yaml_serde::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        config["description"] = yaml_serde::Value::String(description.to_string());
+        fs::write(config_path, yaml_serde::to_string(&config).unwrap()).unwrap();
+    }
+
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("build")
+        .assert()
+        .success();
+
+    for name in ["sample", "additional"] {
+        let content =
+            fs::read_to_string(project.join(format!("dist/claude/{name}/SKILL.md"))).unwrap();
+        let (frontmatter, body) = content
+            .strip_prefix("---\n")
+            .unwrap()
+            .split_once("\n---\n")
+            .unwrap();
+        let parsed: yaml_serde::Value = yaml_serde::from_str(frontmatter).unwrap();
+        let config: yaml_serde::Value = yaml_serde::from_str(
+            &fs::read_to_string(project.join(format!("skills/{name}/skill.yaml"))).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(parsed["name"].as_str(), Some(name));
+        assert_eq!(parsed["description"].as_str(), Some(description));
+        assert_eq!(parsed["description"], config["description"]);
+        assert_eq!(body, format!("\n# {name}\n\n{description}\n"));
+    }
 }
 
 #[test]
@@ -625,8 +675,8 @@ fn full_build_pipeline() {
         "rendered SKILL.md must start with YAML frontmatter, got: {}",
         &alpha_claude[..alpha_claude.len().min(80)]
     );
-    assert!(alpha_claude.contains("name: alpha"));
-    assert!(alpha_claude.contains("description: First test skill"));
+    assert!(alpha_claude.contains("name: \"alpha\""));
+    assert!(alpha_claude.contains("description: \"First test skill\""));
     assert!(alpha_claude.contains("# alpha"));
     assert!(alpha_claude.contains("Hello from Alpha"));
     assert!(alpha_claude.contains("Theme: dark"));
@@ -639,8 +689,8 @@ fn full_build_pipeline() {
         beta_opencode.starts_with("---\n"),
         "rendered SKILL.md must start with YAML frontmatter"
     );
-    assert!(beta_opencode.contains("name: beta"));
-    assert!(beta_opencode.contains("description: Second test skill"));
+    assert!(beta_opencode.contains("name: \"beta\""));
+    assert!(beta_opencode.contains("description: \"Second test skill\""));
     assert!(beta_opencode.contains("# beta"));
     assert!(beta_opencode.contains("Hello from Beta"));
     assert!(beta_opencode.contains("Message:"));

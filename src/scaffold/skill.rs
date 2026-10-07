@@ -84,8 +84,8 @@ pub fn scaffold_skill(project_root: &Path, name: &str) -> io::Result<()> {
     fs::write(
         target_dir.join("SKILL.md"),
         "---\n\
-         name: {{ skill_name }}\n\
-         description: {{ skill_description }}\n\
+         name: {{ skill_name | yaml_str }}\n\
+         description: {{ skill_description | yaml_str }}\n\
          ---\n\n\
          # {{ skill_name }}\n\n\
          {{ skill_description }}\n",
@@ -224,11 +224,11 @@ mod tests {
             "SKILL.md must start with YAML frontmatter, got: {template:?}"
         );
         assert!(
-            template.contains("name: {{ skill_name }}"),
+            template.contains("name: {{ skill_name | yaml_str }}"),
             "frontmatter must render the skill name"
         );
         assert!(
-            template.contains("description: {{ skill_description }}"),
+            template.contains("description: {{ skill_description | yaml_str }}"),
             "frontmatter must render the skill description"
         );
 

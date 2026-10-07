@@ -1,6 +1,6 @@
 ---
-name: {{ skill_name }}
-description: {{ skill_description }}
+name: {{ skill_name | yaml_str }}
+description: {{ skill_description | yaml_str }}
 ---
 
 # {{ skill_name }}

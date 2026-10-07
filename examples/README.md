@@ -123,8 +123,8 @@ fixes, so this section stays honest as the code evolves.
    `metadata`, `version`, etc. — see `types::SKILL_METADATA_FIELDS`, the single list
    shared by `build_context` and `validator::variables::is_builtin` so the two can't
    drift apart; `engine::context::tests::context_includes_every_skill_metadata_field`
-   guards against that). Both skills reference `{{ license }}` and `{{ when_to_use }}`
-   directly in their `SKILL.md` — `mcp-builder` also uses `{{ allowed_tools }}` in
+   guards against that). Both skills reference `{{ license | yaml_str }}` and `{{ when_to_use }}`
+   directly in their `SKILL.md` — `mcp-builder` also uses `{{ allowed_tools | yaml_str }}` in
    its frontmatter, with no workaround needed. Note that not every field a skill
    declares has to be echoed into the rendered body to be "used" — `version` and
    `metadata.*` reach the context too (proven by the unit test above) but exist here

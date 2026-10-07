@@ -1,7 +1,7 @@
 ---
-name: {{ skill_name }}
-description: {{ skill_description }}
-license: {{ license }}
+name: {{ skill_name | yaml_str }}
+description: {{ skill_description | yaml_str }}
+license: {{ license | yaml_str }}
 ---
 
 # {{ skill_name }}

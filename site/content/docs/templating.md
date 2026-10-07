@@ -24,10 +24,10 @@ Every `skill.yaml` field is available under its own name (with three [renamed ex
 
 ```jinja
 ---
-name: {{ skill_name }}
-description: {{ skill_description }}
-license: {{ license }}
-allowed-tools: {{ allowed_tools }}
+name: {{ skill_name | yaml_str }}
+description: {{ skill_description | yaml_str }}
+license: {{ license | yaml_str }}
+allowed-tools: {{ allowed_tools | yaml_str }}
 ---
 
 # {{ skill_name }}
@@ -39,7 +39,7 @@ allowed-tools: {{ allowed_tools }}
 {{ when_to_use }}
 ```
 
-Unset optional fields render as empty (not the string `"none"`), so a missing `license` produces `license: ` in the frontmatter — not `license: none`.
+Use `| yaml_str` for string values in frontmatter so punctuation, quotes, and line breaks survive YAML parsing. An unfiltered description such as `Router: use mode X. Say "hello" ok` produces invalid YAML; use `description: {{ skill_description | yaml_str }}`. The filter adds double quotes and escapes the content; hand-quoting `"{{ skill_description }}"` breaks on embedded double quotes. Unset optional values become YAML `null`; leave lists and maps unfiltered because the filter rejects them.
 
 ## Custom variables
 

@@ -25,8 +25,8 @@ skillprism's scaffold emits this frontmatter by default, and `skillprism validat
 
 ```jinja
 ---
-name: {{ skill_name }}
-description: {{ skill_description }}
+name: {{ skill_name | yaml_str }}
+description: {{ skill_description | yaml_str }}
 ---
 ```
 
@@ -38,10 +38,10 @@ The spec defines optional frontmatter fields (`license`, `compatibility`, `metad
 
 ```jinja
 ---
-name: {{ skill_name }}
-description: {{ skill_description }}
-license: {{ license }}
-allowed-tools: {{ allowed_tools }}
+name: {{ skill_name | yaml_str }}
+description: {{ skill_description | yaml_str }}
+license: {{ license | yaml_str }}
+allowed-tools: {{ allowed_tools | yaml_str }}
 ---
 ```
 
