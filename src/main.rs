@@ -26,23 +26,26 @@ mod state;
 mod types;
 mod validator;
 
+fn plain_diagnostics(stderr_is_terminal: bool, no_color: Option<&std::ffi::OsStr>) -> bool {
+    !stderr_is_terminal || no_color.is_some_and(|value| !value.is_empty())
+}
+
+fn diagnostic_options(plain: bool) -> miette::MietteHandlerOpts {
+    let options = miette::MietteHandlerOpts::new().wrap_lines(false);
+    if plain {
+        options.color(false).unicode(false).terminal_links(false)
+    } else {
+        options
+    }
+}
+
 fn main() {
     use std::io::IsTerminal;
 
-    let plain_diagnostics =
-        !std::io::stderr().is_terminal() || std::env::var_os("NO_COLOR").is_some();
+    let no_color = std::env::var_os("NO_COLOR");
+    let plain = plain_diagnostics(std::io::stderr().is_terminal(), no_color.as_deref());
     miette::set_hook(Box::new(move |_| {
-        let options = miette::MietteHandlerOpts::new();
-        let options = if plain_diagnostics {
-            options
-                .color(false)
-                .unicode(false)
-                .terminal_links(false)
-                .wrap_lines(false)
-        } else {
-            options
-        };
-        Box::new(options.build())
+        Box::new(diagnostic_options(plain).build())
     }))
     .expect("the diagnostic hook is installed once at startup");
 
@@ -55,4 +58,72 @@ fn main() {
         return;
     }
     cli::run();
+}
+
+#[cfg(test)]
+mod tests {
+    use std::ffi::OsStr;
+    use std::fmt;
+    use std::path::Path;
+
+    use miette::ReportHandler;
+
+    use super::{diagnostic_options, plain_diagnostics};
+    use crate::types::ProjectError;
+
+    struct RenderedDiagnostic {
+        handler: miette::MietteHandler,
+        diagnostic: ProjectError,
+    }
+
+    impl fmt::Debug for RenderedDiagnostic {
+        fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            self.handler.debug(&self.diagnostic, formatter)
+        }
+    }
+
+    #[test]
+    fn diagnostic_help_urls_stay_intact_in_terminal_and_plain_modes() {
+        for plain in [false, true] {
+            let diagnostic = ProjectError::config_schema(
+                Path::new("skillprism.yaml"),
+                "name: my-skills\n",
+                "unknown field `name`".to_owned(),
+                None,
+            );
+            let handler = diagnostic_options(plain)
+                .force_graphical(true)
+                .width(80)
+                .build();
+            let rendered = format!(
+                "{:?}",
+                RenderedDiagnostic {
+                    handler,
+                    diagnostic
+                }
+            );
+            for url in [
+                "https://tuvren.github.io/skillprism/docs/quickstart/",
+                "https://tuvren.github.io/skillprism/docs/skill-yaml/",
+            ] {
+                assert!(rendered.contains(url), "plain={plain}: {rendered}");
+            }
+            if plain {
+                assert!(rendered.is_ascii(), "{rendered}");
+                assert!(!rendered.contains('\u{1b}'), "{rendered}");
+            }
+        }
+    }
+
+    #[test]
+    fn empty_no_color_is_unset_and_nonempty_values_select_plain_diagnostics() {
+        assert!(!plain_diagnostics(true, None));
+        assert!(!plain_diagnostics(true, Some(OsStr::new(""))));
+        for value in ["0", "1", " "] {
+            assert!(plain_diagnostics(true, Some(OsStr::new(value))));
+        }
+        for no_color in [None, Some(OsStr::new("")), Some(OsStr::new("1"))] {
+            assert!(plain_diagnostics(false, no_color));
+        }
+    }
 }
