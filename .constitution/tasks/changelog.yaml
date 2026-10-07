@@ -1,4 +1,14 @@
 entries:
+  - version: v2.1.5
+    date: 2026-10-07
+    by: reconcile
+    fixed:
+      - "feat: match skills CLI install paths and lifecycle flags (c092b75, fast lane)"
+    fast_lane_through: c092b7584e004460ac5010ffb2c3dad7565616b5
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+      tech-spec: v1.0.2
   - version: v2.1.4
     date: 2026-10-07
     changed:
