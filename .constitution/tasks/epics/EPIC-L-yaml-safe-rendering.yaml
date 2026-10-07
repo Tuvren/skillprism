@@ -74,7 +74,7 @@ tickets:
         No live_probe: guidelines declare no build-manifest recipe, and this plan must not invent one. The gap is routed to Stage 3 (specifying-technical-implementation). The behavior proof is the automated tests.
     flows: [flow-compile-template, flow-validate]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-L002
     title: Move scaffold, examples, fixtures, and docs to the yaml_str filter for frontmatter values
     type: Chore
