@@ -92,6 +92,65 @@ fn graphical_diagnostics_piped_no_color() {
 }
 
 #[test]
+fn documentation_frontmatter_strings_use_yaml_str() {
+    const NON_STRING_FIELDS: &[&str] = &[
+        "metadata",
+        "arguments",
+        "disable_model_invocation",
+        "user_invocable",
+        "disallowed_tools",
+        "context_fork",
+        "hooks",
+        "activation_paths",
+        "required_capabilities",
+    ];
+
+    for (page, read_error) in [
+        (
+            "site/content/docs/templating.md",
+            "read site/content/docs/templating.md",
+        ),
+        (
+            "site/content/docs/quickstart.md",
+            "read site/content/docs/quickstart.md",
+        ),
+    ] {
+        let content = fs::read_to_string(project_root().join(page)).expect(read_error);
+        let mut lines = content.lines().enumerate();
+        while let Some((_, line)) = lines.next() {
+            let line = line.trim_start();
+            let fence = if line.starts_with("```") {
+                "```"
+            } else if line.starts_with("~~~") {
+                "~~~"
+            } else {
+                continue;
+            };
+            let mut block = lines
+                .by_ref()
+                .take_while(|(_, line)| !line.trim_start().starts_with(fence));
+            let mut in_frontmatter = block.next().is_some_and(|(_, line)| line.trim() == "---");
+            for (line_number, line) in block {
+                if line.trim() == "---" {
+                    in_frontmatter = false;
+                }
+                if !in_frontmatter || line.contains("yaml_str") {
+                    continue;
+                }
+                for expression in line.split("{{").skip(1) {
+                    let name = expression.split(['|', '}']).next().unwrap_or("").trim();
+                    assert!(
+                        NON_STRING_FIELDS.contains(&name),
+                        "{page}:{}: frontmatter string interpolation needs yaml_str: {line}",
+                        line_number + 1
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn validate_accepts_yaml_str_filter() {
     let tmp = copy_fixture("valid");
     fs::write(

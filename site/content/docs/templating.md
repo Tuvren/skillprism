@@ -39,7 +39,7 @@ allowed-tools: {{ allowed_tools | yaml_str }}
 {{ when_to_use }}
 ```
 
-Use `| yaml_str` for string values in frontmatter so punctuation, quotes, and line breaks survive YAML parsing. An unfiltered description such as `Router: use mode X. Say "hello" ok` produces invalid YAML; use `description: {{ skill_description | yaml_str }}`. The filter adds double quotes and escapes the content; hand-quoting `"{{ skill_description }}"` breaks on embedded double quotes. Unset optional values become YAML `null`; leave lists and maps unfiltered because the filter rejects them.
+Use `| yaml_str` for string values in frontmatter so punctuation, quotes, and line breaks survive YAML parsing. An unfiltered description such as `Router: use mode X. Say "hello" ok` produces invalid YAML; use `description: {{ skill_description | yaml_str }}`. The filter adds double quotes and escapes the content; hand-quoting `"{{ skill_description }}"` breaks on embedded double quotes. Unset optional values become YAML `null`; leave lists, maps, booleans, and numbers unfiltered to preserve their YAML types (the filter rejects lists and maps).
 
 ## Custom variables
 

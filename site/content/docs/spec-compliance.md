@@ -45,7 +45,7 @@ allowed-tools: {{ allowed_tools | yaml_str }}
 ---
 ```
 
-Unset fields render as empty — `license: ` — not as `none`.
+Unset fields piped through `yaml_str` render as YAML `null` (`license: null`), not as the string `none`.
 
 ## Name constraints
 
