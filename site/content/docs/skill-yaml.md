@@ -24,6 +24,8 @@ description: Roll dice using a random number generator.
 
 The first-line comment links the [skill metadata schema](https://tuvren.github.io/skillprism/schema/v1/skill.json) for editor completion and field validation. Install the [VS Code YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to read the modeline; in [JetBrains IDEs](https://www.jetbrains.com/help/idea/yaml.html), select the schema URL through **JSON Schema Mappings**.
 
+`/schema/v1/` follows the latest published docs within configuration format version 1, so the editor can accept fields added after your installed skillprism release before your binary supports them.
+
 ## Required fields
 
 | Field | Type | Constraint | Template variable |

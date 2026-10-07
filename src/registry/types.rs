@@ -136,7 +136,7 @@ pub struct ManifestDef {
 mod tests {
     use super::*;
     use crate::types::schema_contract::{
-        assert_loader_contract, assert_struct_contract, serde_accepts,
+        assert_loader_contract, assert_struct_contract, yaml_accepts,
     };
     use serde_json::{Value, json};
 
@@ -154,7 +154,7 @@ mod tests {
                 "paths": {"project_scope_path": ".demo/skills", "user_scope_path": ".demo/skills", "skill_filename": "SKILL.md"},
                 "macros": {}, "sidecars": [], "manifest": {"template": "{}"}, "skill_ref_pattern": "/{name}"
             }),
-            serde_accepts::<HarnessDefinition>,
+            yaml_accepts::<HarnessDefinition>,
         );
     }
 
@@ -167,7 +167,7 @@ mod tests {
                 "name_max_length": 64, "description_max_length": 1024, "supports_allowed_tools": true,
                 "supports_disable_model_invocation": true, "supports_user_invocable_flag": true
             }),
-            serde_accepts::<HarnessCapabilities>,
+            yaml_accepts::<HarnessCapabilities>,
         );
     }
 
@@ -179,7 +179,7 @@ mod tests {
                 "project_scope_path": ".demo/skills", "user_scope_path": ".demo/skills", "skill_filename": "SKILL.md",
                 "manifest_scope_path": ".demo", "manifest_filename": "plugin.json"
             }),
-            serde_accepts::<HarnessPaths>,
+            yaml_accepts::<HarnessPaths>,
         );
     }
 
@@ -188,7 +188,7 @@ mod tests {
         assert_struct_contract::<SidecarDef>(
             &schema()["properties"]["sidecars"]["items"],
             &json!({"filename": "demo.json", "template": "{}", "output_dir": "data"}),
-            serde_accepts::<SidecarDef>,
+            yaml_accepts::<SidecarDef>,
         );
     }
 
@@ -197,7 +197,7 @@ mod tests {
         assert_struct_contract::<ManifestDef>(
             &schema()["properties"]["manifest"],
             &json!({"template": "{}"}),
-            serde_accepts::<ManifestDef>,
+            yaml_accepts::<ManifestDef>,
         );
     }
 
@@ -211,7 +211,7 @@ mod tests {
                 .is_valid(&json!("body"))
         );
         assert!(
-            matches!(serde_json::from_value::<MacroDef>(json!("body")).unwrap(), MacroDef::Inline(body) if body == "body")
+            matches!(yaml_serde::from_str::<MacroDef>("body").unwrap(), MacroDef::Inline(body) if body == "body")
         );
 
         let function = &schema["properties"]["macros"]["additionalProperties"]["oneOf"][1];
@@ -219,7 +219,7 @@ mod tests {
         // The untagged enum does not expose deserialize_struct's field list.
         // An exhaustive pattern guards the variant's fields; deserialization
         // verifies its serde name, and omission verifies that it is required.
-        match serde_json::from_value::<MacroDef>(sample.clone()).unwrap() {
+        match yaml_serde::from_str::<MacroDef>(&yaml_serde::to_string(&sample).unwrap()).unwrap() {
             MacroDef::Function { content } => assert_eq!(content, "body"),
             MacroDef::Inline(_) => panic!("expected function macro"),
         }
@@ -233,6 +233,35 @@ mod tests {
                 .collect::<std::collections::BTreeSet<_>>(),
             fields
         );
-        assert_loader_contract(function, &sample, &fields, serde_accepts::<MacroDef>);
+        assert_loader_contract(function, &sample, &fields, yaml_accepts::<MacroDef>);
+        // Macro function objects are open: the loader ignores extra keys.
+        let extra_key = json!({"content": "body", "unknown_property": "ignored"});
+        assert!(
+            jsonschema::draft202012::new(function)
+                .unwrap()
+                .is_valid(&extra_key)
+        );
+        assert!(yaml_accepts::<MacroDef>(&extra_key));
+    }
+
+    #[test]
+    fn harness_schema_documents_integral_float_length_limitation() {
+        let schema = schema();
+        let validator = jsonschema::draft202012::new(&schema).unwrap();
+        for field in ["name_max_length", "description_max_length"] {
+            let content = format!(
+                "id: demo\nname: Demo\ncapabilities:\n  supports_subagent: false\n  {field}: 64.0\n\
+                 paths:\n  project_scope_path: .demo\n  user_scope_path: .demo\n  skill_filename: SKILL.md\n"
+            );
+            let value: Value = yaml_serde::from_str(&content).unwrap();
+            assert!(validator.is_valid(&value), "integral float for {field}");
+            assert!(yaml_serde::from_str::<HarnessDefinition>(&content).is_err());
+            assert!(
+                schema["properties"]["capabilities"]["properties"][field]["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("integral floats")
+            );
+        }
     }
 }

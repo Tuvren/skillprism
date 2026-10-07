@@ -14,7 +14,7 @@
 
 //! File-level checks for the hand-written draft 2020-12 contracts.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -116,6 +116,62 @@ fn schemas_have_absolute_versioned_published_ids() {
                 .unwrap();
         assert_eq!(schema["$id"], expected_id, "{name}");
     }
+}
+
+#[test]
+fn hugo_schema_mounts_match_published_ids() {
+    let config = fs::read_to_string(root().join("site/hugo.toml")).unwrap();
+    let mut mounts = Vec::<BTreeMap<&str, &str>>::new();
+    let mut in_mount = false;
+    // Only module.mounts source/target pairs are needed; no TOML dependency.
+    for line in config.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_mount = line == "[[module.mounts]]";
+            if in_mount {
+                mounts.push(BTreeMap::new());
+            }
+        } else if in_mount {
+            if let Some((key, value)) = line.split_once('=') {
+                let key = key.trim();
+                if matches!(key, "source" | "target") {
+                    let value = value.trim().strip_prefix('"').unwrap();
+                    let value = value.strip_suffix('"').unwrap();
+                    assert!(mounts.last_mut().unwrap().insert(key, value).is_none());
+                }
+            }
+        }
+    }
+
+    let mut mounted = BTreeSet::new();
+    for mount in &mounts {
+        let source = mount.get("source").unwrap();
+        let Some(file) = source.strip_prefix("../schemas/") else {
+            continue;
+        };
+        assert!(file.ends_with(".json"));
+        assert!(mounted.insert(file), "duplicate schema mount: {file}");
+        let schema: Value =
+            serde_json::from_str(&fs::read_to_string(root().join("schemas").join(file)).unwrap())
+                .unwrap();
+        let id = schema["$id"].as_str().unwrap();
+        let (_, url_path) = id
+            .strip_prefix("https://")
+            .unwrap()
+            .split_once('/')
+            .unwrap();
+        let name = url_path.strip_prefix("skillprism/schema/v1/").unwrap();
+        assert!(!name.contains('/'));
+        assert!(name.ends_with(".json"));
+        assert_eq!(mount["target"], format!("static/schema/v1/{name}"));
+    }
+    assert_eq!(
+        mounted,
+        BTreeSet::from([
+            "project-config-schema.json",
+            "skill-schema.json",
+            "harness-schema.json",
+        ])
+    );
 }
 
 #[test]

@@ -6,7 +6,7 @@
   "type": "object",
   "properties": {
     "skillprism": {
-      "description": "Manifest format version. Required. The loader accepts only the string \"1\" or the integer 1.",
+      "description": "Manifest format version. Required. The loader accepts only the string \"1\" or the integer 1. Known limitation: integral floats such as 1.0 pass the schema but the YAML loader rejects them; use '1' or 1 without a decimal point.",
       "oneOf": [
         { "type": "string", "const": "1" },
         { "type": "integer", "const": 1 }

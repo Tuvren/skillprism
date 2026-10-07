@@ -492,7 +492,7 @@ mod tests {
 
     #[test]
     fn harness_override_schema_field_coverage() {
-        use crate::types::schema_contract::{assert_struct_contract, serde_accepts};
+        use crate::types::schema_contract::assert_struct_contract;
         use serde_json::json;
 
         let schema: serde_json::Value =
@@ -500,7 +500,36 @@ mod tests {
         assert_struct_contract::<HarnessOverrideRaw>(
             &schema["properties"]["overrides"]["additionalProperties"],
             &json!({"variables": {}, "macros": {}}),
-            serde_accepts::<HarnessOverrideRaw>,
+            |value| {
+                parse_skill_config(
+                    &yaml_serde::to_string(
+                        &json!({"skillprism": "1", "overrides": {"demo": value}}),
+                    )
+                    .unwrap(),
+                    Path::new("skill.yaml"),
+                )
+                .is_ok()
+            },
+        );
+    }
+
+    #[test]
+    fn skill_schema_documents_integral_float_limitation() {
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../schemas/skill-schema.json")).unwrap();
+        let content = "skillprism: 1.0\n";
+        let value: serde_json::Value = yaml_serde::from_str(content).unwrap();
+        assert!(
+            jsonschema::draft202012::new(&schema)
+                .unwrap()
+                .is_valid(&value)
+        );
+        assert!(parse_skill_config(content, Path::new("skill.yaml")).is_err());
+        assert!(
+            schema["properties"]["skillprism"]["description"]
+                .as_str()
+                .unwrap()
+                .contains("integral floats")
         );
     }
 

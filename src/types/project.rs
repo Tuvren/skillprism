@@ -228,7 +228,19 @@ pub mod schema_contract {
                 .collect(),
             "schema properties must equal serde fields in both directions"
         );
-        assert_loader_contract(schema, sample, &fields, accepts);
+        assert_loader_contract(schema, sample, &fields, &accepts);
+        let mut unknown = sample.clone();
+        unknown["unknown_property"] = json!("unexpected");
+        assert!(
+            !jsonschema::draft202012::new(schema)
+                .unwrap()
+                .is_valid(&unknown),
+            "schema must reject unknown properties in a closed object"
+        );
+        assert!(
+            !accepts(&unknown),
+            "loader must reject unknown properties in a closed object"
+        );
     }
 
     pub fn assert_loader_contract(
@@ -273,19 +285,64 @@ pub mod schema_contract {
             required, declared,
             "required fields must match the full loader contract"
         );
+        assert_schema_soundness(schema, sample, fields, &declared, &accepts);
+    }
+
+    fn assert_schema_soundness(
+        schema: &Value,
+        sample: &Value,
+        fields: &BTreeSet<&str>,
+        required: &BTreeSet<&str>,
+        accepts: impl Fn(&Value) -> bool,
+    ) {
+        let validator = jsonschema::draft202012::new(schema).unwrap();
+        let mut minimal = sample.clone();
+        minimal
+            .as_object_mut()
+            .unwrap()
+            .retain(|field, _| required.contains(field.as_str()));
+        assert!(validator.is_valid(&minimal));
+        assert!(accepts(&minimal), "schema-valid minimal sample must load");
         for field in fields {
+            let mut optional = minimal.clone();
+            optional[*field] = sample[*field].clone();
+            assert!(validator.is_valid(&optional));
+            assert!(accepts(&optional), "schema-valid field {field} must load");
+
             let mut null = sample.clone();
             null[*field] = Value::Null;
-            assert_eq!(
-                validator.is_valid(&null),
-                accepts(&null),
-                "schema/loader null acceptance differs for {field}"
+            if validator.is_valid(&null) {
+                assert!(accepts(&null), "schema-valid null for {field} must load");
+                optional[*field] = Value::Null;
+                assert!(validator.is_valid(&optional));
+                assert!(accepts(&optional), "schema-valid optional null must load");
+            }
+
+            // Maps fail string coercion too, unlike plain numbers or booleans.
+            let property = jsonschema::draft202012::new(&schema["properties"][*field]).unwrap();
+            let wrong_type = [
+                json!({"unexpected": "value"}),
+                json!([]),
+                json!("wrong-type"),
+            ]
+            .into_iter()
+            .find(|value| !property.is_valid(value))
+            .expect("a representative wrong non-null type");
+            let mut invalid = sample.clone();
+            invalid[*field] = wrong_type;
+            assert!(
+                !validator.is_valid(&invalid),
+                "schema must reject wrong type for {field}"
+            );
+            assert!(
+                !accepts(&invalid),
+                "loader must reject wrong type for {field}"
             );
         }
     }
 
-    pub fn serde_accepts<T: DeserializeOwned>(value: &Value) -> bool {
-        serde_json::from_value::<T>(value.clone()).is_ok()
+    pub fn yaml_accepts<T: DeserializeOwned>(value: &Value) -> bool {
+        yaml_serde::from_str::<T>(&yaml_serde::to_string(value).unwrap()).is_ok()
     }
 
     #[test]
@@ -295,7 +352,7 @@ pub mod schema_contract {
         assert_struct_contract::<super::ProjectConfig>(
             &schema,
             &json!({"harnesses": ["claude"], "skills_dir": "skills"}),
-            serde_accepts::<super::ProjectConfig>,
+            yaml_accepts::<super::ProjectConfig>,
         );
     }
 }
