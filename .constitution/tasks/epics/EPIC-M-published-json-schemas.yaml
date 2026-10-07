@@ -206,7 +206,8 @@ closeout:
     - stage: tech-spec
       item: "Record the schema publication convention: schemas/ is the single source, published through Hugo module mounts in site/hugo.toml at /schema/v1/<name>.json keyed to the config format version; a format version 2 needs new mounts and $ids."
   follow_ups:
-    - "Null-parity coverage for ProjectConfig and HarnessDefinition uses serde_json::from_value as the parser stand-in; the real loader (yaml_serde::from_str) turns a bare key (harnesses:, skills_dir:, macros:, sidecars:) into an empty value and accepts it, while the schema rejects it as null. Switch those checks to a YAML round-trip or document the gap."
+    - "Macro function objects accept unknown keys in both the harness schema and the loader; decide whether either should close them."
+    - "Publish release-keyed schema snapshots (e.g. /schema/v0.3/) alongside the format-keyed /schema/v1/, so pinned binaries can validate against their own schema (issue #32 asked for release-keyed URLs)."
     - "The JetBrains link in site/content/docs/skill-yaml.md and siblings (and README.md) points at the general YAML help page; the JSON Schema mappings page (help/idea/json.html) is more specific."
     - "tests/fixtures/invalid-syntax-error was added for the expected-invalid list: no syntax-error fixture existed despite the ticket text citing one from EPIC-K. Correct the SKP-M001 evidence text (archived epic) so it no longer claims an EPIC-K syntax-error fixture."
   code_decisions:
@@ -214,7 +215,7 @@ closeout:
       kind: dependency
       paths: [Cargo.toml, Cargo.lock]
       commit: "28e330e"
-    - summary: "Schema/loader coverage pattern: #[cfg(test)] unit tests next to the structs capture serde field names (renames included) with a test-only Deserializer and compare them both ways with schema properties, required sets against the loader contract, and null acceptance; tests/schemas.rs validates shipped and generated files with an explicit expected-invalid list."
+    - summary: "Schema/loader coverage pattern: #[cfg(test)] unit tests next to the structs capture serde field names (renames included) with a test-only Deserializer and compare them both ways with schema properties, required sets against the loader contract, and null acceptance through the real loaders (soundness: schema-valid samples load), plus negative parity for closed objects; tests/schemas.rs validates shipped and generated files with an explicit expected-invalid list and ties Hugo mount targets to the $ids. Real-loader soundness and negative parity added in 45cc3a6 under OD-02."
       kind: pattern
       paths: [tests/schemas.rs, src/types/project.rs, src/loader/project.rs, src/registry/types.rs]
       commit: "28e330e"
