@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.3.0 — 2026-10-07
+
 ### Added
 
 - **Editor validation schemas** — Publish versioned JSON Schemas for project configuration, skill metadata, and harness definitions, add schema modelines to scaffolds and examples, and link the schemas from the documentation. Addresses [#32](https://github.com/tuvren/skillprism/issues/32).
