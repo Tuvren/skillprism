@@ -2,6 +2,9 @@ artifact_path: schemas/project-config-schema.json
 surface: json
 flows: [flow-compile-template, flow-merge-variables]
 boundaries: [BND-02]
-certainty: assumed
-assumption: "The schema was aligned with ProjectConfig after the move. It describes the supported shape, not every value the parser silently ignores."
-settles_when: "A test validates a project config against this schema."
+certainty: settled
+evidence:
+  kind: repository
+  ref: tests/schemas.rs
+  date: 2026-10-07
+  note: "Validates examples/skillprism.yaml, every fixture project config and init project output against schemas/project-config-schema.json; project_config_schema_field_coverage compares the schema with ProjectConfig both ways."

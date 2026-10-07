@@ -2,6 +2,9 @@ artifact_path: schemas/skill-schema.json
 surface: json
 flows: [flow-compile-template, flow-merge-variables, flow-copy-assets]
 boundaries: [BND-02]
-certainty: assumed
-assumption: "The schema was aligned with SkillYamlRaw after the move. It describes the supported shape, not every value the parser silently ignores."
-settles_when: "A test validates a skill file against this schema."
+certainty: settled
+evidence:
+  kind: repository
+  ref: tests/schemas.rs
+  date: 2026-10-07
+  note: "Validates example, fixture and scaffold skill.yaml files against schemas/skill-schema.json; skill_schema_field_coverage compares the schema with SkillYamlRaw and the loader's required skillprism field."

@@ -1,0 +1,28 @@
+date: 2026-10-07
+commit: 7d43400
+epics: [M]
+routed:
+  - stage: tech-spec
+    item: "harness-schema.meta.yaml's assumption says the parser may ignore an unknown manifest field the schema rejects; ManifestDef is deny_unknown_fields and harness_manifest_schema_field_coverage proves the schema and serde agree. Update the assumption text when the sidecar settles."
+    from: M
+  - stage: tech-spec
+    item: "Record the schema publication convention: schemas/ is the single source, published through Hugo module mounts in site/hugo.toml at /schema/v1/<name>.json keyed to the config format version; a format version 2 needs new mounts and $ids."
+    from: M
+  - stage: tech-spec
+    item: "code decision (dependency): Dev-dependency jsonschema =0.49.4 with default features off: the newest release with rust-version 1.85 that keeps every existing Cargo.lock version (0.49.5+ needs a newer regex-automata); adds dev-only transitive crates, none in the release binary. [Cargo.toml, Cargo.lock] at 28e330e"
+    from: M
+  - stage: tech-spec
+    item: "code decision (pattern): Schema/loader coverage pattern: #[cfg(test)] unit tests next to the structs capture serde field names (renames included) with a test-only Deserializer and compare them both ways with schema properties, required sets against the loader contract, and null acceptance through the real loaders (soundness: schema-valid samples load), plus negative parity for closed objects; tests/schemas.rs validates shipped and generated files with an explicit expected-invalid list and ties Hugo mount targets to the $ids. Real-loader soundness and negative parity added in 45cc3a6 under OD-02. [tests/schemas.rs, src/types/project.rs, src/loader/project.rs, src/registry/types.rs] at 28e330e"
+    from: M
+  - stage: tech-spec
+    item: "code decision (contract_shape): Optional skill.yaml and harness fields accept explicit YAML null in the schemas, matching the Option<T> parser (additive correction). [schemas/skill-schema.json, schemas/harness-schema.json] at 28e330e"
+    from: M
+  - stage: tech-spec
+    item: "code decision (convention): Schemas carry absolute $ids https://tuvren.github.io/skillprism/schema/v1/{skillprism,skill,harness}.json and are published from schemas/ via Hugo single-file module mounts (explicit static mount retained). [schemas, site/hugo.toml] at 3511ba9"
+    from: M
+  - stage: tech-spec
+    item: "code decision (convention): Scaffolds write a first-line yaml-language-server $schema modeline; the URLs live once in src/scaffold/mod.rs and a unit test ties them to each schema's $id. [src/scaffold/mod.rs, src/scaffold/project.rs, src/scaffold/skill.rs, src/scaffold/harness.rs] at 1994d6e"
+    from: M
+proposed_decisions: [OD-02]
+candidate_terms: []
+stale_owners: [".constitution/evidence/SKP-M003/manifest.yaml: SKP-M003"]

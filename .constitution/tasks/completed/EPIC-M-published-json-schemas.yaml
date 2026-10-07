@@ -1,7 +1,7 @@
 id: M
-name: Test, version, and publish the JSON Schemas for skillprism.yaml, skill.yaml, and harness definitions
+name: "Test, version, and publish the JSON Schemas for skillprism.yaml, skill.yaml, and harness definitions"
 kind: out_of_band
-source: github#32
+source: "github#32"
 capabilities: [CAP-012, CAP-013, CAP-014, CAP-009]
 depends_on: [L]
 scope:
@@ -21,38 +21,15 @@ scope:
     - README.md
     - CHANGELOG.md
   tech_spec_patchable:
-    - .constitution/tech-spec/contracts/project-config-schema.meta.yaml
-    - .constitution/tech-spec/contracts/skill-schema.meta.yaml
-    - .constitution/tech-spec/contracts/harness-schema.meta.yaml
-    - .constitution/tech-spec/guidelines.md
-    - .constitution/tech-spec/stack.yaml
+    - ".constitution/tech-spec/contracts/project-config-schema.meta.yaml"
+    - ".constitution/tech-spec/contracts/skill-schema.meta.yaml"
+    - ".constitution/tech-spec/contracts/harness-schema.meta.yaml"
+    - ".constitution/tech-spec/guidelines.md"
+    - ".constitution/tech-spec/stack.yaml"
 estimated_diff_lines: 1250
-decisions:
-  - id: OD-02
-    question: "Should the published JSON Schemas accept every value the loaders coerce or accept (plain scalars such as version: 1.0 for string fields, bare keys), or describe the recommended strict shape?"
-    blocks: [SKP-M001, schemas/project-config-schema.json, schemas/harness-schema.json]
-    options:
-      - name: "strict recommended shape; guarantee soundness (schema-valid always loads) and document where the schema is stricter"
-        pros: ["Editors steer authors toward quoted strings and canonical shapes", "The guarantee that matters most holds: a file the editor accepts never fails the CLI", "No loader behavior changes"]
-        cons: ["Editors flag some files the CLI accepts (false positives)", "JSON Schema cannot distinguish 1.0 from 1, so integral floats stay a documented soundness gap"]
-      - name: "mirror the loader exactly (accept numbers/booleans for string fields, null for bare keys)"
-        pros: ["No false positives in editors"]
-        cons: ["Schemas become permissive and stop teaching the canonical shape", "Still cannot express integral-float rejection"]
-      - name: "tighten the loader to match the strict schema"
-        pros: ["Exact parity"]
-        cons: ["Breaking change for existing configs that rely on coercion", "Outside the scope of publishing schemas"]
-    recommendation: "strict recommended shape; guarantee soundness (schema-valid always loads) and document where the schema is stricter"
-    closure: ruling
-    ruler: "the user (project owner), after the EPIC-M merge"
-    interim:
-      assumption: "Schemas describe the recommended strict shape; contract tests assert soundness through the real YAML loaders (every schema-valid sample loads) plus negative parity for closed objects; known stricter-than-loader cases and the integral-float gap are documented in the schema descriptions."
-      applied_by: [schemas/project-config-schema.json, schemas/skill-schema.json, schemas/harness-schema.json, tests/schemas.rs, src/types/project.rs, src/registry/types.rs, src/loader/project.rs]
-    status: proposed
-    asked: { date: "2026-10-07", in: EPIC-M }
-    proposed_by: "EPIC-M, PR #44 review round 1"
 tickets:
   - id: SKP-M001
-    title: Validate examples, fixtures, scaffold output, and built-in harnesses against the schemas and check struct field coverage
+    title: "Validate examples, fixtures, scaffold output, and built-in harnesses against the schemas and check struct field coverage"
     type: Chore
     effort: 5
     depends_on: []
@@ -74,8 +51,7 @@ tickets:
       - "STOP if a schema disagrees with what the parser accepts in a way that would require changing the Rust structs or loader behavior; fixing the schema to match the structs and the loader contract is in scope, changing the structs or parser behavior is not."
       - "STOP if the coverage checks would require making SkillYamlRaw or HarnessOverrideRaw public or adding a [lib] target; keep them as cfg(test) modules next to the structs. Don't improvise."
       - "STOP if fixture classification would rename or move an existing fixture; EPIC-K integration tests reference those paths. Use an explicit expected-invalid list in tests/schemas.rs."
-    description: >-
-      The three hand-written schemas under schemas/ stay the source of truth; they are the contract artifacts the sidecars point at. The crate is binary-only (no src/lib.rs, no [lib] target) and SkillYamlRaw and HarnessOverrideRaw are private in src/loader/project.rs, so tests/schemas.rs cannot name those Rust structs. Add a JSON Schema validator as a dev-dependency (a code decision for the closeout; the jsonschema crate is the expected choice, subject to the MSRV stop condition). tests/schemas.rs only reads JSON and YAML files and spawns the binary for scaffold output. It validates examples/skillprism.yaml and every examples/skills/*/skill.yaml, the output of init project, init skill, and init harness in a temp directory, and all five built-in harness YAMLs under src/builtin_harnesses against the matching schema. It also proves the schemas reject an unknown top-level name field in skillprism.yaml and a skill.yaml without skillprism. Do not require every file under tests/fixtures to pass: EPIC-K adds deliberately invalid fixtures (unknown top-level name: in skillprism.yaml, and skill.yaml missing skillprism:). Classify every skillprism.yaml and skill.yaml under tests/fixtures as expected-valid or expected-invalid. Use an explicit expected-invalid list inside tests/schemas.rs; all other fixtures are expected-valid. Do not rename or move existing fixtures, because EPIC-K integration tests reference their paths. Assert expected-valid files parse as YAML and pass their schema. Expected-invalid files must fail YAML parsing or schema validation; a YAML parse failure, such as EPIC-K's syntax-error fixture, counts as a correct rejection. The two-way struct-field coverage check is cfg(test) unit tests next to the structs, which read the schema files via include_str! or CARGO_MANIFEST_DIR: src/types/project.rs for ProjectConfig, src/loader/project.rs for SkillYamlRaw and HarnessOverrideRaw, and src/registry/types.rs for HarnessDefinition and its nested types. Those unit tests may not change parser behavior. Coverage is against the full loader contract, not the serde-required set alone: property names match struct fields both ways, and the schema's required list matches the fields the loader requires, including explicit pre-deserialization rules. SkillYamlRaw.skillprism is Option in serde but mandatory via validate_skillprism_manifest_version, so the schema must require skillprism. Fix any drift this exposes in the schemas. Passing these tests is the settles_when condition of all three schema sidecars; record that under closeout.settled. Alternative noted and not planned: generate the schemas from the structs with schemars and keep a golden-file test.
+    description: "The three hand-written schemas under schemas/ stay the source of truth; they are the contract artifacts the sidecars point at. The crate is binary-only (no src/lib.rs, no [lib] target) and SkillYamlRaw and HarnessOverrideRaw are private in src/loader/project.rs, so tests/schemas.rs cannot name those Rust structs. Add a JSON Schema validator as a dev-dependency (a code decision for the closeout; the jsonschema crate is the expected choice, subject to the MSRV stop condition). tests/schemas.rs only reads JSON and YAML files and spawns the binary for scaffold output. It validates examples/skillprism.yaml and every examples/skills/*/skill.yaml, the output of init project, init skill, and init harness in a temp directory, and all five built-in harness YAMLs under src/builtin_harnesses against the matching schema. It also proves the schemas reject an unknown top-level name field in skillprism.yaml and a skill.yaml without skillprism. Do not require every file under tests/fixtures to pass: EPIC-K adds deliberately invalid fixtures (unknown top-level name: in skillprism.yaml, and skill.yaml missing skillprism:). Classify every skillprism.yaml and skill.yaml under tests/fixtures as expected-valid or expected-invalid. Use an explicit expected-invalid list inside tests/schemas.rs; all other fixtures are expected-valid. Do not rename or move existing fixtures, because EPIC-K integration tests reference their paths. Assert expected-valid files parse as YAML and pass their schema. Expected-invalid files must fail YAML parsing or schema validation; a YAML parse failure, such as EPIC-K's syntax-error fixture, counts as a correct rejection. The two-way struct-field coverage check is cfg(test) unit tests next to the structs, which read the schema files via include_str! or CARGO_MANIFEST_DIR: src/types/project.rs for ProjectConfig, src/loader/project.rs for SkillYamlRaw and HarnessOverrideRaw, and src/registry/types.rs for HarnessDefinition and its nested types. Those unit tests may not change parser behavior. Coverage is against the full loader contract, not the serde-required set alone: property names match struct fields both ways, and the schema's required list matches the fields the loader requires, including explicit pre-deserialization rules. SkillYamlRaw.skillprism is Option in serde but mandatory via validate_skillprism_manifest_version, so the schema must require skillprism. Fix any drift this exposes in the schemas. Passing these tests is the settles_when condition of all three schema sidecars; record that under closeout.settled. Alternative noted and not planned: generate the schemas from the structs with schemars and keep a golden-file test."
     acceptance:
       mode: contract_test
       evidence: |
@@ -89,27 +65,27 @@ tickets:
         Coverage unit tests next to the structs, also run by `cargo test`. They may not change parser behavior.
         - For ProjectConfig (src/types/project.rs), SkillYamlRaw and HarnessOverrideRaw (src/loader/project.rs), and HarnessDefinition and its nested types (src/registry/types.rs), the set of serde field names (including renames) equals the set of schema property names at the matching path, both ways.
         - The schema required list equals the fields the loader requires, not only the serde-required set. skillprism is required because validate_skillprism_manifest_version rejects a skill.yaml that omits it, even though SkillYamlRaw.skillprism is optional in serde.
-    flows: [flow-validate, flow-builtin-harness, flow-override-harness, flow-merge-variables]
+    flows:
+      - flow-validate
+      - flow-builtin-harness
+      - flow-override-harness
+      - flow-merge-variables
     certainty: assumed
     status: done
   - id: SKP-M002
-    title: Give the schemas absolute versioned $id URLs and publish them from the docs site
+    title: "Give the schemas absolute versioned $id URLs and publish them from the docs site"
     type: Feature
     effort: 3
     depends_on: [SKP-M001]
     scope:
-      in:
-        - schemas
-        - site/hugo.toml
-        - tests/schemas.rs
+      in: [schemas, site/hugo.toml, tests/schemas.rs]
     verification:
       command: cargo test
       expected: "exit 0; tests/schemas.rs verifies each schema's published $id URL. Also run `hugo --gc --minify -s site` separately and require exit 0; site/public/schema/v1/skillprism.json, skill.json, and harness.json must exist and be content-identical to the files under schemas/."
     stop_conditions:
       - "STOP if Hugo 0.163.3 cannot mount an individual file from outside site/ under a different name, so publishing would require renaming the files under schemas/ (which moves the sidecars' artifact_path) or adding a copy script; don't improvise; report both options."
       - "STOP if the published files are minified or rewritten by `hugo --gc --minify` so they differ from schemas/; don't improvise."
-    description: >-
-      Set each schema's `$id` to its absolute published URL under a path keyed to the config format version (`skillprism: '1'`): https://tuvren.github.io/skillprism/schema/v1/skillprism.json for project-config-schema.json, .../schema/v1/skill.json for skill-schema.json (fixing today's mismatched "skill-yaml-schema.json" id), and .../schema/v1/harness.json for harness-schema.json. Publish them through the Hugo build with module mounts in site/hugo.toml that map each file under schemas/ to static/schema/v1/<name>.json, so schemas/ stays the single source and the existing deploy-site workflow serves them with no workflow change; re-declare the default static mount, since adding mounts replaces the defaults. A future breaking config format adds /schema/v2/ next to v1, which stays published. Extend tests/schemas.rs to assert each `$id` equals its published URL. Alternative (if the mount stop condition fires): a copy step in the site build, or renaming the files under schemas/ with a sidecar spec-patch.
+    description: "Set each schema's `$id` to its absolute published URL under a path keyed to the config format version (`skillprism: '1'`): https://tuvren.github.io/skillprism/schema/v1/skillprism.json for project-config-schema.json, .../schema/v1/skill.json for skill-schema.json (fixing today's mismatched \"skill-yaml-schema.json\" id), and .../schema/v1/harness.json for harness-schema.json. Publish them through the Hugo build with module mounts in site/hugo.toml that map each file under schemas/ to static/schema/v1/<name>.json, so schemas/ stays the single source and the existing deploy-site workflow serves them with no workflow change; re-declare the default static mount, since adding mounts replaces the defaults. A future breaking config format adds /schema/v2/ next to v1, which stays published. Extend tests/schemas.rs to assert each `$id` equals its published URL. Alternative (if the mount stop condition fires): a copy step in the site build, or renaming the files under schemas/ with a sidecar spec-patch."
     acceptance:
       mode: contract_test
       evidence: |
@@ -125,17 +101,13 @@ tickets:
     effort: 2
     depends_on: [SKP-M002]
     scope:
-      in:
-        - src/scaffold
-        - examples
-        - tests/schemas.rs
+      in: [src/scaffold, examples, tests/schemas.rs]
     verification:
       command: cargo test
       expected: "exit 0; scaffold tests assert the modeline on the first line of each generated YAML file and the schema tests still accept the generated files"
     stop_conditions:
       - "STOP if the loader or the distribution format detection treats a leading comment line as content in any file; don't improvise."
-    description: >-
-      `init project` writes `# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skillprism.json` as the first line of skillprism.yaml and the skill.json modeline as the first line of the sample skill.yaml; `init skill` does the same for its skill.yaml; `init harness` writes the harness.json modeline. Keep the URLs in one place in the scaffold module, shared with the test from SKP-M002 if practical. Add the same modelines to examples/skillprism.yaml and examples/skills/*/skill.yaml. Generated projects still build and validate. Assumption: the three schema contracts and the scaffolder boundary (BND-08) are assumed; the generated modelines must preserve the loader's acceptance of YAML with leading comments.
+    description: "`init project` writes `# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skillprism.json` as the first line of skillprism.yaml and the skill.json modeline as the first line of the sample skill.yaml; `init skill` does the same for its skill.yaml; `init harness` writes the harness.json modeline. Keep the URLs in one place in the scaffold module, shared with the test from SKP-M002 if practical. Add the same modelines to examples/skillprism.yaml and examples/skills/*/skill.yaml. Generated projects still build and validate. Assumption: the three schema contracts and the scaffolder boundary (BND-08) are assumed; the generated modelines must preserve the loader's acceptance of YAML with leading comments."
     acceptance:
       mode: gherkin
       supplementary: [live_probe]
@@ -152,7 +124,7 @@ tickets:
             When the user runs `skillprism init skill extra` and `skillprism init harness custom`
             Then skills/extra/skill.yaml starts with the skill.json modeline
             And harnesses/custom.yaml starts with the harness.json modeline
-
+        
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed" with the modelines added to the example YAML files. This probe is a regression check only; it does not prove the scaffolds emit modelines. The behavior proof is the automated tests.
     flows: [flow-validate]
     certainty: assumed
@@ -166,17 +138,13 @@ tickets:
     effort: 1
     depends_on: [SKP-M002]
     scope:
-      in:
-        - site/content/docs
-        - README.md
-        - CHANGELOG.md
+      in: [site/content/docs, README.md, CHANGELOG.md]
     verification:
       command: hugo --gc --minify -s site
       expected: "exit 0; the edited pages build and the schema links resolve to files in site/public/schema/v1/"
     stop_conditions:
       - "STOP if documenting a schema URL would require a docs page for a config file that has no page today and the page would describe behavior beyond the schema; don't improvise."
-    description: >-
-      skill-yaml.md links skill.json, harnesses.md links harness.json, and the page that documents skillprism.yaml (quickstart.md or concepts.md, whichever the site uses as the config reference) links skillprism.json; each shows the modeline and one line on editor setup (the VS Code YAML extension and JetBrains read it). README.md gets a short "Editor validation" note with the three URLs. Add an "Added" entry referencing #32 under an Unreleased section at the top of CHANGELOG.md (create the section if absent).
+    description: "skill-yaml.md links skill.json, harnesses.md links harness.json, and the page that documents skillprism.yaml (quickstart.md or concepts.md, whichever the site uses as the config reference) links skillprism.json; each shows the modeline and one line on editor setup (the VS Code YAML extension and JetBrains read it). README.md gets a short \"Editor validation\" note with the three URLs. Add an \"Added\" entry referencing #32 under an Unreleased section at the top of CHANGELOG.md (create the section if absent)."
     acceptance:
       mode: gherkin
       evidence: |
@@ -214,27 +182,67 @@ closeout:
     - summary: "Dev-dependency jsonschema =0.49.4 with default features off: the newest release with rust-version 1.85 that keeps every existing Cargo.lock version (0.49.5+ needs a newer regex-automata); adds dev-only transitive crates, none in the release binary."
       kind: dependency
       paths: [Cargo.toml, Cargo.lock]
-      commit: "28e330e"
+      commit: 28e330e
     - summary: "Schema/loader coverage pattern: #[cfg(test)] unit tests next to the structs capture serde field names (renames included) with a test-only Deserializer and compare them both ways with schema properties, required sets against the loader contract, and null acceptance through the real loaders (soundness: schema-valid samples load), plus negative parity for closed objects; tests/schemas.rs validates shipped and generated files with an explicit expected-invalid list and ties Hugo mount targets to the $ids. Real-loader soundness and negative parity added in 45cc3a6 under OD-02."
       kind: pattern
-      paths: [tests/schemas.rs, src/types/project.rs, src/loader/project.rs, src/registry/types.rs]
-      commit: "28e330e"
+      paths:
+        - tests/schemas.rs
+        - src/types/project.rs
+        - src/loader/project.rs
+        - src/registry/types.rs
+      commit: 28e330e
     - summary: "Optional skill.yaml and harness fields accept explicit YAML null in the schemas, matching the Option<T> parser (additive correction)."
       kind: contract_shape
       paths: [schemas/skill-schema.json, schemas/harness-schema.json]
-      commit: "28e330e"
+      commit: 28e330e
     - summary: "Schemas carry absolute $ids https://tuvren.github.io/skillprism/schema/v1/{skillprism,skill,harness}.json and are published from schemas/ via Hugo single-file module mounts (explicit static mount retained)."
       kind: convention
       paths: [schemas, site/hugo.toml]
-      commit: "3511ba9"
+      commit: 3511ba9
     - summary: "Scaffolds write a first-line yaml-language-server $schema modeline; the URLs live once in src/scaffold/mod.rs and a unit test ties them to each schema's $id."
       kind: convention
-      paths: [src/scaffold/mod.rs, src/scaffold/project.rs, src/scaffold/skill.rs, src/scaffold/harness.rs]
-      commit: "1994d6e"
+      paths:
+        - src/scaffold/mod.rs
+        - src/scaffold/project.rs
+        - src/scaffold/skill.rs
+        - src/scaffold/harness.rs
+      commit: 1994d6e
   settled:
     - record: tech-spec/contracts/project-config-schema.meta.yaml
-      evidence: { kind: repository, ref: tests/schemas.rs, date: "2026-10-07", note: "Validates examples/skillprism.yaml, every fixture project config and init project output against schemas/project-config-schema.json; project_config_schema_field_coverage compares the schema with ProjectConfig both ways." }
+      evidence:
+        kind: repository
+        ref: tests/schemas.rs
+        date: 2026-10-07
+        note: "Validates examples/skillprism.yaml, every fixture project config and init project output against schemas/project-config-schema.json; project_config_schema_field_coverage compares the schema with ProjectConfig both ways."
     - record: tech-spec/contracts/skill-schema.meta.yaml
-      evidence: { kind: repository, ref: tests/schemas.rs, date: "2026-10-07", note: "Validates example, fixture and scaffold skill.yaml files against schemas/skill-schema.json; skill_schema_field_coverage compares the schema with SkillYamlRaw and the loader's required skillprism field." }
+      evidence:
+        kind: repository
+        ref: tests/schemas.rs
+        date: 2026-10-07
+        note: "Validates example, fixture and scaffold skill.yaml files against schemas/skill-schema.json; skill_schema_field_coverage compares the schema with SkillYamlRaw and the loader's required skillprism field."
     - record: tech-spec/contracts/harness-schema.meta.yaml
-      evidence: { kind: repository, ref: tests/schemas.rs, date: "2026-10-07", note: "Validates the five built-in harness definitions and init harness output against schemas/harness-schema.json; harness field-coverage tests compare it with the harness definition types." }
+      evidence:
+        kind: repository
+        ref: tests/schemas.rs
+        date: 2026-10-07
+        note: "Validates the five built-in harness definitions and init harness output against schemas/harness-schema.json; harness field-coverage tests compare it with the harness definition types."
+  actuals:
+    diff_lines: 1815
+    files_touched: 33
+    milestones: 2
+    review_rounds: 0
+    per_ticket:
+      - id: SKP-M001
+        diff_lines: 1815
+        review_rounds: 0
+      - id: SKP-M002
+        diff_lines: 0
+        review_rounds: 0
+      - id: SKP-M003
+        diff_lines: 0
+        review_rounds: 0
+      - id: SKP-M004
+        diff_lines: 0
+        review_rounds: 0
+    merged_commit: 7d43400
+    measured_at: 2026-10-07

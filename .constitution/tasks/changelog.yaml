@@ -1,4 +1,20 @@
 entries:
+  - version: v2.1.4
+    date: 2026-10-07
+    changed:
+      - "EPIC-M Test, version, and publish the JSON Schemas for skillprism.yaml, skill.yaml, and harness definitions archived: 4 tickets, 11 points, 1815 diff lines, 0 review rounds"
+    added:
+      - "EPIC-M (github#32): contract tests for the JSON Schemas, absolute versioned $ids published at tuvren.github.io/skillprism/schema/v1/, and yaml-language-server modelines in scaffolds, examples and docs."
+      - "Follow-up from EPIC-M: Macro function objects accept unknown keys in both the harness schema and the loader; decide whether either should close them."
+      - "Follow-up from EPIC-M: Publish release-keyed schema snapshots (e.g. /schema/v0.3/) alongside the format-keyed /schema/v1/, so pinned binaries can validate against their own schema (issue #32 asked for release-keyed URLs)."
+      - "Follow-up from EPIC-M: The JetBrains link in site/content/docs/skill-yaml.md and siblings (and README.md) points at the general YAML help page; the JSON Schema mappings page (help/idea/json.html) is more specific."
+      - "Follow-up from EPIC-M: tests/fixtures/invalid-syntax-error was added for the expected-invalid list: no syntax-error fixture existed despite the ticket text citing one from EPIC-K. Correct the SKP-M001 evidence text (archived epic) so it no longer claims an EPIC-K syntax-error fixture."
+    by: reconcile
+    fast_lane_through: 7d43400190d3e883e5d18d93ce51f24d4792616e
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+      tech-spec: v1.0.2
   - version: v2.1.3
     date: 2026-10-07
     changed:

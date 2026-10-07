@@ -33,3 +33,46 @@ decisions:
       date: 2026-10-07
       in: EPIC-L
     proposed_by: EPIC-L @ 33b09d4
+  - id: OD-02
+    question: "Should the published JSON Schemas accept every value the loaders coerce or accept (plain scalars such as version: 1.0 for string fields, bare keys), or describe the recommended strict shape?"
+    blocks:
+      - SKP-M001
+      - schemas/project-config-schema.json
+      - schemas/harness-schema.json
+    options:
+      - name: "strict recommended shape; guarantee soundness (schema-valid always loads) and document where the schema is stricter"
+        pros:
+          - Editors steer authors toward quoted strings and canonical shapes
+          - "The guarantee that matters most holds: a file the editor accepts never fails the CLI"
+          - No loader behavior changes
+        cons:
+          - Editors flag some files the CLI accepts (false positives)
+          - "JSON Schema cannot distinguish 1.0 from 1, so integral floats stay a documented soundness gap"
+      - name: "mirror the loader exactly (accept numbers/booleans for string fields, null for bare keys)"
+        pros: [No false positives in editors]
+        cons:
+          - Schemas become permissive and stop teaching the canonical shape
+          - Still cannot express integral-float rejection
+      - name: tighten the loader to match the strict schema
+        pros: [Exact parity]
+        cons:
+          - Breaking change for existing configs that rely on coercion
+          - Outside the scope of publishing schemas
+    recommendation: "strict recommended shape; guarantee soundness (schema-valid always loads) and document where the schema is stricter"
+    closure: ruling
+    ruler: "the user (project owner), after the EPIC-M merge"
+    interim:
+      assumption: "Schemas describe the recommended strict shape; contract tests assert soundness through the real YAML loaders (every schema-valid sample loads) plus negative parity for closed objects; known stricter-than-loader cases and the integral-float gap are documented in the schema descriptions."
+      applied_by:
+        - schemas/project-config-schema.json
+        - schemas/skill-schema.json
+        - schemas/harness-schema.json
+        - tests/schemas.rs
+        - src/types/project.rs
+        - src/registry/types.rs
+        - src/loader/project.rs
+    status: proposed
+    asked:
+      date: 2026-10-07
+      in: EPIC-M
+    proposed_by: EPIC-M @ 7d43400

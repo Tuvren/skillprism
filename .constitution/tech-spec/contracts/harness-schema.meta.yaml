@@ -2,6 +2,9 @@ artifact_path: schemas/harness-schema.json
 surface: json
 flows: [flow-builtin-harness, flow-override-harness]
 boundaries: [BND-03]
-certainty: assumed
-assumption: "The schema was aligned with the harness structs after the move. It describes the supported shape. The parser may ignore an unknown manifest field that this schema rejects."
-settles_when: "A test validates a built-in harness definition against this schema."
+certainty: settled
+evidence:
+  kind: repository
+  ref: tests/schemas.rs
+  date: 2026-10-07
+  note: "Validates the five built-in harness definitions and init harness output against schemas/harness-schema.json; harness field-coverage tests compare it with the harness definition types."
