@@ -314,15 +314,31 @@ fn validate_skillprism_manifest_version(
         ));
     };
     if map.contains_key("harnesses") {
-        return Err(ProjectError::config_schema(path, content,
-            "the `harnesses:` block in skill.yaml has been renamed to `overrides:` in skillprism 0.2.0; please update your skill.yaml to use `overrides:`".to_owned(), super::yaml::legacy_harnesses_location(content)));
+        let message = "the `harnesses:` block in skill.yaml has been renamed to `overrides:` \
+                       in skillprism 0.2.0; please update your skill.yaml to use `overrides:`";
+        return Err(ProjectError::config_schema(
+            path,
+            content,
+            message.to_owned(),
+            super::yaml::legacy_harnesses_location(content),
+        ));
     }
     let message = match map.get("skillprism") {
-        None => return Err(ProjectError::config_schema(path, content,
-            "missing required field `skillprism`; either add `skillprism: '1'` to declare skillprism-format, or remove skill.yaml to declare plain-format.".to_owned(), None)),
+        None => {
+            let message = "missing required field `skillprism`; either add `skillprism: '1'` \
+                           to declare skillprism-format, or remove skill.yaml to declare plain-format.";
+            return Err(ProjectError::config_schema(
+                path,
+                content,
+                message.to_owned(),
+                None,
+            ));
+        }
         Some(yaml_serde::Value::String(s)) if s == "1" => return Ok(()),
         Some(yaml_serde::Value::Number(n)) if n.as_i64() == Some(1) => return Ok(()),
-        Some(yaml_serde::Value::String(s)) if s.is_empty() => "the `skillprism:` field must not be empty".to_owned(),
+        Some(yaml_serde::Value::String(s)) if s.is_empty() => {
+            "the `skillprism:` field must not be empty".to_owned()
+        }
         Some(yaml_serde::Value::String(other)) => format!(
             "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
         ),

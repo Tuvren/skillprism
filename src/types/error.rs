@@ -33,25 +33,30 @@ pub enum ProjectError {
 
     /// A YAML file contains invalid syntax.
     #[error("YAML does not parse in {path}{location}: {message}")]
+    #[diagnostic(help("Fix the YAML syntax at the reported location"))]
     YamlSyntax {
         path: String,
         location: YamlLocation,
         message: String,
         #[source_code]
         src: Arc<NamedSource<String>>,
-        #[label("{message}")]
+        #[label("here")]
         span: Option<SourceSpan>,
     },
 
     /// Valid YAML does not match the configuration schema.
     #[error("Invalid config in {path}{location}: {message}")]
+    #[diagnostic(help(
+        "Check field names and value types against docs/quickstart for skillprism.yaml \
+         and docs/skill-yaml for skill.yaml"
+    ))]
     ConfigSchema {
         path: String,
         location: YamlLocation,
         message: String,
         #[source_code]
         src: Arc<NamedSource<String>>,
-        #[label("{message}")]
+        #[label("here")]
         span: Option<SourceSpan>,
     },
 

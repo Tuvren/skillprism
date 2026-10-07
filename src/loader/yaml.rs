@@ -111,6 +111,45 @@ mod tests {
     use crate::types::ProjectConfig;
 
     #[test]
+    fn config_diagnostics_both_variants_have_help_and_short_labels() {
+        use miette::Diagnostic;
+
+        for (content, syntax, suggestion) in [
+            (
+                "harnesses: [claude",
+                true,
+                "Fix the YAML syntax at the reported location",
+            ),
+            ("name: demo\n", false, "Check field names and value types"),
+        ] {
+            let error =
+                deserialize::<ProjectConfig>(content, Path::new("skillprism.yaml")).unwrap_err();
+            assert_eq!(matches!(error, ProjectError::YamlSyntax { .. }), syntax);
+            assert_eq!(matches!(error, ProjectError::ConfigSchema { .. }), !syntax);
+            let help = error.help().expect("config diagnostics must provide help");
+            assert!(help.to_string().contains(suggestion), "{help}");
+            assert_eq!(
+                error.labels().unwrap().next().unwrap().label(),
+                Some("here")
+            );
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_duplicate_mapping_keys_are_yaml_syntax_errors() {
+        let content = "harnesses: [claude]\nharnesses: [codex]\n";
+        let error =
+            deserialize::<ProjectConfig>(content, Path::new("skillprism.yaml")).unwrap_err();
+        assert!(matches!(error, ProjectError::YamlSyntax { .. }), "{error}");
+        assert!(
+            error
+                .to_string()
+                .contains("duplicate entry with key \"harnesses\""),
+            "{error}"
+        );
+    }
+
+    #[test]
     fn config_diagnostics_multiple_documents_are_file_level_schema_errors() {
         use miette::Diagnostic;
 
