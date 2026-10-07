@@ -273,6 +273,126 @@ fn build_rejects_non_string_description_from_chained_yaml_merges() {
 }
 
 #[test]
+fn build_checks_yaml_merge_chains_longer_than_sixteen_links() {
+    let mut template = "---\nname: sample\na0: &a0 {description: [x]}\n".to_owned();
+    for index in 1..=24 {
+        let previous = index - 1;
+        template.push_str(&format!("a{index}: &a{index} {{<<: *a{previous}}}\n"));
+    }
+    template.push_str("<<: *a24\n---\n");
+    let dir = project(&template);
+    let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    for expected in [
+        "field `description`",
+        "YAML string",
+        "resolving YAML merges",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
+    assert_no_skill_output(dir.path(), "sample");
+}
+
+#[test]
+fn build_keeps_deep_alias_branches_from_blocking_other_yaml_merges() {
+    let mut definitions = "a0: &a0 {other: 1}\n".to_owned();
+    for index in 1..=70 {
+        let previous = index - 1;
+        definitions.push_str(&format!("a{index}: &a{index} {{<<: *a{previous}}}\n"));
+    }
+    for description in ["ok", "[x]"] {
+        let dir = project(&format!(
+            "---\nname: sample\n{definitions}defaults: &d {{description: {description}}}\n<<: [*a70, *d]\n---\n"
+        ));
+        let assertion = bin(dir.path()).args(["build", "--force"]).assert();
+        if description == "ok" {
+            assertion.success();
+        } else {
+            let assertion = assertion.code(1);
+            let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+            for expected in [
+                "field `description`",
+                "YAML string",
+                "resolving YAML merges",
+            ] {
+                assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+            }
+            assert_no_skill_output(dir.path(), "sample");
+        }
+    }
+}
+
+#[test]
+fn build_accepts_string_from_first_chained_yaml_merge_list_element() {
+    let dir = project(
+        "---\nname: sample\nc: &c {description: ok}\na: &a {<<: *c}\nb: &b {description: [x]}\n<<: [*a, *b]\n---\n",
+    );
+    bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn build_rejects_non_string_from_first_chained_yaml_merge_list_element() {
+    let dir = project(
+        "---\nname: sample\nc: &c {description: [x]}\na: &a {<<: *c}\nb: &b {description: ok}\n<<: [*a, *b]\n---\n",
+    );
+    let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    for expected in [
+        "field `description`",
+        "YAML string",
+        "resolving YAML merges",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
+    assert_no_skill_output(dir.path(), "sample");
+}
+
+#[test]
+fn build_checks_later_chained_yaml_merge_list_elements_for_missing_fields() {
+    // Aliases must follow their anchors. Vary definition order so traversal of
+    // unrelated definitions cannot determine the effective merged description.
+    for definitions in [
+        "x: &x {other: 1}\na: &a {<<: *x}\ny: &y {description: [x]}\nb: &b {<<: *y}\n",
+        "y: &y {description: [x]}\nb: &b {<<: *y}\nx: &x {other: 1}\na: &a {<<: *x}\n",
+    ] {
+        let dir = project(&format!(
+            "---\nname: sample\n{definitions}<<: [*a, *b]\n---\n"
+        ));
+        let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        for expected in [
+            "field `description`",
+            "YAML string",
+            "resolving YAML merges",
+        ] {
+            assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+        }
+        assert_no_skill_output(dir.path(), "sample");
+    }
+}
+
+#[test]
+fn build_checks_tagged_scalars_consistently_in_explicit_and_merged_fields() {
+    for field in ["name", "description"] {
+        for template in [
+            format!("---\n{field}: !foo bar\n---\n"),
+            format!("---\ndefaults: &d {{{field}: !foo bar}}\n<<: *d\n---\n"),
+        ] {
+            let dir = project(&template);
+            let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+            let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+            for expected in [field, "YAML string", "yaml_str"] {
+                assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+            }
+            assert_no_skill_output(dir.path(), "sample");
+        }
+    }
+}
+
+#[test]
 fn build_accepts_literal_quoted_merge_key() {
     let dir = project("---\nname: sample\ndescription: safe\n\"<<\": hello\n---\n");
     bin(dir.path())
@@ -282,16 +402,53 @@ fn build_accepts_literal_quoted_merge_key() {
 }
 
 #[test]
-fn build_accepts_invalid_nested_merges_and_discards_partial_merge_results() {
-    for template in [
-        "---\nname: sample\ndescription: safe\nmetadata: {<<: 5}\n---\n",
-        "---\nname: sample\ndefaults: &d {description: [x]}\n<<: *d\nmetadata: {<<: 5}\n---\n",
-    ] {
-        let dir = project(template);
+fn build_accepts_invalid_nested_merges() {
+    let dir = project("---\nname: sample\ndescription: safe\nmetadata: {<<: 5}\n---\n");
+    bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn build_skips_invalid_merge_values_without_partially_merging_lists() {
+    for merge in ["[*d, 5]", "[5, *d]", "[[*d]]", "!foo {description: [x]}"] {
+        let dir = project(&format!(
+            "---\nname: sample\ndefaults: &d {{description: [x]}}\n<<: {merge}\n---\n"
+        ));
         bin(dir.path())
             .args(["build", "--force"])
             .assert()
             .success();
+    }
+}
+
+#[test]
+fn build_leaves_tagged_merge_keys_unmerged() {
+    let dir = project("---\nname: sample\ndefaults: &d {description: [x]}\n!foo <<: *d\n---\n");
+    bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+}
+
+#[test]
+fn build_checks_merged_fields_despite_unrelated_invalid_nested_merges() {
+    for template in [
+        "---\nname: sample\ndefaults: &d {description: [x]}\n<<: *d\nmetadata: {<<: 5}\n---\n",
+        "---\nname: sample\nmetadata: {<<: 5}\ndefaults: &d {description: [x]}\n<<: *d\n---\n",
+    ] {
+        let dir = project(template);
+        let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        for expected in [
+            "field `description`",
+            "YAML string",
+            "resolving YAML merges",
+        ] {
+            assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+        }
+        assert_no_skill_output(dir.path(), "sample");
     }
 }
 

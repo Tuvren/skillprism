@@ -151,12 +151,15 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
         )
     })?;
 
-    let merged = resolve_merges(&value);
-    let effective = merged.as_ref().unwrap_or(&value);
+    let mut effective = value.clone();
+    resolve_merges(&mut effective, 0);
     // The location-preserving parse above checks explicit fields; merges can
     // supply additional fields that must satisfy the same string requirement.
     for field in ["name", "description"] {
-        if effective.get(field).is_some_and(|value| !value.is_string()) {
+        if effective
+            .get(field)
+            .is_some_and(|value| !matches!(value, Value::String(_)))
+        {
             let (offset, line) = if value.get(field).is_none() {
                 merge_location(frontmatter).unwrap_or((0, 1))
             } else {
@@ -176,17 +179,58 @@ pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<Front
     Ok(())
 }
 
-// Merge resolution is only input to the string check. Errors or exhaustion
-// discard the clone, including any partial mutations made by apply_merge.
-fn resolve_merges(value: &Value) -> Option<Value> {
-    let mut merged = value.clone();
-    for _ in 0..16 {
-        merged.apply_merge().ok()?;
-        if merged.get("<<").is_none() {
-            return Some(merged);
-        }
+// Merge resolution is only input to the string check. Invalid merges and
+// branches beyond the depth guard remain intact without blocking other nodes.
+fn resolve_merges(value: &mut Value, depth: usize) {
+    const MAX_DEPTH: usize = 64;
+    if depth >= MAX_DEPTH {
+        return;
     }
-    None
+    match value {
+        Value::Mapping(mapping) => {
+            // Resolve merge sources before or_insert establishes precedence.
+            for child in mapping.values_mut() {
+                resolve_merges(child, depth + 1);
+            }
+            // Like yaml_serde's apply_merge, string lookup matches untagged
+            // Value::String keys; quoting is not retained in Value.
+            let valid_merge = match mapping.get("<<") {
+                Some(Value::Mapping(_)) => true,
+                Some(Value::Sequence(sequence)) => sequence
+                    .iter()
+                    .all(|value| matches!(value, Value::Mapping(_))),
+                _ => false,
+            };
+            if !valid_merge {
+                return;
+            }
+            match mapping.remove("<<") {
+                Some(Value::Mapping(merge)) => merge_mapping(mapping, merge),
+                Some(Value::Sequence(sequence)) => {
+                    for value in sequence {
+                        if let Value::Mapping(merge) = value {
+                            merge_mapping(mapping, merge);
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        Value::Sequence(sequence) => {
+            for child in sequence {
+                resolve_merges(child, depth + 1);
+            }
+        }
+        Value::Tagged(tagged) => resolve_merges(&mut tagged.value, depth + 1),
+        _ => {}
+    }
+}
+
+fn merge_mapping(mapping: &mut yaml_serde::Mapping, merge: yaml_serde::Mapping) {
+    // Explicit keys win, followed by the earliest source in a merge list.
+    for (key, value) in merge {
+        mapping.entry(key).or_insert(value);
+    }
 }
 
 fn merge_location(frontmatter: &str) -> Option<(usize, usize)> {
