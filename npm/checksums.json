@@ -1,4 +1,9 @@
 {
+  "0.4.0": {
+    "aarch64-apple-darwin": "sha256:7200da34bcc95355e1a239897b3403ac3e0a3bc235debb895f6b7569fe0d399d",
+    "x86_64-apple-darwin": "sha256:3c1063a3171ced9645ff29fe1ee5ce938e442c6eb8867d0959a0cfb78a75c988",
+    "x86_64-unknown-linux-gnu": "sha256:530a78f1bfad386b3f3f9d5c0ab957386d42de64d15cda96d4f5ca1e729ae422"
+  },
   "0.3.0": {
     "aarch64-apple-darwin": "sha256:fb9497989db3d77a4b6190bae01c1b6030d3453250684bb0923cd0171fcd78af",
     "x86_64-apple-darwin": "sha256:99b7c6d2cf11013e9e2d16efdf03b43721df18173833f252b72d1a3606044018",
