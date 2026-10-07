@@ -133,7 +133,7 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed" with the modelines added to the example YAML files. This probe is a regression check only; it does not prove the scaffolds emit modelines. The behavior proof is the automated tests.
     flows: [flow-validate]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-M004
     title: Link the published schema URLs from the docs and README
     type: Chore
@@ -163,4 +163,4 @@ tickets:
             Then every /schema/v1/ link on those pages names a file present in site/public/schema/v1/
     flows: []
     certainty: settled
-    status: planned
+    status: done
