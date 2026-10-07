@@ -95,7 +95,7 @@ tickets:
         - The rest of the site still builds: site/public/index.html and site/public/favicon.svg exist.
     flows: [flow-validate]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-M003
     title: Emit yaml-language-server schema modelines from init scaffolds and in examples
     type: Feature
