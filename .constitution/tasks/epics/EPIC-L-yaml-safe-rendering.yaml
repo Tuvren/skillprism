@@ -28,6 +28,29 @@ scope:
     - .constitution/tech-spec/adrs/ADR-0002-minijinja.md
     - .constitution/tech-spec/guidelines.md
 estimated_diff_lines: 1500
+decisions:
+  - id: OD-01
+    question: "What should the yaml_str filter render for an undefined or none value, and for a sequence or map?"
+    blocks: [SKP-L002, SKP-L003, src/engine/helpers.rs]
+    options:
+      - name: "null for undefined/none; error for sequences and maps"
+        pros: ["Keeps today's semantics: an unset optional field (license, compatibility) stays YAML null, as with the bare `license: ` the scaffold renders now", "A list-typed field piped through the filter fails loudly instead of becoming a wrong-typed string", "M2 can migrate every string field uniformly without wrapping each optional in an if"]
+        cons: ["The filter no longer always yields a string; authors must know null is possible", "An error on sequences means templates must not pipe list fields through yaml_str"]
+      - name: "always a string (empty for undefined, 'none' for none, display form for collections)"
+        pros: ["Simplest contract: the output is always a quoted string"]
+        cons: ["Unset optional fields become present empty strings (license: \"\"), a semantic change from today", "A skill variable set to ~ becomes the text 'none'", "Lists become their MiniJinja display string, a silent type change M3's check would not catch"]
+      - name: "always a string, and M2 wraps optional fields in {% if %} blocks"
+        pros: ["Keeps the string-only contract while preserving absence"]
+        cons: ["Every optional frontmatter line in scaffold, examples and docs needs template logic, which is noisier for authors", "Still silently stringifies collections"]
+    recommendation: "null for undefined/none; error for sequences and maps"
+    closure: ruling
+    ruler: "the user (project owner), after the EPIC-L merge"
+    interim:
+      assumption: "yaml_str renders undefined and none as YAML null, renders strings/numbers/booleans as double-quoted strings, and raises an invalid-operation error naming yaml_str for sequences and maps; M2 applies the filter only to string-typed fields."
+      applied_by: [src/engine/helpers.rs, SKP-L002]
+    status: proposed
+    asked: { date: "2026-10-07", in: EPIC-L }
+    proposed_by: "EPIC-L, milestone M1 review of 813614b"
 tickets:
   - id: SKP-L001
     title: Add a yaml_str template filter that emits a quoted YAML scalar
@@ -74,6 +97,9 @@ tickets:
         No live_probe: guidelines declare no build-manifest recipe, and this plan must not invent one. The gap is routed to Stage 3 (specifying-technical-implementation). The behavior proof is the automated tests.
     flows: [flow-compile-template, flow-validate]
     certainty: assumed
+    deviations:
+      - files: [tests/integration.rs]
+        justification: "The gherkin scenario 'the validator accepts the filter' runs skillprism validate, so it needs a CLI-level test; tests/integration.rs is in the epic's scope.paths but not in SKP-L001's scope.in."
     status: done
   - id: SKP-L002
     title: Move scaffold, examples, fixtures, and docs to the yaml_str filter for frontmatter values
