@@ -4,6 +4,7 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always
@@ -11,6 +12,7 @@ env:
 jobs:
   build:
     name: Build ${{ matrix.target }}
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
@@ -65,6 +67,7 @@ jobs:
   create-release:
     name: Create GitHub Release
     needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -104,3 +107,57 @@ jobs:
             artifacts/checksums.json
           draft: false
           prerelease: false
+
+  # npm Trusted Publishing: package settings must name this file (release.yml),
+  # repository Tuvren/skillprism, and allow `npm publish`. No NPM_TOKEN.
+  publish-npm:
+    name: Publish npm package
+    needs: create-release
+    if: >-
+      always() &&
+      (needs.create-release.result == 'success' ||
+       github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Merge this release's checksums into the package
+        working-directory: npm
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          gh release download "v${version}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --pattern checksums.json \
+            --dir "${RUNNER_TEMP}/rel" \
+            --clobber
+          VERSION="${version}" RELEASE_CHECKSUMS="${RUNNER_TEMP}/rel/checksums.json" \
+            node --input-type=module <<'EOF'
+          import { readFileSync, writeFileSync } from "node:fs";
+
+          const version = process.env.VERSION;
+          const release = JSON.parse(readFileSync(process.env.RELEASE_CHECKSUMS, "utf8"));
+          const manifest = JSON.parse(readFileSync("checksums.json", "utf8"));
+          manifest[version] = Object.fromEntries(
+            Object.entries(release).sort(([left], [right]) => left.localeCompare(right)),
+          );
+          const versions = Object.keys(manifest).sort((left, right) =>
+            right.localeCompare(left, undefined, { numeric: true }),
+          );
+          const ordered = Object.fromEntries(versions.map((key) => [key, manifest[key]]));
+          writeFileSync("checksums.json", `${JSON.stringify(ordered, null, 2)}\n`);
+          EOF
+
+      - name: Publish to npm
+        working-directory: npm
+        run: npm publish --access public --provenance
