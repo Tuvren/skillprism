@@ -17,7 +17,7 @@
 use std::borrow::Cow;
 use std::collections::HashSet;
 use std::io::{self, IsTerminal, Write};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::registry::HarnessRegistry;
 
@@ -247,13 +247,17 @@ fn remove_skill_files(skill: &InstalledSkill, harness_ids: &[String]) -> Result<
     let registry = load_registry(skill)?;
     let kept_dirs = kept_output_dirs(skill, harness_ids, &registry)?;
     let removed_dirs = skill_output_dirs(skill, harness_ids, &registry)?;
-    // Delete recorded files that belong to a harness being removed, including
-    // directories those harnesses used before they moved to `.agents/skills`.
-    // A path a staying harness still resolves to (or recorded under its legacy
-    // directory) is left in place.
+    let legacy_dirs = legacy_dirs_with_recorded_files(skill, harness_ids);
+    let allowed_base = removal_allowed_base(skill);
+    // Delete recorded files that belong to a harness being removed.
+    // A path a staying harness still resolves to is left in place.
     for file in &skill.files {
         let path = PathBuf::from(&file.path);
         if !path_is_only_under(&path, &removed_dirs, &kept_dirs) {
+            continue;
+        }
+        // Skip a symlink (or its target) that resolves outside the scope.
+        if !path_is_contained(&path, allowed_base.as_deref()) {
             continue;
         }
         if path.is_file() {
@@ -264,6 +268,9 @@ fn remove_skill_files(skill: &InstalledSkill, harness_ids: &[String]) -> Result<
     }
     for dir in &removed_dirs {
         if kept_dirs.contains(dir) || kept_dirs.iter().any(|kept| kept.starts_with(dir)) {
+            continue;
+        }
+        if legacy_dirs.contains(dir) && !path_is_contained(dir, allowed_base.as_deref()) {
             continue;
         }
         if dir.exists() {
@@ -326,11 +333,73 @@ fn skill_output_dirs(
     let mut dirs = HashSet::new();
     for harness_id in harness_ids {
         dirs.insert(output_dir(skill, harness_id, registry)?);
+    }
+    // A pre-move directory is removed only when a recorded file sits inside
+    // it. A user file that merely shares that old path must survive.
+    dirs.extend(legacy_dirs_with_recorded_files(skill, harness_ids));
+    Ok(dirs)
+}
+
+fn legacy_dirs_with_recorded_files(
+    skill: &InstalledSkill,
+    harness_ids: &[String],
+) -> HashSet<PathBuf> {
+    let mut dirs = HashSet::new();
+    for harness_id in harness_ids {
         if let Some(legacy) = legacy_output_dir(skill, harness_id) {
-            dirs.insert(legacy);
+            if recorded_file_inside(skill, &legacy) {
+                dirs.insert(legacy);
+            }
         }
     }
-    Ok(dirs)
+    dirs
+}
+
+fn recorded_file_inside(skill: &InstalledSkill, dir: &Path) -> bool {
+    skill
+        .files
+        .iter()
+        .any(|file| Path::new(&file.path).starts_with(dir))
+}
+
+/// Project root, or `$HOME` for a user install. Removal refuses a path whose
+/// canonical location leaves this base.
+fn removal_allowed_base(skill: &InstalledSkill) -> Option<PathBuf> {
+    match skill.scope {
+        InstallScope::Project => skill
+            .project_root
+            .as_ref()
+            .map(PathBuf::from)
+            .or_else(|| find_project_root().ok()),
+        InstallScope::User => match std::env::var("HOME") {
+            Ok(home) if !home.is_empty() => Some(PathBuf::from(home)),
+            _ => None,
+        },
+    }
+}
+
+/// Same symlink rule as `validate_scope_relative`: both sides must canonicalize
+/// under the base, otherwise the lexical path must stay inside it with no `..`.
+fn path_is_contained(path: &Path, allowed_base: Option<&Path>) -> bool {
+    let Some(allowed_base) = allowed_base else {
+        return false;
+    };
+    match (path.canonicalize(), allowed_base.canonicalize()) {
+        (Ok(resolved), Ok(base)) => resolved.starts_with(base),
+        _ => lexical_path_is_contained(path, allowed_base),
+    }
+}
+
+fn lexical_path_is_contained(path: &Path, allowed_base: &Path) -> bool {
+    if !path.starts_with(allowed_base) {
+        return false;
+    }
+    let Ok(relative) = path.strip_prefix(allowed_base) else {
+        return true;
+    };
+    relative
+        .components()
+        .all(|component| component != Component::ParentDir)
 }
 
 /// Project or user directory a harness used before the `.agents/skills` move.
@@ -679,6 +748,95 @@ mod tests {
                 .files
                 .iter()
                 .any(|file| file.path.contains(".agents"))
+        );
+    }
+
+    fn plain_project_skill(
+        root: &Path,
+        harnesses: &[&str],
+        files: Vec<InstalledFile>,
+    ) -> InstalledSkill {
+        InstalledSkill {
+            name: "plain-skill".to_string(),
+            source: "owner/plain-skill".to_string(),
+            source_url: "https://github.com/owner/plain-skill.git".to_string(),
+            source_type: SourceType::GitHub,
+            r#ref: Some("main".to_string()),
+            resolved_ref: None,
+            skill_path: None,
+            project_root: Some(root.to_string_lossy().to_string()),
+            scope: InstallScope::Project,
+            harnesses: harnesses.iter().map(|id| (*id).to_string()).collect(),
+            format: SkillFormat::Plain,
+            installed_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            files,
+        }
+    }
+
+    #[test]
+    fn remove_keeps_unrecorded_legacy_opencode_file() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let legacy = root.join(".opencode/skills/plain-skill/SKILL.md");
+        let current = root.join(".agents/skills/plain-skill/SKILL.md");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(current.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, b"user file").unwrap();
+        std::fs::write(&current, b"installed").unwrap();
+
+        let skill = plain_project_skill(
+            root,
+            &["opencode"],
+            vec![InstalledFile {
+                path: current.to_string_lossy().to_string(),
+                hash: "sha256:current".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            legacy.exists(),
+            "an unrecorded .opencode/skills file must survive opencode removal"
+        );
+        assert!(
+            !current.exists(),
+            "the recorded install file is still removed"
+        );
+    }
+
+    #[test]
+    fn remove_skips_legacy_directory_symlinked_outside_the_project() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join(".opencode")).unwrap();
+
+        let legacy = root.join(".opencode/skills/plain-skill/SKILL.md");
+        let sibling = legacy.parent().unwrap().join("notes.txt");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, b"outside").unwrap();
+        std::fs::write(&sibling, b"keep").unwrap();
+
+        let skill = plain_project_skill(
+            &root,
+            &["opencode"],
+            vec![InstalledFile {
+                path: legacy.to_string_lossy().to_string(),
+                hash: "sha256:legacy".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            legacy.exists(),
+            "a recorded path reached through a symlink outside the project must not be deleted"
+        );
+        assert!(
+            sibling.exists(),
+            "the legacy directory itself must not be removed when it escapes the project"
         );
     }
 }

@@ -72,14 +72,28 @@ where
 ///
 /// Returns `None` when the argument is absent or names nothing. An exact
 /// registered id wins over `claude-code` → `claude` and `droid` → `factory`.
+/// Literal ids are returned as written. Project harness files are loaded only
+/// when a token is one of those aliases, so an unrelated invalid harness file
+/// does not fail `list`, `remove`, or `update`.
 pub fn canonical_harness_arg(raw: Option<String>) -> Result<Option<String>, miette::Report> {
     let Some(raw) = raw else {
         return Ok(None);
     };
-    let root = find_project_root().ok();
-    let registry =
-        install::build_registry_for_harnesses(root.as_deref()).map_err(miette::Report::new)?;
-    let ids = registry.selected_ids(raw.split(','));
+    let tokens = parse_harness_list(&raw);
+    if tokens.is_empty() {
+        return Ok(None);
+    }
+    let ids = if tokens
+        .iter()
+        .any(|id| crate::registry::alias_of(id).is_some())
+    {
+        let root = find_project_root().ok();
+        let registry =
+            install::build_registry_for_harnesses(root.as_deref()).map_err(miette::Report::new)?;
+        registry.selected_ids(tokens)
+    } else {
+        tokens
+    };
     if ids.is_empty() {
         Ok(None)
     } else {

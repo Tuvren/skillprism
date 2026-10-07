@@ -113,12 +113,113 @@ fn add_all_installs_discovered_skills_without_a_tty() {
         }
     }
 
-    let state = fs::read_to_string(env.state_config.join("skillprism/installed.yaml")).unwrap();
-    assert!(state.contains("- claude"), "{state}");
-    assert!(state.contains("- opencode"), "{state}");
-    assert!(!state.contains("factory"), "{state}");
-    assert!(!state.contains("codex"), "{state}");
-    assert!(!state.contains("- pi"), "{state}");
+    let lists = installed_harness_lists(&env.state_config.join("skillprism/installed.yaml"));
+    assert_eq!(lists.len(), 2, "{lists:?}");
+    for harnesses in &lists {
+        let ids: Vec<&str> = harnesses.iter().map(String::as_str).collect();
+        assert_eq!(ids, ["claude", "opencode"], "{lists:?}");
+    }
+}
+
+fn installed_harness_lists(path: &Path) -> Vec<Vec<String>> {
+    #[derive(serde::Deserialize)]
+    struct StateDoc {
+        skills: Vec<StateSkill>,
+    }
+    #[derive(serde::Deserialize)]
+    struct StateSkill {
+        harnesses: Vec<String>,
+    }
+    let text = fs::read_to_string(path).unwrap();
+    let state: StateDoc = yaml_serde::from_str(&text).unwrap();
+    state
+        .skills
+        .into_iter()
+        .map(|skill| skill.harnesses)
+        .collect()
+}
+
+#[test]
+fn list_literal_harness_ignores_invalid_unrelated_harness_file() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(env.project_dir())
+        .args(["--force", "-H", "opencode", "--skill", PLAIN_SKILL])
+        .assert()
+        .success();
+    fs::create_dir_all(env.project_dir().join("harnesses")).unwrap();
+    fs::write(env.project_dir().join("harnesses/broken.yaml"), "[\n").unwrap();
+
+    let listed = env
+        .bin()
+        .args(["list", "-H", "opencode"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&listed.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL),
+        "list -H opencode should ignore an unrelated invalid harness file, got: {stdout}"
+    );
+}
+
+#[test]
+fn list_droid_selects_factory_unless_a_user_harness_owns_that_id() {
+    let aliased = TestEnv::new("dist-simple");
+    aliased
+        .bin()
+        .arg("add")
+        .arg(aliased.project_dir())
+        .args(["--force", "-H", "droid", "--skill", PLAIN_SKILL])
+        .assert()
+        .success();
+    let listed = aliased
+        .bin()
+        .args(["list", "-H", "droid"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&listed.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL),
+        "droid should select the factory install, got: {stdout}"
+    );
+    let harnesses =
+        installed_harness_lists(&aliased.state_config.join("skillprism/installed.yaml"));
+    assert!(
+        harnesses.iter().any(|ids| ids == &["factory".to_string()]),
+        "alias install should record factory, got: {harnesses:?}"
+    );
+
+    let owned = TestEnv::new("dist-simple");
+    fs::create_dir_all(owned.project_dir().join("harnesses")).unwrap();
+    fs::write(
+        owned.project_dir().join("harnesses/droid.yaml"),
+        "id: droid\nname: droid\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .droid/skills\n  user_scope_path: .droid/skills\n  skill_filename: SKILL.md\n",
+    )
+    .unwrap();
+    owned
+        .bin()
+        .arg("add")
+        .arg(owned.project_dir())
+        .args(["--force", "-H", "droid", "--skill", PLAIN_SKILL])
+        .assert()
+        .success();
+    let owned_list = owned.bin().args(["list", "-H", "droid"]).assert().success();
+    let owned_stdout = String::from_utf8_lossy(&owned_list.get_output().stdout);
+    assert!(
+        owned_stdout.contains(PLAIN_SKILL),
+        "an exact user harness id must win over the droid alias, got: {owned_stdout}"
+    );
+    let factory = owned
+        .bin()
+        .args(["list", "-H", "factory"])
+        .assert()
+        .success();
+    let factory_stdout = String::from_utf8_lossy(&factory.get_output().stdout);
+    assert!(
+        !factory_stdout.contains(PLAIN_SKILL),
+        "factory must not match a user harness registered as droid, got: {factory_stdout}"
+    );
 }
 
 #[test]

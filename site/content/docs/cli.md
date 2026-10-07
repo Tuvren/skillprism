@@ -135,7 +135,7 @@ skillprism add owner/repo --target user -H claude,opencode
 | `-H, --harnesses <list>` | Comma-separated harness IDs to install to (default: all configured) |
 | `-y, --yes` | Skip interactive prompts |
 | `--list` | Print discovered skill names and write nothing |
-| `--all` | Install every discovered skill and skip prompts (`-y`). Does not select every built-in harness; `-H` / `-a` or the project harness list still chooses the targets |
+| `--all` | Install every discovered skill and skip prompts (`-y`). When the project harness list is non-empty, or `-H` / `-a` is set, those choose the targets and `--all` does not select every built-in harness. When neither is set, prompts are skipped and every built-in harness is selected |
 | `--force` | Overwrite existing files and skip interactive prompts |
 
 ## list (alias: ls)

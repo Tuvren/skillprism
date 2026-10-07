@@ -4,7 +4,7 @@
 
 ### Added
 
-- **Distribution flags** — `add --all` installs every discovered skill and skips prompts without selecting every built-in harness. `remove --all` skips the confirmation prompt. `-y` / `--yes` skips prompts, and `-a` / `--agent` selects harnesses. `claude-code` and `droid` select Claude and Factory unless a user harness is registered with that exact id.
+- **Distribution flags** — `add --all` installs every discovered skill and skips prompts. When the project harness list is non-empty, or `-H` / `-a` is set, those choose the targets and `--all` does not select every built-in harness. When neither is set, prompts are skipped and every built-in harness is selected. `remove --all` skips the confirmation prompt. `-y` / `--yes` skips prompts, and `-a` / `--agent` selects harnesses. `claude-code` and `droid` select Claude and Factory unless a user harness is registered with that exact id.
 
 ### Changed
 

@@ -117,7 +117,7 @@ enum Command {
         #[arg(long = "list")]
         list: bool,
 
-        /// Install every discovered skill and skip prompts (does not select every harness)
+        /// Install every discovered skill and skip prompts (project harness list or -H/-a when set; otherwise every built-in)
         #[arg(long = "all")]
         all: bool,
     },
@@ -306,7 +306,8 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
                 crate::distribution::combine_harness_args(harnesses.as_deref(), &agent),
                 force,
                 // `--all` installs every discovered skill and skips prompts.
-                // It does not expand the harness set to every built-in.
+                // A project harness list or `-H`/`-a` still chooses targets.
+                // With neither, skipping prompts selects every built-in.
                 yes || all,
                 list,
                 cli.verbose,
