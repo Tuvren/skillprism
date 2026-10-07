@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **YAML frontmatter rendering** — Add the `yaml_str` filter to quote and escape template values, and reject invalid rendered frontmatter during build with field and location diagnostics. Fixes [#34](https://github.com/tuvren/skillprism/issues/34).
 - **Configuration diagnostics** — Distinguish YAML syntax errors from schema errors, render graphical reports with help and source labels, and remove the rejected `name` field from the quickstart project configuration. Fixes [#31](https://github.com/tuvren/skillprism/issues/31).
 - **`init project` default harnesses** — Without `-H`, non-interactive runs apply the documented `claude`, `opencode` default and print how to choose other harnesses. The prompt appears only when stdin and stdout are both a terminal. Fixes [#33](https://github.com/tuvren/skillprism/issues/33).
 - **`skill_ref` template helper** — `skillprism validate` and `skillprism build` no longer reject templates that call the registered `skill_ref` helper as an `Undefined template variable`, and `skill_ref(name)` now renders the current harness's `skill_ref_pattern` (falling back to `/{name}`) instead of hardcoding `/{name}`.
@@ -11,6 +12,7 @@
 
 ### Changed
 
+- **Rendered frontmatter validation (breaking)** — Build fails on unquoted frontmatter values containing a colon followed by a space and on `name` or `description` values that YAML coerces to non-strings (`null`, `123`, or `yes` when coerced); migrate templates to the `yaml_str` filter.
 - **`init project` overwrite protection** — Project initialization refuses a target directory containing `skillprism.yaml` with a usage error, preserving the existing project files.
 - **Reserved helper function names** — A skill variable named after a skillprism helper function (currently `skill_ref`) is now rejected by `validate` as a reserved name because it shadowed the helper.
 

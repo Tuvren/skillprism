@@ -431,12 +431,9 @@ fn execute_build_pipeline(
     let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
     let mut skip_all = false;
     let mut overwrite_all = false;
+    let outputs = render_build_pairs(valid_pairs, verbose)?;
 
-    for pair in valid_pairs {
-        let t_render = Instant::now();
-        let output = Engine::render(pair).map_err(miette::Report::new)?;
-        let render_time = fmt_duration(t_render.elapsed());
-
+    for (pair, output) in valid_pairs.iter().zip(&outputs) {
         if let Some(entry) = Engine::render_manifest_entry(pair).map_err(miette::Report::new)? {
             if let Some(path) =
                 crate::router::resolve_manifest_path(project_root, &pair.harness, target)
@@ -450,13 +447,10 @@ fn execute_build_pipeline(
         }
 
         let pair_name = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
-        if verbose {
-            eprintln!("  [{render_time}] render {pair_name}");
-        }
 
         if diff {
             let entries =
-                Router::diff(pair, &output, project_root, target).map_err(miette::Report::new)?;
+                Router::diff(pair, output, project_root, target).map_err(miette::Report::new)?;
             for entry in &entries {
                 print_diff_entry(entry, &mut result);
             }
@@ -464,7 +458,7 @@ fn execute_build_pipeline(
             let t_write = Instant::now();
             let write_result = Router::write(
                 pair,
-                &output,
+                output,
                 project_root,
                 target,
                 force,
@@ -528,6 +522,40 @@ fn execute_build_pipeline(
     }
 
     Ok(())
+}
+
+fn render_build_pairs(
+    pairs: &[crate::resolver::ResolvedPair],
+    verbose: bool,
+) -> Result<Vec<crate::engine::HarnessOutput>, miette::Report> {
+    let mut outputs = Vec::with_capacity(pairs.len());
+    let mut error_count = 0;
+    for pair in pairs {
+        let started = Instant::now();
+        match Engine::render(pair).map_err(miette::Report::new) {
+            Ok(output) => {
+                outputs.push(output);
+                if verbose {
+                    eprintln!(
+                        "  [{time}] render {skill} → {harness}",
+                        time = fmt_duration(started.elapsed()),
+                        skill = pair.skill.name,
+                        harness = pair.harness.id,
+                    );
+                }
+            }
+            Err(error) => {
+                eprintln!("{error:?}");
+                error_count += 1;
+            }
+        }
+    }
+    if error_count > 0 {
+        return Err(miette::miette!(
+            "Build failed with {error_count} rendering error(s)"
+        ));
+    }
+    Ok(outputs)
 }
 
 fn load_project(

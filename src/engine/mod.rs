@@ -13,6 +13,7 @@
 // limitations under the License.
 
 mod context;
+mod frontmatter;
 mod helpers;
 
 use std::collections::BTreeMap;
@@ -25,6 +26,7 @@ use crate::registry::ManifestDef;
 use crate::resolver::ResolvedPair;
 
 pub use context::build_context;
+pub use frontmatter::FrontmatterError;
 pub use helpers::register_helpers;
 
 /// Output produced by rendering a skill template through a harness.
@@ -62,6 +64,7 @@ pub enum EngineError {
 
     /// The template failed to render (syntax error or missing variable).
     #[error("[{skill}] {harness}: {detail}")]
+    #[diagnostic(help("Check the template syntax and its referenced variables"))]
     RenderError {
         skill: String,
         harness: String,
@@ -69,6 +72,11 @@ pub enum EngineError {
         line: Option<usize>,
         detail: String,
     },
+
+    /// The rendered skill has invalid YAML frontmatter.
+    #[error(transparent)]
+    #[diagnostic(transparent)]
+    Frontmatter(Box<FrontmatterError>),
 }
 
 /// The rendering engine that processes skill templates through harnesses.
@@ -102,6 +110,8 @@ impl Engine {
         let skill_content = tmpl
             .render(&ctx)
             .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
+
+        frontmatter::check(pair, &skill_content).map_err(EngineError::Frontmatter)?;
 
         let sidecars = render_sidecars(pair, &ctx).map_err(|e| EngineError::RenderError {
             skill: pair.skill.name.clone(),
@@ -395,19 +405,14 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let (_dir, mut skill) = create_skill_with_template(
             "raw-description",
-            "---\ndescription: \"{{ skill_description }}\"\n---\n{{ skill_description }}\n",
+            "---\ndescription: {{ skill_description | yaml_str }}\n---\n{{ skill_description }}\n",
             BTreeMap::new(),
         );
         skill.description = "Router: \"hello\" & <world>".to_string();
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = Engine::render(&pair).unwrap();
-        assert_eq!(
-            output.skill_content,
-            format!(
-                "---\ndescription: \"{}\"\n---\n{}\n",
-                skill.description, skill.description
-            )
-        );
+        let (_, body) = output.skill_content.split_once("\n---\n").unwrap();
+        assert_eq!(body, format!("{}\n", skill.description));
     }
 
     #[test]
@@ -541,7 +546,9 @@ mod tests {
         assert!(result.is_err());
         match result.unwrap_err() {
             EngineError::TemplateRead { .. } => {}
-            e @ EngineError::RenderError { .. } => panic!("expected TemplateRead, got {e:?}"),
+            e @ (EngineError::RenderError { .. } | EngineError::Frontmatter(_)) => {
+                panic!("expected TemplateRead, got {e:?}")
+            }
         }
     }
 
@@ -560,7 +567,9 @@ mod tests {
                 );
                 assert_eq!(line, Some(1), "syntax error on line 1, got {line:?}");
             }
-            e @ EngineError::TemplateRead { .. } => panic!("expected RenderError, got {e:?}"),
+            e @ (EngineError::TemplateRead { .. } | EngineError::Frontmatter(_)) => {
+                panic!("expected RenderError, got {e:?}")
+            }
         }
     }
 }
