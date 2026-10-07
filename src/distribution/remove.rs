@@ -248,25 +248,69 @@ fn remove_skill_files(skill: &InstalledSkill, harness_ids: &[String]) -> Result<
     // Delete recorded files that belong to a harness being removed.
     // A path a staying harness still resolves to is left in place.
     // A canonical path that leaves the installer base is skipped, not deleted.
+    // The skill directory is removed only as the parent of a file this call
+    // actually deleted — the longest removed directory that contains that file
+    // (the trailing `opencode/skills/<skill>`, or the current/legacy directory).
+    let mut deleted_dirs = HashSet::new();
+    let mut skipped_paths = Vec::new();
     for file in &skill.files {
         let path = PathBuf::from(&file.path);
         if !path_is_only_under(&path, &removed_dirs, &kept_dirs) {
             continue;
         }
-        if !path_is_contained(&path, removal_allowed_base(skill, &path).as_deref()) {
+        if !file_is_removed(skill, &path, &removed_dirs, &kept_dirs) {
+            skipped_paths.push(path);
             continue;
         }
         if path.is_file() {
             std::fs::remove_file(&path)
                 .into_diagnostic()
                 .map_err(CommandError::Runtime)?;
+            if let Some(dir) = longest_prefixed_dir(&path, &removed_dirs) {
+                deleted_dirs.insert(dir);
+            }
         }
     }
-    for dir in &removed_dirs {
-        if kept_dirs.contains(dir) || kept_dirs.iter().any(|kept| kept.starts_with(dir)) {
+    remove_deleted_skill_dirs(skill, &deleted_dirs, &kept_dirs, &skipped_paths)
+}
+
+fn file_is_removed(
+    skill: &InstalledSkill,
+    path: &Path,
+    removed_dirs: &HashSet<PathBuf>,
+    kept_dirs: &HashSet<PathBuf>,
+) -> bool {
+    path_is_only_under(path, removed_dirs, kept_dirs)
+        && path_is_contained(path, removal_allowed_base(skill, path).as_deref())
+}
+
+/// Longest removal directory that contains `path`.
+///
+/// That is the skill directory at the end of the recorded path. A shorter
+/// `opencode/skills/<skill>` prefix is not selected once a longer one exists.
+fn longest_prefixed_dir(path: &Path, dirs: &HashSet<PathBuf>) -> Option<PathBuf> {
+    dirs.iter()
+        .filter(|dir| path.starts_with(dir))
+        .max_by_key(|dir| dir.components().count())
+        .cloned()
+}
+
+fn remove_deleted_skill_dirs(
+    skill: &InstalledSkill,
+    dirs: &HashSet<PathBuf>,
+    kept_dirs: &HashSet<PathBuf>,
+    skipped_paths: &[PathBuf],
+) -> Result<(), CommandError> {
+    for dir in dirs {
+        if kept_dirs.contains(dir)
+            || kept_dirs
+                .iter()
+                .any(|kept| kept.starts_with(dir) || dir.starts_with(kept))
+        {
             continue;
         }
-        if !recorded_file_inside(skill, dir) {
+        // `remove_dir_all` would also unlink a recorded file containment skipped.
+        if skipped_paths.iter().any(|path| path.starts_with(dir)) {
             continue;
         }
         if !path_is_contained(dir, removal_allowed_base(skill, dir).as_deref()) {
@@ -355,7 +399,9 @@ fn skill_output_dirs(
 ///
 /// Installs made while `XDG_CONFIG_HOME` was set to a directory other than
 /// `$HOME/.config` are not the current output directory and are not the
-/// historical `$HOME/.config/opencode/skills/<skill>` path.
+/// historical `$HOME/.config/opencode/skills/<skill>` path. The directory is
+/// the trailing `opencode/skills/<skill>`, never an earlier copy of that
+/// sequence that is only part of `XDG_CONFIG_HOME`.
 fn recorded_opencode_user_dirs(skill: &InstalledSkill, harness_ids: &[String]) -> HashSet<PathBuf> {
     let mut dirs = HashSet::new();
     if skill.scope != InstallScope::User || !harness_ids.iter().any(|id| id == "opencode") {
@@ -369,9 +415,13 @@ fn recorded_opencode_user_dirs(skill: &InstalledSkill, harness_ids: &[String]) -
     dirs
 }
 
+/// Rightmost `opencode/skills/<skill_name>` prefix of `path`.
+///
+/// `XDG_CONFIG_HOME` may itself be `$HOME/opencode/skills/<skill>/config`.
+/// The earlier sequence is not the installed skill directory.
 fn opencode_user_skill_dir(path: &Path, skill_name: &str) -> Option<PathBuf> {
     let components: Vec<Component<'_>> = path.components().collect();
-    let start = components.windows(3).position(|window| {
+    let start = components.windows(3).rposition(|window| {
         window[0].as_os_str() == "opencode"
             && window[1].as_os_str() == "skills"
             && window[2].as_os_str() == skill_name
@@ -402,14 +452,15 @@ fn recorded_file_inside(skill: &InstalledSkill, dir: &Path) -> bool {
 }
 
 /// Installer anchor for `path`. A canonical path that leaves this base is not
-/// deleted.
+/// deleted. `$HOME`, the project root, and `$XDG_CONFIG_HOME` may be symlinks.
 ///
 /// Project scope uses the project root. User scope uses `$HOME`, except
-/// `OpenCode`: the current user directory is anchored at `$XDG_CONFIG_HOME`
+/// `OpenCode`. The current user directory is anchored at `$XDG_CONFIG_HOME`
 /// when that variable is set and non-empty, otherwise at `$HOME/.config`.
-/// The historical user directory `$HOME/.config/opencode/skills/<skill>` stays
-/// anchored at `$HOME` when `XDG_CONFIG_HOME` points elsewhere, because that
-/// older path was joined to `$HOME`.
+/// Any other recorded `OpenCode` user file is anchored at the retired `XDG` root:
+/// the parent of the trailing `opencode/skills/<skill>` on that path, even
+/// when that root is outside `$HOME`. The default `$HOME/.config` directory
+/// is still refused when it is a symlink pointing outside `$HOME`.
 fn removal_allowed_base(skill: &InstalledSkill, path: &Path) -> Option<PathBuf> {
     match skill.scope {
         InstallScope::Project => skill
@@ -427,12 +478,23 @@ fn user_removal_base(skill: &InstalledSkill, path: &Path) -> Option<PathBuf> {
             return crate::router::paths::xdg_config_home().ok();
         }
     }
-    if let Some(historical) = legacy_output_dir(skill, "opencode") {
-        if path.starts_with(&historical) {
-            return home_dir();
-        }
+    if let Some(root) = retired_opencode_xdg_root(path, &skill.name) {
+        return Some(root);
     }
     home_dir()
+}
+
+/// Parent of the trailing `opencode/skills/<skill>` — the `XDG` root that
+/// install joined `opencode/skills` onto.
+fn retired_opencode_xdg_root(path: &Path, skill_name: &str) -> Option<PathBuf> {
+    let skill_dir = opencode_user_skill_dir(path, skill_name)?;
+    let skills = skill_dir.parent()?;
+    let opencode = skills.parent()?;
+    let root = opencode.parent()?;
+    if root.as_os_str().is_empty() {
+        return None;
+    }
+    Some(root.to_path_buf())
 }
 
 fn current_opencode_user_dir(skill_name: &str) -> Option<PathBuf> {
@@ -447,21 +509,43 @@ fn home_dir() -> Option<PathBuf> {
     }
 }
 
-/// Both sides canonicalize, matching `validate_scope_relative`. The allowed
-/// base itself must not be a symlink whose target leaves its parent, so a
-/// symlinked `$HOME/.config` does not widen removal to the link target.
+/// Both sides canonicalize, matching `validate_scope_relative`.
+///
+/// `$HOME`, the project root, and an explicit `$XDG_CONFIG_HOME` may be
+/// symlinks; their targets are not required to stay inside the lexical parent.
+/// The default `$HOME/.config` directory is the exception: when that directory
+/// itself is a symlink pointing outside `$HOME`, removal does not follow it.
 /// A missing path falls back to a lexical check with no `..`.
 fn path_is_contained(path: &Path, allowed_base: Option<&Path>) -> bool {
     let Some(allowed_base) = allowed_base else {
         return false;
     };
-    if !symlink_base_stays_inside_parent(allowed_base) {
+    if refuses_symlinked_default_config(allowed_base) {
         return false;
     }
     match (path.canonicalize(), allowed_base.canonicalize()) {
         (Ok(resolved), Ok(base)) => resolved.starts_with(base),
         _ => lexical_path_is_contained(path, allowed_base),
     }
+}
+
+/// True when `allowed_base` is the default `$HOME/.config` (not an explicit
+/// `$XDG_CONFIG_HOME` set to that same path) and the directory is a symlink
+/// whose target leaves `$HOME`.
+fn refuses_symlinked_default_config(allowed_base: &Path) -> bool {
+    let Some(home) = home_dir() else {
+        return false;
+    };
+    let default_config = home.join(".config");
+    if allowed_base != default_config {
+        return false;
+    }
+    if std::env::var("XDG_CONFIG_HOME")
+        .is_ok_and(|xdg| !xdg.is_empty() && Path::new(&xdg) == allowed_base)
+    {
+        return false;
+    }
+    !symlink_base_stays_inside_parent(allowed_base)
 }
 
 fn symlink_base_stays_inside_parent(allowed_base: &Path) -> bool {
@@ -546,11 +630,6 @@ fn apply_removals_to_state(
     removals: Vec<RemovalAction>,
 ) -> Result<(), CommandError> {
     for (skill, harnesses_to_remove) in removals {
-        if harnesses_to_remove.len() >= skill.harnesses.len() {
-            store.remove(&skill.name, skill.scope, skill.project_root.as_deref());
-            continue;
-        }
-
         let registry = load_registry(&skill)?;
         let kept_dirs = kept_output_dirs(&skill, &harnesses_to_remove, &registry)?;
         let removed_dirs = skill_output_dirs(&skill, &harnesses_to_remove, &registry)?;
@@ -559,15 +638,53 @@ fn apply_removals_to_state(
         record.files = files
             .into_iter()
             .filter(|file| {
-                let path = Path::new(&file.path);
-                // Keep a file we refused to delete because it leaves its base.
-                !(path_is_only_under(path, &removed_dirs, &kept_dirs)
-                    && path_is_contained(path, removal_allowed_base(&record, path).as_deref()))
+                // State follows disk: a file containment skipped stays recorded,
+                // including when every harness on the skill was selected.
+                !file_is_removed(&record, Path::new(&file.path), &removed_dirs, &kept_dirs)
             })
             .collect();
-        record
-            .harnesses
-            .retain(|h| !harnesses_to_remove.contains(h));
+
+        // Drop the record only when nothing skipped remains. `store.remove`
+        // would also forget a harness whose file is still on disk.
+        if record.files.is_empty()
+            && record
+                .harnesses
+                .iter()
+                .all(|harness_id| harnesses_to_remove.contains(harness_id))
+        {
+            store.remove(&record.name, record.scope, record.project_root.as_deref());
+            continue;
+        }
+
+        let previous_harnesses = record.harnesses.clone();
+        let mut kept_harnesses = Vec::new();
+        for harness_id in &previous_harnesses {
+            if !harnesses_to_remove.contains(harness_id) {
+                kept_harnesses.push(harness_id.clone());
+                continue;
+            }
+            let Ok(own_dirs) =
+                skill_output_dirs(&record, std::slice::from_ref(harness_id), &registry)
+            else {
+                kept_harnesses.push(harness_id.clone());
+                continue;
+            };
+            if record
+                .files
+                .iter()
+                .any(|file| path_is_only_under(Path::new(&file.path), &own_dirs, &kept_dirs))
+            {
+                kept_harnesses.push(harness_id.clone());
+            }
+        }
+        record.harnesses = kept_harnesses;
+        if record.harnesses.is_empty() && record.files.is_empty() {
+            store.remove(&record.name, record.scope, record.project_root.as_deref());
+            continue;
+        }
+        if record.harnesses.is_empty() {
+            record.harnesses.clone_from(&harnesses_to_remove);
+        }
         store.upsert(record);
     }
     Ok(())
@@ -1200,6 +1317,242 @@ mod tests {
         assert!(
             !current.exists(),
             "the current XDG_CONFIG_HOME install is outside $HOME and must still be deleted"
+        );
+    }
+
+    #[test]
+    fn remove_does_not_treat_xdg_config_home_prefix_as_the_skill_directory() {
+        let _lock = env_lock();
+        let home = tempfile::tempdir().unwrap();
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", home.path());
+        let xdg = home.path().join("opencode/skills/plain-skill/config");
+        std::fs::create_dir_all(&xdg).unwrap();
+        let _xdg = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", &xdg);
+
+        let recorded = xdg.join("opencode/skills/plain-skill/SKILL.md");
+        let keep = xdg.join("other-app/keep.txt");
+        write_skill_file(&recorded);
+        write_skill_file(&keep);
+        let skill = plain_user_skill(
+            &["opencode"],
+            vec![InstalledFile {
+                path: recorded.to_string_lossy().to_string(),
+                hash: "sha256:nested-xdg".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            !recorded.exists(),
+            "the install under XDG_CONFIG_HOME must still be deleted"
+        );
+        assert!(
+            keep.exists(),
+            "an earlier opencode/skills/<skill> inside XDG_CONFIG_HOME is not the skill directory"
+        );
+    }
+
+    #[test]
+    fn remove_deletes_claude_user_install_when_home_is_a_symlink() {
+        let _lock = env_lock();
+        let real_home = tempfile::tempdir().unwrap();
+        let link_parent = tempfile::tempdir().unwrap();
+        let home_link = link_parent.path().join("home");
+        std::os::unix::fs::symlink(real_home.path(), &home_link).unwrap();
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", &home_link);
+        let _xdg = crate::router::paths::tests::EnvGuard::remove("XDG_CONFIG_HOME");
+
+        let recorded = home_link.join(".claude/skills/plain-skill/SKILL.md");
+        write_skill_file(&recorded);
+        let skill = plain_user_skill(
+            &["claude"],
+            vec![InstalledFile {
+                path: recorded.to_string_lossy().to_string(),
+                hash: "sha256:home-link".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["claude".to_string()]).unwrap();
+        assert!(
+            !recorded.exists(),
+            "a symlinked $HOME must not block removal of a non-OpenCode user install"
+        );
+    }
+
+    #[test]
+    fn remove_deletes_opencode_user_install_when_xdg_config_home_is_a_symlink() {
+        let _lock = env_lock();
+        let home = tempfile::tempdir().unwrap();
+        let real_xdg = tempfile::tempdir().unwrap();
+        let link_parent = tempfile::tempdir().unwrap();
+        let xdg_link = link_parent.path().join("xdg");
+        std::os::unix::fs::symlink(real_xdg.path(), &xdg_link).unwrap();
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", home.path());
+        let _xdg = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", &xdg_link);
+
+        let recorded = xdg_link.join("opencode/skills/plain-skill/SKILL.md");
+        write_skill_file(&recorded);
+        let skill = plain_user_skill(
+            &["opencode"],
+            vec![InstalledFile {
+                path: recorded.to_string_lossy().to_string(),
+                hash: "sha256:xdg-link".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            !recorded.exists(),
+            "a symlinked XDG_CONFIG_HOME must not block removal of an OpenCode user install"
+        );
+    }
+
+    #[test]
+    fn remove_deletes_opencode_when_explicit_xdg_is_symlinked_default_config() {
+        let _lock = env_lock();
+        let home = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", home.path());
+        let config = home.path().join(".config");
+        std::os::unix::fs::symlink(outside.path(), &config).unwrap();
+        let _xdg = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", &config);
+
+        let recorded = config.join("opencode/skills/plain-skill/SKILL.md");
+        write_skill_file(&recorded);
+        let skill = plain_user_skill(
+            &["opencode"],
+            vec![InstalledFile {
+                path: recorded.to_string_lossy().to_string(),
+                hash: "sha256:explicit-config".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            !recorded.exists(),
+            "XDG_CONFIG_HOME set to a symlinked $HOME/.config is an explicit anchor and must be removed"
+        );
+    }
+
+    #[test]
+    fn remove_deletes_recorded_retired_xdg_outside_home() {
+        let _lock = env_lock();
+        let home = tempfile::tempdir().unwrap();
+        let current = tempfile::tempdir().unwrap();
+        let retired = tempfile::tempdir().unwrap();
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", home.path());
+        let _xdg = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", current.path());
+
+        let recorded = retired.path().join("opencode/skills/plain-skill/SKILL.md");
+        let neighbor = retired.path().join("opencode/skills/keep.txt");
+        let unrecorded = current.path().join("opencode/skills/plain-skill/SKILL.md");
+        write_skill_file(&recorded);
+        write_skill_file(&neighbor);
+        write_skill_file(&unrecorded);
+        let skill = plain_user_skill(
+            &["opencode"],
+            vec![InstalledFile {
+                path: recorded.to_string_lossy().to_string(),
+                hash: "sha256:retired".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            !recorded.exists(),
+            "a recorded OpenCode install under a retired XDG root outside $HOME must be deleted"
+        );
+        assert!(
+            neighbor.exists(),
+            "removal stops at the skill directory, not the retired XDG root"
+        );
+        assert!(
+            unrecorded.exists(),
+            "an unrecorded file under the current XDG_CONFIG_HOME must survive"
+        );
+    }
+
+    #[test]
+    fn remove_deletes_project_install_when_project_root_is_a_symlink() {
+        let real = tempfile::tempdir().unwrap();
+        let link_parent = tempfile::tempdir().unwrap();
+        let root = link_parent.path().join("project");
+        std::os::unix::fs::symlink(real.path(), &root).unwrap();
+
+        let recorded = root.join(".claude/skills/plain-skill/SKILL.md");
+        write_skill_file(&recorded);
+        let skill = plain_project_skill(
+            &root,
+            &["claude"],
+            vec![InstalledFile {
+                path: recorded.to_string_lossy().to_string(),
+                hash: "sha256:root-link".to_string(),
+            }],
+        );
+
+        remove_skill_files(&skill, &["claude".to_string()]).unwrap();
+        assert!(
+            !recorded.exists(),
+            "a symlinked project root must not block removal inside that root"
+        );
+    }
+
+    #[test]
+    fn skipped_containment_keeps_file_and_harness_when_every_harness_is_selected() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("project");
+        let outside = tmp.path().join("outside");
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::create_dir_all(&outside).unwrap();
+        std::os::unix::fs::symlink(&outside, root.join(".agents")).unwrap();
+
+        let skipped = root.join(".agents/skills/plain-skill/SKILL.md");
+        let deleted = root.join(".claude/skills/plain-skill/SKILL.md");
+        write_skill_file(&skipped);
+        write_skill_file(&deleted);
+        let skipped_path = skipped.to_string_lossy().to_string();
+
+        let skill = plain_project_skill(
+            &root,
+            &["claude", "opencode"],
+            vec![
+                InstalledFile {
+                    path: skipped_path.clone(),
+                    hash: "sha256:skipped".to_string(),
+                },
+                InstalledFile {
+                    path: deleted.to_string_lossy().to_string(),
+                    hash: "sha256:deleted".to_string(),
+                },
+            ],
+        );
+        let harnesses = vec!["claude".to_string(), "opencode".to_string()];
+        remove_skill_files(&skill, &harnesses).unwrap();
+        assert!(
+            skipped.exists(),
+            "the symlinked .agents file is outside the project and must stay on disk"
+        );
+        assert!(!deleted.exists(), "the contained claude file is deleted");
+
+        let state_dir = tmp.path().join("state");
+        let mut store = StateStore::open_at(&state_dir).unwrap();
+        store.upsert(skill);
+        let action = (store.skills()[0].clone(), harnesses);
+        apply_removals_to_state(&mut store, vec![action]).unwrap();
+
+        assert_eq!(
+            store.skills().len(),
+            1,
+            "store.remove must not drop a skill that still has a skipped file"
+        );
+        let updated = &store.skills()[0];
+        assert_eq!(updated.harnesses, vec!["opencode".to_string()]);
+        assert!(updated.files.iter().any(|file| file.path == skipped_path));
+        assert!(
+            updated
+                .files
+                .iter()
+                .all(|file| !file.path.contains(".claude"))
         );
     }
 }
