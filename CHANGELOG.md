@@ -5,6 +5,11 @@
 ### Fixed
 
 - **`skill_ref` template helper** — `skillprism validate` and `skillprism build` no longer reject templates that call the registered `skill_ref` helper as an `Undefined template variable`, and `skill_ref(name)` now renders the current harness's `skill_ref_pattern` (falling back to `/{name}`) instead of hardcoding `/{name}`.
+- **MiniJinja built-in global functions** — `validate` no longer rejects MiniJinja's built-in global functions (`range`, `dict`, `cycler`, `joiner`, `lipsum`, `debug`, `namespace`) as undefined variables.
+
+### Changed
+
+- **Reserved helper function names** — A skill variable named after a skillprism helper function (currently `skill_ref`) is now rejected by `validate` as a reserved name because it shadowed the helper.
 
 ## v0.2.0 — 2026-07-26
 
