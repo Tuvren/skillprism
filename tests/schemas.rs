@@ -78,6 +78,29 @@ fn config_files(dir: &Path) -> Vec<PathBuf> {
 }
 
 #[test]
+fn schemas_have_absolute_versioned_published_ids() {
+    for (name, expected_id) in [
+        (
+            "project-config-schema.json",
+            "https://tuvren.github.io/skillprism/schema/v1/skillprism.json",
+        ),
+        (
+            "skill-schema.json",
+            "https://tuvren.github.io/skillprism/schema/v1/skill.json",
+        ),
+        (
+            "harness-schema.json",
+            "https://tuvren.github.io/skillprism/schema/v1/harness.json",
+        ),
+    ] {
+        let schema: Value =
+            serde_json::from_str(&fs::read_to_string(root().join("schemas").join(name)).unwrap())
+                .unwrap();
+        assert_eq!(schema["$id"], expected_id, "{name}");
+    }
+}
+
+#[test]
 fn examples_and_classified_fixtures_match_schemas() {
     let project = validator("project-config-schema.json");
     let skill = validator("skill-schema.json");

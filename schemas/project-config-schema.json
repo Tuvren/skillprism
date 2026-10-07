@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "project-config-schema.json",
+  "$id": "https://tuvren.github.io/skillprism/schema/v1/skillprism.json",
   "title": "skillprism.yaml",
   "description": "Project-level configuration file for skillprism (skillprism.yaml). Determines which harnesses to build for and where skills live. Matches ProjectConfig in src/types/project.rs. Unknown fields are rejected. harnesses defaults to an empty list when omitted.",
   "type": "object",

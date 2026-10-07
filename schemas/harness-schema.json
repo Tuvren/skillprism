@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "harness-definition-schema.json",
+  "$id": "https://tuvren.github.io/skillprism/schema/v1/harness.json",
   "title": "Harness Definition",
   "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected.",
   "type": "object",

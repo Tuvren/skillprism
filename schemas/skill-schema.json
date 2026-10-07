@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "skill-yaml-schema.json",
+  "$id": "https://tuvren.github.io/skillprism/schema/v1/skill.json",
   "title": "Skill YAML",
   "description": "Per-skill configuration file (skill.yaml) — defines a single skill's metadata and template variables. Note: this is a build-time config file, NOT the output SKILL.md frontmatter. Fields are processed internally; only the rendered template becomes SKILL.md. Whenever skill.yaml is present, including a group file that only contributes variables, the loader requires `skillprism` with value 1 (string or integer) and rejects the legacy `harnesses` key. `name` and `description` are not required: a group skill.yaml may omit them. A leaf skill that omits `name` uses its directory name; a leaf skill that omits `description` gets an empty description.",
   "type": "object",
