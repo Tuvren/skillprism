@@ -64,6 +64,16 @@ skillprism init skill my-agent
 
 This generates `skills/my-agent/skill.yaml` and `skills/my-agent/SKILL.md` together — edit both; they're two halves of one skill.
 
+### Editor validation
+
+The `init` commands add a first-line YAML comment that links a published schema: [project configuration](https://tuvren.github.io/skillprism/schema/v1/skillprism.json), [skill metadata](https://tuvren.github.io/skillprism/schema/v1/skill.json), or [harness definition](https://tuvren.github.io/skillprism/schema/v1/harness.json). For an existing `skill.yaml`, add:
+
+```yaml
+# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skill.json
+```
+
+Install the [VS Code YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) for completion and field validation through this modeline. In [JetBrains IDEs](https://www.jetbrains.com/help/idea/yaml.html), select the corresponding schema URL through **JSON Schema Mappings**.
+
 ### How `skill.yaml` and `SKILL.md` work together
 
 `skill.yaml` holds metadata; `SKILL.md` is a [MiniJinja](https://docs.rs/minijinja) template, rendered once per harness configured in `skillprism.yaml`. It can also be named `SKILL.md.j2` if you'd rather the extension say "this is a template" explicitly — both are accepted, but not both at once in the same skill directory (skillprism errors rather than guessing which one you meant). Three kinds of values are available inside a template's `{{ }}`:

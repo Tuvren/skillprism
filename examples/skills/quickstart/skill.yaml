@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skill.json
 skillprism: '1'
 name: quickstart
 description: >-

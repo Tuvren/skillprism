@@ -170,3 +170,204 @@ pub struct ProjectModel {
     #[allow(dead_code)]
     pub project_root: PathBuf,
 }
+
+/// Test-only introspection of serde's actual field list, including field renames.
+#[cfg(test)]
+pub mod schema_contract {
+    use std::collections::BTreeSet;
+
+    use serde::de::{DeserializeOwned, Error, Visitor};
+    use serde::{Deserializer, forward_to_deserialize_any};
+    use serde_json::{Value, json};
+
+    struct Fields<'a>(&'a mut Option<&'static [&'static str]>);
+
+    impl<'de> Deserializer<'de> for Fields<'_> {
+        type Error = serde::de::value::Error;
+
+        fn deserialize_any<V: Visitor<'de>>(self, _visitor: V) -> Result<V::Value, Self::Error> {
+            Err(Self::Error::custom("field introspection only"))
+        }
+
+        fn deserialize_struct<V: Visitor<'de>>(
+            self,
+            _name: &'static str,
+            fields: &'static [&'static str],
+            _visitor: V,
+        ) -> Result<V::Value, Self::Error> {
+            *self.0 = Some(fields);
+            Err(Self::Error::custom("field introspection only"))
+        }
+
+        forward_to_deserialize_any! {
+            bool i8 i16 i32 i64 u8 u16 u32 u64 f32 f64 char str string bytes
+            byte_buf option unit unit_struct newtype_struct seq tuple tuple_struct
+            map enum identifier ignored_any
+        }
+    }
+
+    pub fn assert_struct_contract<T: DeserializeOwned>(
+        schema: &Value,
+        sample: &Value,
+        accepts: impl Fn(&Value) -> bool,
+    ) {
+        let mut fields = None;
+        assert!(T::deserialize(Fields(&mut fields)).is_err());
+        let fields: BTreeSet<_> = fields
+            .expect("serde struct field list")
+            .iter()
+            .copied()
+            .collect();
+        assert_eq!(
+            fields,
+            schema["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect(),
+            "schema properties must equal serde fields in both directions"
+        );
+        assert_loader_contract(schema, sample, &fields, &accepts);
+        let mut unknown = sample.clone();
+        unknown["unknown_property"] = json!("unexpected");
+        assert!(
+            !jsonschema::draft202012::new(schema)
+                .unwrap()
+                .is_valid(&unknown),
+            "schema must reject unknown properties in a closed object"
+        );
+        assert!(
+            !accepts(&unknown),
+            "loader must reject unknown properties in a closed object"
+        );
+    }
+
+    pub fn assert_loader_contract(
+        schema: &Value,
+        sample: &Value,
+        fields: &BTreeSet<&str>,
+        accepts: impl Fn(&Value) -> bool,
+    ) {
+        assert_eq!(
+            *fields,
+            sample
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect(),
+            "the sample must exercise every field"
+        );
+        assert!(accepts(sample), "loader must accept the complete sample");
+        let validator = jsonschema::draft202012::new(schema).unwrap();
+        assert!(
+            validator.is_valid(sample),
+            "schema must accept the complete sample"
+        );
+        let mut required = BTreeSet::new();
+        for field in fields {
+            let mut omitted = sample.clone();
+            omitted.as_object_mut().unwrap().remove(*field);
+            if !accepts(&omitted) {
+                required.insert(*field);
+            }
+        }
+        let declared: BTreeSet<_> = schema.get("required").map_or_else(BTreeSet::new, |value| {
+            value
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|value| value.as_str().unwrap())
+                .collect()
+        });
+        assert_eq!(
+            required, declared,
+            "required fields must match the full loader contract"
+        );
+        assert_schema_soundness(schema, sample, fields, &declared, &accepts);
+    }
+
+    fn assert_schema_soundness(
+        schema: &Value,
+        sample: &Value,
+        fields: &BTreeSet<&str>,
+        required: &BTreeSet<&str>,
+        accepts: impl Fn(&Value) -> bool,
+    ) {
+        let validator = jsonschema::draft202012::new(schema).unwrap();
+        let mut minimal = sample.clone();
+        minimal
+            .as_object_mut()
+            .unwrap()
+            .retain(|field, _| required.contains(field.as_str()));
+        assert!(validator.is_valid(&minimal));
+        assert!(accepts(&minimal), "schema-valid minimal sample must load");
+        // A non-integral float probes number widening without the documented
+        // integral-float gap, which has dedicated tests in the loader/registry.
+        let probes = [
+            json!("probe"),
+            json!(1),
+            json!(1.5),
+            json!({"probe": "value"}),
+            json!(["probe"]),
+            json!(true),
+            Value::Null,
+        ];
+        for field in fields {
+            let mut optional = minimal.clone();
+            optional[*field] = sample[*field].clone();
+            assert!(validator.is_valid(&optional));
+            assert!(accepts(&optional), "schema-valid field {field} must load");
+
+            for base in [sample, &minimal] {
+                for value in &probes {
+                    let mut probe = base.clone();
+                    probe[*field] = value.clone();
+                    if validator.is_valid(&probe) {
+                        assert!(
+                            accepts(&probe),
+                            "schema-valid value {value} for {field} must load: {probe}"
+                        );
+                    }
+                }
+            }
+
+            // Maps fail string coercion too, unlike plain numbers or booleans.
+            let property = jsonschema::draft202012::new(&schema["properties"][*field]).unwrap();
+            let wrong_type = [
+                json!({"unexpected": "value"}),
+                json!([]),
+                json!("wrong-type"),
+            ]
+            .into_iter()
+            .find(|value| !property.is_valid(value))
+            .expect("a representative wrong non-null type");
+            let mut invalid = sample.clone();
+            invalid[*field] = wrong_type;
+            assert!(
+                !validator.is_valid(&invalid),
+                "schema must reject wrong type for {field}"
+            );
+            assert!(
+                !accepts(&invalid),
+                "loader must reject wrong type for {field}"
+            );
+        }
+    }
+
+    pub fn yaml_accepts<T: DeserializeOwned>(value: &Value) -> bool {
+        yaml_serde::from_str::<T>(&yaml_serde::to_string(value).unwrap()).is_ok()
+    }
+
+    #[test]
+    fn project_config_schema_field_coverage() {
+        let schema =
+            serde_json::from_str(include_str!("../../schemas/project-config-schema.json")).unwrap();
+        assert_struct_contract::<super::ProjectConfig>(
+            &schema,
+            &json!({"harnesses": ["claude"], "skills_dir": "skills"}),
+            yaml_accepts::<super::ProjectConfig>,
+        );
+    }
+}

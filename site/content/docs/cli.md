@@ -73,6 +73,8 @@ skillprism init project my-skills -H claude,codex,opencode
 
 Creates a new project directory with `skillprism.yaml`, a sample skill, `.gitignore`, and `README.md`.
 
+The generated YAML starts with a `yaml-language-server` schema modeline for editor completion and validation.
+
 | Flag | Description |
 |------|-------------|
 | `--out <dir>` | Output directory (default: `./<name>`) |
@@ -88,6 +90,8 @@ skillprism init skill my-agent
 
 Scaffolds a new skill into an existing project's `skills/` directory. Creates `skill.yaml` (with spec-compliant metadata and `skillprism: '1'`), `SKILL.md` (with frontmatter template), and `references/` + `scripts/` asset directories.
 
+The generated YAML starts with a `yaml-language-server` schema modeline for editor completion and validation.
+
 ### init harness
 
 ```bash
@@ -95,6 +99,8 @@ skillprism init harness my-custom-agent
 ```
 
 Scaffolds a custom harness definition in `harnesses/<name>.yaml`.
+
+The generated YAML starts with a `yaml-language-server` schema modeline for editor completion and validation.
 
 ## completions
 

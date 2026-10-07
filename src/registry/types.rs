@@ -131,3 +131,155 @@ pub struct ManifestDef {
     /// Jinja2 template for the manifest content.
     pub template: String,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::types::schema_contract::{
+        assert_loader_contract, assert_struct_contract, yaml_accepts,
+    };
+    use serde_json::{Value, json};
+
+    fn schema() -> Value {
+        serde_json::from_str(include_str!("../../schemas/harness-schema.json")).unwrap()
+    }
+
+    #[test]
+    fn harness_definition_schema_field_coverage() {
+        assert_struct_contract::<HarnessDefinition>(
+            &schema(),
+            &json!({
+                "id": "demo", "name": "Demo", "version": "1",
+                "capabilities": {"supports_subagent": false},
+                "paths": {"project_scope_path": ".demo/skills", "user_scope_path": ".demo/skills", "skill_filename": "SKILL.md"},
+                "macros": {}, "sidecars": [], "manifest": {"template": "{}"}, "skill_ref_pattern": "/{name}"
+            }),
+            yaml_accepts::<HarnessDefinition>,
+        );
+    }
+
+    #[test]
+    fn harness_capabilities_schema_field_coverage() {
+        assert_struct_contract::<HarnessCapabilities>(
+            &schema()["properties"]["capabilities"],
+            &json!({
+                "supports_subagent": true, "requires_sidecar": false, "requires_manifest": true,
+                "name_max_length": 64, "description_max_length": 1024, "supports_allowed_tools": true,
+                "supports_disable_model_invocation": true, "supports_user_invocable_flag": true
+            }),
+            yaml_accepts::<HarnessCapabilities>,
+        );
+    }
+
+    #[test]
+    fn harness_paths_schema_field_coverage() {
+        assert_struct_contract::<HarnessPaths>(
+            &schema()["properties"]["paths"],
+            &json!({
+                "project_scope_path": ".demo/skills", "user_scope_path": ".demo/skills", "skill_filename": "SKILL.md",
+                "manifest_scope_path": ".demo", "manifest_filename": "plugin.json"
+            }),
+            yaml_accepts::<HarnessPaths>,
+        );
+    }
+
+    #[test]
+    fn harness_sidecar_schema_field_coverage() {
+        assert_struct_contract::<SidecarDef>(
+            &schema()["properties"]["sidecars"]["items"],
+            &json!({"filename": "demo.json", "template": "{}", "output_dir": "data"}),
+            yaml_accepts::<SidecarDef>,
+        );
+    }
+
+    #[test]
+    fn harness_manifest_schema_field_coverage() {
+        assert_struct_contract::<ManifestDef>(
+            &schema()["properties"]["manifest"],
+            &json!({"template": "{}"}),
+            yaml_accepts::<ManifestDef>,
+        );
+    }
+
+    #[test]
+    fn harness_macro_schema_field_coverage() {
+        let schema = schema();
+        let inline = &schema["properties"]["macros"]["additionalProperties"]["oneOf"][0];
+        assert!(
+            jsonschema::draft202012::new(inline)
+                .unwrap()
+                .is_valid(&json!("body"))
+        );
+        assert!(
+            matches!(yaml_serde::from_str::<MacroDef>("body").unwrap(), MacroDef::Inline(body) if body == "body")
+        );
+
+        let function = &schema["properties"]["macros"]["additionalProperties"]["oneOf"][1];
+        let sample = json!({"content": "body"});
+        // The untagged enum does not expose deserialize_struct's field list.
+        // An exhaustive pattern guards the variant's fields; deserialization
+        // verifies its serde name, and omission verifies that it is required.
+        match yaml_serde::from_str::<MacroDef>(&yaml_serde::to_string(&sample).unwrap()).unwrap() {
+            MacroDef::Function { content } => assert_eq!(content, "body"),
+            MacroDef::Inline(_) => panic!("expected function macro"),
+        }
+        let fields = std::iter::once("content").collect();
+        assert_eq!(
+            function["properties"]
+                .as_object()
+                .unwrap()
+                .keys()
+                .map(String::as_str)
+                .collect::<std::collections::BTreeSet<_>>(),
+            fields
+        );
+        assert_loader_contract(function, &sample, &fields, yaml_accepts::<MacroDef>);
+        // Macro function objects are open: the loader ignores extra keys.
+        let extra_key = json!({"content": "body", "unknown_property": "ignored"});
+        assert!(
+            jsonschema::draft202012::new(function)
+                .unwrap()
+                .is_valid(&extra_key)
+        );
+        assert!(yaml_accepts::<MacroDef>(&extra_key));
+    }
+
+    #[test]
+    fn harness_schema_rejects_out_of_range_lengths() {
+        let schema = schema();
+        let validator =
+            jsonschema::draft202012::new(&schema["properties"]["capabilities"]).unwrap();
+        let overflow: Value = serde_json::from_str("18446744073709551616").unwrap();
+        for field in ["name_max_length", "description_max_length"] {
+            let mut value = json!({"supports_subagent": false});
+            value[field] = json!(u64::MAX);
+            assert!(validator.is_valid(&value), "maximum length for {field}");
+            value[field] = overflow.clone();
+            assert!(
+                !validator.is_valid(&value),
+                "out-of-range length for {field} must be schema-invalid"
+            );
+        }
+    }
+
+    #[test]
+    fn harness_schema_documents_integral_float_length_limitation() {
+        let schema = schema();
+        let validator = jsonschema::draft202012::new(&schema).unwrap();
+        for field in ["name_max_length", "description_max_length"] {
+            let content = format!(
+                "id: demo\nname: Demo\ncapabilities:\n  supports_subagent: false\n  {field}: 64.0\n\
+                 paths:\n  project_scope_path: .demo\n  user_scope_path: .demo\n  skill_filename: SKILL.md\n"
+            );
+            let value: Value = yaml_serde::from_str(&content).unwrap();
+            assert!(validator.is_valid(&value), "integral float for {field}");
+            assert!(yaml_serde::from_str::<HarnessDefinition>(&content).is_err());
+            assert!(
+                schema["properties"]["capabilities"]["properties"][field]["description"]
+                    .as_str()
+                    .unwrap()
+                    .contains("integral floats")
+            );
+        }
+    }
+}

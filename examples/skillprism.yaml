@@ -1,3 +1,4 @@
+# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/skillprism.json
 harnesses:
   - claude
   - opencode

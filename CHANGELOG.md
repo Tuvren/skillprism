@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Editor validation schemas** — Publish versioned JSON Schemas for project configuration, skill metadata, and harness definitions, add schema modelines to scaffolds and examples, and link the schemas from the documentation. Addresses [#32](https://github.com/tuvren/skillprism/issues/32).
+
 ### Fixed
 
 - **JSON manifest rendering** — Escape every interpolated string in the built-in Claude and Codex manifests with `tojson`, and reject invalid aggregated JSON before writing or diffing with harness, path, and parser diagnostics. Fixes [#34](https://github.com/tuvren/skillprism/issues/34).

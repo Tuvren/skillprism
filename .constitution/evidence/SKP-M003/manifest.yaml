@@ -1,0 +1,12 @@
+owner: SKP-M003
+mode: gherkin
+produced:
+  date: "2026-10-07"
+  commit: "1994d6e"
+  command: "cargo run --quiet -- validate examples"
+files:
+  - path: validate-examples.log
+    sha256: ac9c7b040479d7fc1089fd7929cce2638042b78e90f371ccb92f386d71032bff
+    bytes: 985
+    role: log
+pass_criteria: "The validate-examples recipe prints 'Validation passed' with the schema modelines added to the examples (the loader ignores the comment)."

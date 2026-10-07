@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "harness-definition-schema.json",
+  "$id": "https://tuvren.github.io/skillprism/schema/v1/harness.json",
   "title": "Harness Definition",
-  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected.",
+  "description": "A harness definition describes one agent platform (harness) — its identity, installation paths, macros, sidecars, and optional manifest template. Matches HarnessDefinition in src/registry/types.rs. Unknown fields are rejected outside macro function objects. This schema describes the recommended strict shape; the loader also coerces plain scalars to strings (for example, version: 1.0) and accepts bare keys (null) for string, list, and map fields.",
   "type": "object",
   "required": ["id", "name", "capabilities", "paths"],
   "properties": {
@@ -15,7 +15,7 @@
       "description": "Human-readable display name (e.g., Claude Code, Codex CLI)"
     },
     "version": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Optional version string of this harness definition. The loader accepts any string."
     },
     "capabilities": {
@@ -39,13 +39,15 @@
         "name_max_length": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum allowed skill name length",
+          "maximum": 18446744073709551615,
+          "description": "Maximum allowed skill name length. Known limitation: integral floats such as 64.0 pass the schema but the YAML loader rejects them; use an integer without a decimal point.",
           "default": 64
         },
         "description_max_length": {
           "type": "integer",
           "minimum": 0,
-          "description": "Maximum allowed description length",
+          "maximum": 18446744073709551615,
+          "description": "Maximum allowed description length. Known limitation: integral floats such as 1024.0 pass the schema but the YAML loader rejects them; use an integer without a decimal point.",
           "default": 1024
         },
         "supports_allowed_tools": {
@@ -85,11 +87,11 @@
           "description": "Filename for the rendered skill file (e.g., SKILL.md)"
         },
         "manifest_scope_path": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "Directory for manifest output (e.g., .claude). Omit if the harness has no manifest system."
         },
         "manifest_filename": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "Filename for the manifest file (e.g., plugin.json). Omit if the harness has no manifest system."
         }
       },
@@ -121,7 +123,7 @@
           "filename": { "type": "string", "description": "Filename for the sidecar output" },
           "template": { "type": "string", "description": "Jinja2 template for the sidecar content" },
           "output_dir": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Optional subdirectory within the skill output directory"
           }
         },
@@ -130,7 +132,7 @@
       }
     },
     "manifest": {
-      "type": "object",
+      "type": ["object", "null"],
       "description": "Optional manifest definition. The loader reads only the template string.",
       "properties": {
         "template": {
@@ -142,7 +144,7 @@
       "additionalProperties": false
     },
     "skill_ref_pattern": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Pattern for referencing skills in this harness (e.g., /{name}). {name} is replaced at runtime."
     }
   },

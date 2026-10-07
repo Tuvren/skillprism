@@ -27,6 +27,7 @@ skillprism init harness my-agent
 This scaffolds `harnesses/my-agent.yaml`. Custom harness YAML definitions placed under `harnesses/` are automatically loaded during `build`, `add`, and `update` commands.
 
 ```yaml
+# yaml-language-server: $schema=https://tuvren.github.io/skillprism/schema/v1/harness.json
 id: my-agent
 name: my-agent
 capabilities:
@@ -40,6 +41,10 @@ paths:
   user_scope_path: ".my-agent/skills"
   skill_filename: SKILL.md
 ```
+
+The first-line comment links the [harness definition schema](https://tuvren.github.io/skillprism/schema/v1/harness.json) for editor completion and field validation. Install the [VS Code YAML extension](https://marketplace.visualstudio.com/items?itemName=redhat.vscode-yaml) to read the modeline; in [JetBrains IDEs](https://www.jetbrains.com/help/idea/yaml.html), select the schema URL through **JSON Schema Mappings**.
+
+`/schema/v1/` follows the latest published docs within configuration format version 1, so the editor can accept fields added after your installed skillprism release before your binary supports them.
 
 Edit the values to match your agent product's conventions, then add `my-agent` to `skillprism.yaml`'s `harnesses:` list.
 

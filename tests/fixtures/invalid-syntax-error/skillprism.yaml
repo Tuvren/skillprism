@@ -1,0 +1,2 @@
+# Deliberately malformed YAML: the harness list never closes.
+harnesses: [claude

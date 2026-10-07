@@ -16,6 +16,8 @@ use std::fs;
 use std::io;
 use std::path::Path;
 
+use super::PROJECT_SCHEMA_URL;
+
 /// Scaffolds a new skillprism project with directory structure, config, sample skill,
 /// and a project-level .gitignore so generated harness output isn't committed.
 ///
@@ -28,7 +30,7 @@ pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Res
     fs::write(
         dir.join("skillprism.yaml"),
         format!(
-            "harnesses:\n{harness_list}\nskills_dir: skills\n",
+            "# yaml-language-server: $schema={PROJECT_SCHEMA_URL}\nharnesses:\n{harness_list}\nskills_dir: skills\n",
             harness_list = yaml_lines.join("\n")
         ),
     )?;
@@ -73,6 +75,14 @@ mod tests {
         assert!(dir.join("README.md").exists());
 
         let content = fs::read_to_string(dir.join("skillprism.yaml")).unwrap();
+        let project_modeline = format!("# yaml-language-server: $schema={PROJECT_SCHEMA_URL}");
+        assert_eq!(content.lines().next(), Some(project_modeline.as_str()));
+        let sample = fs::read_to_string(dir.join("skills/sample/skill.yaml")).unwrap();
+        let skill_modeline = format!(
+            "# yaml-language-server: $schema={}",
+            super::super::SKILL_SCHEMA_URL
+        );
+        assert_eq!(sample.lines().next(), Some(skill_modeline.as_str()));
         let model = crate::loader::ProjectLoader::load(dir).unwrap();
         assert_eq!(model.skills.len(), 1);
         let lines: Vec<&str> = content.lines().collect();

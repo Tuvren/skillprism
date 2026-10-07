@@ -5,6 +5,24 @@ description = "Distribution CLI with per-harness templating for agent skills."
 enableRobotsTXT = true
 disableKinds = ["taxonomy", "term"]
 
+# Keep the default static mount when adding the schema file mounts.
+[[module.mounts]]
+source = "static"
+target = "static"
+
+# Schema URLs are versioned by the config format (skillprism: '1').
+[[module.mounts]]
+source = "../schemas/project-config-schema.json"
+target = "static/schema/v1/skillprism.json"
+
+[[module.mounts]]
+source = "../schemas/skill-schema.json"
+target = "static/schema/v1/skill.json"
+
+[[module.mounts]]
+source = "../schemas/harness-schema.json"
+target = "static/schema/v1/harness.json"
+
 [[menus.main]]
 name = "Docs"
 pageRef = "/docs/quickstart"
