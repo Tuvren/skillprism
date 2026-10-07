@@ -59,6 +59,148 @@ fn bin(home: &Path) -> Command {
 }
 
 #[test]
+fn config_diagnostics_unknown_project_field() {
+    let tmp = copy_fixture("invalid-unknown-project-field");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("unknown field `name`")
+                .and(predicate::str::contains("skillprism.yaml"))
+                .and(predicate::str::contains("line 1 column 1"))
+                .and(predicate::str::contains("Invalid YAML").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_missing_skillprism_field() {
+    let tmp = copy_fixture("invalid-missing-skillprism-field");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("missing required field `skillprism`")
+                .and(predicate::str::contains("skills/demo/skill.yaml"))
+                .and(predicate::str::contains("Invalid YAML").not())
+                .and(predicate::str::contains("line 1").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_wrong_type() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skills/alpha/skill.yaml"),
+        "skillprism: '1'\nname: alpha\nvariables: text\n",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("variables")
+                .and(predicate::str::contains("expected a map"))
+                .and(predicate::str::contains("line 3 column 12"))
+                .and(predicate::str::contains("Invalid YAML").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_malformed_yaml() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skillprism.yaml"),
+        "# project\n# broken sequence\nharnesses: [claude",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("YAML does not parse")
+                .and(predicate::str::contains("skillprism.yaml"))
+                // yaml_serde reports EOF on line 4 and the sequence start on line 3.
+                .and(predicate::str::contains("at line 4 column 1"))
+                .and(predicate::str::contains(
+                    "flow sequence at line 3 column 12",
+                )),
+        );
+}
+
+#[test]
+fn config_diagnostics_other_config_paths() {
+    let cases = [
+        (
+            "skillprism.yaml",
+            "# config\nharnesses: claude\n",
+            "harnesses: invalid type",
+            "expected a sequence",
+        ),
+        (
+            "skills/alpha/skill.yaml",
+            "skillprism: '1'\n# config\nnam: alpha\n",
+            "unknown field `nam`",
+            "expected one of",
+        ),
+        (
+            "skills/alpha/skill.yaml",
+            "skillprism: '1'\n# config\nvariables: [text",
+            "YAML does not parse",
+            "line 3 column",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "typo: custom\n",
+            "unknown field `typo`",
+            "expected one of",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "name: Custom\n",
+            "missing field `id`",
+            "column",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "id: custom\nname: Custom\ncapabilities: text\n",
+            "capabilities: invalid type",
+            "line 3 column 15",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "id: custom\nname: Custom\ncapabilities: [text",
+            "YAML does not parse",
+            "line 3 column",
+        ),
+    ];
+    for (file, content, reason, detail) in cases {
+        let tmp = copy_fixture("valid");
+        let path = tmp.path().join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+        bin(tmp.path())
+            .current_dir(tmp.path())
+            .arg("validate")
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains(file)
+                    .and(predicate::str::contains(reason))
+                    .and(predicate::str::contains(detail))
+                    .and(predicate::str::contains("Invalid YAML").not()),
+            );
+    }
+}
+
+#[test]
 fn init_project_non_tty_without_harnesses_applies_default() {
     let tmp = TempDir::new().unwrap();
     let assertion = bin(tmp.path())

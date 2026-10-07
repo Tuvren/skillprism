@@ -45,14 +45,7 @@ impl ProjectLoader {
             },
         })?;
 
-        yaml_serde::from_str(&content).map_err(|e| {
-            let loc = e.location().map_or(0, |l| l.line());
-            ProjectError::YamlParse {
-                path: path.to_string_lossy().to_string(),
-                line: loc,
-                message: e.to_string(),
-            }
-        })
+        super::yaml::deserialize(&content, path)
     }
 
     fn discover_skills(
@@ -82,26 +75,7 @@ impl ProjectLoader {
                     source: e,
                 })?;
 
-            let raw_value: yaml_serde::Value = yaml_serde::from_str(&content).map_err(|e| {
-                let loc = e.location().map_or(0, |l| l.line());
-                ProjectError::YamlParse {
-                    path: config_path.to_string_lossy().to_string(),
-                    line: loc,
-                    message: e.to_string(),
-                }
-            })?;
-
-            validate_skillprism_manifest_version(&raw_value, &config_path)?;
-
-            let skill_config: SkillYamlRaw = yaml_serde::from_value(raw_value).map_err(|e| {
-                let loc = e.location().map_or(0, |l| l.line());
-                ProjectError::YamlParse {
-                    path: config_path.to_string_lossy().to_string(),
-                    line: loc,
-                    message: e.to_string(),
-                }
-            })?;
-
+            let skill_config = parse_skill_config(&content, &config_path)?;
             skill_config.variables.unwrap_or_default()
         } else {
             BTreeMap::new()
@@ -209,25 +183,7 @@ impl ProjectLoader {
                 source: e,
             })?;
 
-        let raw_value: yaml_serde::Value = yaml_serde::from_str(&content).map_err(|e| {
-            let loc = e.location().map_or(0, |l| l.line());
-            ProjectError::YamlParse {
-                path: config_path.to_string_lossy().to_string(),
-                line: loc,
-                message: e.to_string(),
-            }
-        })?;
-
-        validate_skillprism_manifest_version(&raw_value, config_path)?;
-
-        let skill_config: SkillYamlRaw = yaml_serde::from_value(raw_value).map_err(|e| {
-            let loc = e.location().map_or(0, |l| l.line());
-            ProjectError::YamlParse {
-                path: config_path.to_string_lossy().to_string(),
-                line: loc,
-                message: e.to_string(),
-            }
-        })?;
+        let skill_config = parse_skill_config(&content, config_path)?;
 
         if let Some(name) = skill_config.name {
             skill.name = name;
@@ -338,60 +294,49 @@ fn merge_variables(
     merged
 }
 
+fn parse_skill_config(content: &str, path: &Path) -> Result<SkillYamlRaw, ProjectError> {
+    let raw = super::yaml::deserialize(content, path)?;
+    validate_skillprism_manifest_version(&raw, path, content)?;
+    super::yaml::from_value(raw, content, path)
+}
+
 fn validate_skillprism_manifest_version(
     raw: &yaml_serde::Value,
     path: &Path,
+    content: &str,
 ) -> Result<(), ProjectError> {
-    let path_str = path.to_string_lossy().to_string();
-    if let yaml_serde::Value::Mapping(map) = raw {
-        if map.contains_key("harnesses") {
-            return Err(ProjectError::YamlParse {
-                path: path_str,
-                line: 1,
-                message: "the `harnesses:` block in skill.yaml has been renamed to `overrides:` in skillprism 0.2.0; please update your skill.yaml to use `overrides:`".to_string(),
-            });
-        }
-        let key = yaml_serde::Value::String("skillprism".to_string());
-        match map.get(&key) {
-            None => Err(ProjectError::YamlParse {
-                path: path_str,
-                line: 1,
-                message: "skill.yaml is present but missing the `skillprism:` field; either add `skillprism: '1'` to declare skillprism-format, or remove skill.yaml to declare plain-format.".to_string(),
-            }),
-            Some(yaml_serde::Value::String(s)) if s == "1" => Ok(()),
-            Some(yaml_serde::Value::Number(n)) if n.as_i64() == Some(1) => Ok(()),
-            Some(yaml_serde::Value::String(s)) if s.is_empty() => Err(ProjectError::YamlParse {
-                path: path_str,
-                line: 1,
-                message: "the `skillprism:` field must not be empty".to_string(),
-            }),
-            Some(yaml_serde::Value::String(other)) => Err(ProjectError::YamlParse {
-                path: path_str,
-                line: 1,
-                message: format!(
-                    "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
-                ),
-            }),
-            Some(yaml_serde::Value::Number(other)) => Err(ProjectError::YamlParse {
-                path: path_str,
-                line: 1,
-                message: format!(
-                    "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
-                ),
-            }),
-            Some(_) => Err(ProjectError::YamlParse {
-                path: path_str,
-                line: 1,
-                message: "the `skillprism:` field must be a quoted string or integer".to_string(),
-            }),
-        }
-    } else {
-        Err(ProjectError::YamlParse {
-            path: path_str,
-            line: 1,
-            message: "skill.yaml must contain a top-level YAML mapping".to_string(),
-        })
+    let yaml_serde::Value::Mapping(map) = raw else {
+        return Err(ProjectError::config_schema(
+            path,
+            content,
+            "skill.yaml must contain a top-level YAML mapping".to_owned(),
+            super::yaml::root_location(content),
+        ));
+    };
+    if map.contains_key("harnesses") {
+        return Err(ProjectError::config_schema(path, content,
+            "the `harnesses:` block in skill.yaml has been renamed to `overrides:` in skillprism 0.2.0; please update your skill.yaml to use `overrides:`".to_owned(), super::yaml::legacy_harnesses_location(content)));
     }
+    let message = match map.get("skillprism") {
+        None => return Err(ProjectError::config_schema(path, content,
+            "missing required field `skillprism`; either add `skillprism: '1'` to declare skillprism-format, or remove skill.yaml to declare plain-format.".to_owned(), None)),
+        Some(yaml_serde::Value::String(s)) if s == "1" => return Ok(()),
+        Some(yaml_serde::Value::Number(n)) if n.as_i64() == Some(1) => return Ok(()),
+        Some(yaml_serde::Value::String(s)) if s.is_empty() => "the `skillprism:` field must not be empty".to_owned(),
+        Some(yaml_serde::Value::String(other)) => format!(
+            "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
+        ),
+        Some(yaml_serde::Value::Number(other)) => format!(
+            "unsupported `skillprism:` value `{other}`; only `skillprism: '1'` is supported"
+        ),
+        Some(_) => "the `skillprism:` field must be a quoted string or integer".to_owned(),
+    };
+    Err(ProjectError::config_schema(
+        path,
+        content,
+        message,
+        super::yaml::manifest_version_location(content),
+    ))
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -446,6 +391,199 @@ mod tests {
 
     fn setup_test_dir() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
+    }
+
+    #[test]
+    fn config_diagnostics_loader_scenarios() {
+        let cases = [
+            (
+                "skillprism.yaml",
+                "name: my-skills\nharnesses: [claude]\n",
+                "unknown field `name`",
+                Some("line 1 column 1"),
+            ),
+            (
+                "skills/demo/skill.yaml",
+                "name: demo\ndescription: test\n",
+                "missing required field `skillprism`",
+                None,
+            ),
+            (
+                "skills/demo/skill.yaml",
+                "skillprism: '1'\nname: demo\nvariables: text\n",
+                "variables",
+                Some("line 3 column 12"),
+            ),
+            (
+                "skillprism.yaml",
+                "# project\n# broken sequence\nharnesses: [claude",
+                "YAML does not parse",
+                Some("line 4 column 1"),
+            ),
+        ];
+        for (file, content, reason, location) in cases {
+            let tmp = setup_test_dir();
+            fs::create_dir_all(tmp.path().join("skills/demo")).unwrap();
+            fs::write(tmp.path().join("skillprism.yaml"), "harnesses: [claude]\n").unwrap();
+            fs::write(tmp.path().join("skills/demo/SKILL.md"), "# Demo\n").unwrap();
+            fs::write(tmp.path().join(file), content).unwrap();
+            let error = ProjectLoader::load(tmp.path()).unwrap_err().to_string();
+            assert!(error.contains(reason), "{error}");
+            assert!(error.contains(file), "{error}");
+            assert!(!error.contains("Invalid YAML"), "{error}");
+            if let Some(location) = location {
+                assert!(error.contains(location), "{error}");
+            } else {
+                assert!(!error.contains("line 1"), "{error}");
+            }
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_skill_unknown_field_and_syntax_have_spans() {
+        use miette::Diagnostic;
+
+        let cases = [
+            (
+                "skillprism: '1'\n# metadata\nnam: demo\n",
+                "unknown field `nam`",
+                "nam",
+            ),
+            (
+                "skillprism: '1'\n# metadata\nvariables: [text",
+                "YAML does not parse",
+                "",
+            ),
+        ];
+        for (content, reason, text) in cases {
+            let tmp = setup_test_dir();
+            fs::create_dir_all(tmp.path().join("skills/demo")).unwrap();
+            fs::write(tmp.path().join("skillprism.yaml"), "harnesses: [claude]\n").unwrap();
+            fs::write(tmp.path().join("skills/demo/SKILL.md"), "# Demo\n").unwrap();
+            fs::write(tmp.path().join("skills/demo/skill.yaml"), content).unwrap();
+            let error = ProjectLoader::load(tmp.path()).unwrap_err();
+            assert!(error.to_string().contains(reason), "{error}");
+            assert!(error.to_string().contains("line 3 column"), "{error}");
+            let label = error.labels().unwrap().next().unwrap();
+            assert_eq!(&content[label.offset()..label.offset() + label.len()], text);
+            assert!(error.source_code().is_some());
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_project_wrong_type_and_defaults() {
+        let tmp = setup_test_dir();
+        fs::write(
+            tmp.path().join("skillprism.yaml"),
+            "# config\nharnesses: claude\n",
+        )
+        .unwrap();
+        let error = ProjectLoader::load(tmp.path()).unwrap_err();
+        assert!(matches!(error, ProjectError::ConfigSchema { .. }));
+        let message = error.to_string();
+        assert!(message.contains("harnesses"), "{message}");
+        assert!(message.contains("expected a sequence"), "{message}");
+        assert!(message.contains("line 2 column 12"), "{message}");
+
+        // ProjectConfig has no required fields; preserve its defaults.
+        fs::write(tmp.path().join("skillprism.yaml"), "{}\n").unwrap();
+        let project = ProjectLoader::load(tmp.path()).unwrap();
+        assert!(project.config.harnesses.is_empty());
+        assert_eq!(project.config.skills_dir, Path::new("skills"));
+    }
+
+    #[test]
+    fn config_diagnostics_version_checks_use_parser_locations() {
+        use miette::Diagnostic;
+
+        for value in ["''", "'2'", "2", "null", "false", "[]", "{}"] {
+            let content = format!("# manifest\nname: demo\nskillprism: {value}\n");
+            let error = parse_skill_config(&content, Path::new("skill.yaml")).unwrap_err();
+            assert!(matches!(error, ProjectError::ConfigSchema { .. }));
+            let message = error.to_string();
+            assert!(message.contains("skillprism:"), "{message}");
+            assert!(message.contains("line 3 column 13"), "{message}");
+            let label = error.labels().unwrap().next().unwrap();
+            assert_eq!(
+                label.offset(),
+                content.find(value).unwrap(),
+                "{value}: {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_value_conversion_keeps_file_level_when_direct_parse_coerces() {
+        use miette::Diagnostic;
+
+        for content in [
+            "skillprism: '1'\nname: 42\n",
+            "skillprism: '1'\nname: 42\nvariables: text\n",
+        ] {
+            let error = parse_skill_config(content, Path::new("skill.yaml")).unwrap_err();
+            assert!(matches!(error, ProjectError::ConfigSchema { .. }));
+            let message = error.to_string();
+            assert!(
+                message.contains("invalid type: integer `42`, expected a string"),
+                "{message}"
+            );
+            assert!(!message.contains("line"), "{message}");
+            assert!(error.labels().unwrap().next().is_none());
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_spans_use_bytes_for_utf8_and_crlf() {
+        use miette::Diagnostic;
+
+        for content in [
+            "skillprism: '1'\nname: café\nvariables: text\n",
+            "skillprism: '1'\r\nname: café\r\nvariables: text\r\n",
+            "{skillprism: '1', name: café, variables: text}",
+        ] {
+            let error = parse_skill_config(content, Path::new("skill.yaml")).unwrap_err();
+            let label = error.labels().unwrap().next().unwrap();
+            assert_eq!(label.offset(), content.find("text").unwrap());
+            assert_eq!(
+                &content[label.offset()..label.offset() + label.len()],
+                "text"
+            );
+        }
+    }
+
+    #[test]
+    fn config_diagnostics_root_shape_and_legacy_migration_locations() {
+        use miette::Diagnostic;
+
+        for value in ["text", "[]", "null"] {
+            let content = format!("# manifest\n{value}\n");
+            let error = parse_skill_config(&content, Path::new("skill.yaml")).unwrap_err();
+            assert!(error.to_string().contains("top-level YAML mapping"));
+            assert!(error.to_string().contains("line 2 column 1"), "{error}");
+            assert_eq!(
+                error.labels().unwrap().next().unwrap().offset(),
+                content.find(value).unwrap()
+            );
+        }
+        let content = "skillprism: '2'\n# legacy config\nharnesses: {}\n";
+        let error = parse_skill_config(content, Path::new("skill.yaml")).unwrap_err();
+        // The migration check retains its wording and precedence over version errors.
+        assert!(error.to_string().contains("renamed to `overrides:`"));
+        assert!(error.to_string().contains("line 3 column 12"), "{error}");
+        assert_eq!(
+            error.labels().unwrap().next().unwrap().offset(),
+            content.find('{').unwrap()
+        );
+
+        let error = parse_skill_config("name: demo\ndescription: test\n", Path::new("skill.yaml"))
+            .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("missing required field `skillprism`")
+        );
+        assert!(!error.to_string().contains("line"));
+        assert!(error.labels().unwrap().next().is_none());
     }
 
     #[test]
@@ -574,8 +712,8 @@ mod tests {
         let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
-            ProjectError::YamlParse { .. } => {}
-            e => panic!("expected YamlParse error, got {e:?}"),
+            ProjectError::YamlSyntax { .. } => {}
+            e => panic!("expected YamlSyntax error, got {e:?}"),
         }
     }
 
@@ -592,8 +730,8 @@ mod tests {
         let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
-            ProjectError::YamlParse { .. } => {}
-            e => panic!("expected YamlParse error, got {e:?}"),
+            ProjectError::YamlSyntax { .. } => {}
+            e => panic!("expected YamlSyntax error, got {e:?}"),
         }
     }
 
@@ -614,10 +752,10 @@ mod tests {
         let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
-            ProjectError::YamlParse { message, .. } => {
-                assert!(message.contains("missing the `skillprism:` field"));
+            ProjectError::ConfigSchema { message, .. } => {
+                assert!(message.contains("missing required field `skillprism`"));
             }
-            e => panic!("expected YamlParse error for missing skillprism field, got {e:?}"),
+            e => panic!("expected ConfigSchema error for missing skillprism field, got {e:?}"),
         }
     }
 
@@ -659,8 +797,8 @@ mod tests {
             "a typo'd override field should not be silently dropped"
         );
         match result.unwrap_err() {
-            ProjectError::YamlParse { .. } => {}
-            e => panic!("expected YamlParse error, got {e:?}"),
+            ProjectError::ConfigSchema { .. } => {}
+            e => panic!("expected ConfigSchema error, got {e:?}"),
         }
     }
 
@@ -681,10 +819,10 @@ mod tests {
         let result = ProjectLoader::load(root);
         assert!(result.is_err());
         match result.unwrap_err() {
-            ProjectError::YamlParse { message, .. } => {
+            ProjectError::ConfigSchema { message, .. } => {
                 assert!(message.contains("renamed to `overrides:`"));
             }
-            e => panic!("expected YamlParse with migration help, got {e:?}"),
+            e => panic!("expected ConfigSchema with migration help, got {e:?}"),
         }
     }
 
