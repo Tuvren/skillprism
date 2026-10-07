@@ -45,11 +45,13 @@ pub struct FrontmatterError {
 }
 
 pub(super) fn check(pair: &ResolvedPair, rendered: &str) -> Result<(), Box<FrontmatterError>> {
-    let mut lines = rendered.split_inclusive('\n');
+    let without_bom = rendered.strip_prefix('\u{feff}').unwrap_or(rendered);
+    let mut lines = without_bom.split_inclusive('\n');
     let Some(opening) = lines.next().filter(|line| is_fence(line)) else {
         return Ok(());
     };
-    let start = opening.len();
+    // The BOM adds bytes to source spans, but does not add a rendered line.
+    let start = rendered.len() - without_bom.len() + opening.len();
     let mut end = start;
     let mut closed = false;
     for line in lines {

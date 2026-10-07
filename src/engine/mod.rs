@@ -404,14 +404,15 @@ mod tests {
     fn unfiltered_interpolation_remains_unescaped() {
         let registry = HarnessRegistry::with_builtins();
         let (_dir, mut skill) = create_skill_with_template(
-            "raw-description",
-            "---\ndescription: {{ skill_description | yaml_str }}\n---\n{{ skill_description }}\n",
+            "alpha",
+            "---\nname: {{ skill_name }}\ndescription: {{ skill_description | yaml_str }}\n---\n{{ skill_description }}\n",
             BTreeMap::new(),
         );
         skill.description = "Router: \"hello\" & <world>".to_string();
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = Engine::render(&pair).unwrap();
-        let (_, body) = output.skill_content.split_once("\n---\n").unwrap();
+        let (frontmatter, body) = output.skill_content.split_once("\n---\n").unwrap();
+        assert_eq!(frontmatter.lines().nth(1), Some("name: alpha"));
         assert_eq!(body, format!("{}\n", skill.description));
     }
 

@@ -123,9 +123,56 @@ fn build_with_yaml_str_round_trips_issue_description() {
 }
 
 #[test]
+fn build_checks_bom_prefixed_frontmatter_and_accepts_yaml_str() {
+    let dir =
+        project("\u{feff}---\nname: {{ skill_name }}\ndescription: {{ skill_description }}\n---\n");
+    let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    for expected in [
+        "description",
+        "frontmatter line 2",
+        "rendered line 3",
+        "mapping values",
+        "yaml_str",
+        "rendered claude/SKILL.md:3:20",
+        "rendered codex/SKILL.md:3:20",
+    ] {
+        assert!(stderr.contains(expected), "missing {expected}: {stderr}");
+    }
+    assert_no_skill_output(dir.path(), "sample");
+
+    fs::write(
+        dir.path().join("skills/sample/SKILL.md"),
+        "\u{feff}---\nname: {{ skill_name }}\ndescription: {{ skill_description | yaml_str }}\n---\n",
+    )
+    .unwrap();
+    bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+    for harness in ["claude", "codex"] {
+        let rendered = fs::read_to_string(
+            dir.path()
+                .join("dist")
+                .join(harness)
+                .join("sample/SKILL.md"),
+        )
+        .unwrap();
+        let frontmatter = rendered
+            .strip_prefix("\u{feff}---\n")
+            .unwrap()
+            .split_once("\n---")
+            .unwrap()
+            .0;
+        let value: yaml_serde::Value = yaml_serde::from_str(frontmatter).unwrap();
+        assert_eq!(value["description"].as_str(), Some(ISSUE_DESCRIPTION));
+    }
+}
+
+#[test]
 fn build_rejects_non_string_name_and_description() {
     for field in ["name", "description"] {
-        for value in ["null", "~", "123", "true", "[]", "{}"] {
+        for value in ["null", "~", "123", "true", "false", "[]", "{}"] {
             let dir = project(&format!("---\n{field}: {value}\n---\n"));
             let assertion = bin(dir.path()).args(["build", "--force"]).assert().code(1);
             let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();

@@ -12,7 +12,7 @@
 
 ### Changed
 
-- **Rendered frontmatter validation (breaking)** — Build fails on unquoted frontmatter values containing a colon followed by a space and on `name` or `description` values that YAML coerces to non-strings (`null`, `123`, or `yes` when coerced); migrate templates to the `yaml_str` filter.
+- **Rendered frontmatter validation (breaking)** — `build`, `add`, and `update` now fail when rendered `SKILL.md` frontmatter isn't a closed YAML mapping, doesn't parse (for example an unquoted value containing `: `), or has a `name` or `description` that parses as a non-string (`null`/`~`, numbers such as `123`, `true`/`false`, lists or maps; `yes` stays a string under YAML 1.2); migrate templates to the `yaml_str` filter.
 - **`init project` overwrite protection** — Project initialization refuses a target directory containing `skillprism.yaml` with a usage error, preserving the existing project files.
 - **Reserved helper function names** — A skill variable named after a skillprism helper function (currently `skill_ref`) is now rejected by `validate` as a reserved name because it shadowed the helper.
 
