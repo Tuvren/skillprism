@@ -214,7 +214,7 @@ skillprism update [<skills>...] [--target project|user] [-H <harnesses>] [--diff
 
 ### Init flags
 
-- `init project <name>`: Scaffold a new project (`--out` for output dir, `-H`/`--harnesses` for comma-separated harness list). Without `-H`, the prompt appears only when stdin and stdout are both a terminal. Otherwise, the command uses the default harnesses: `claude`, `opencode`.
+- `init project <name>`: Scaffold a new project (`--out` for output dir, `-H`/`--harnesses` for comma-separated harness list). Without `-H`, the prompt appears only when stdin and stdout are both a terminal. Otherwise, the command uses the default harnesses: `claude`, `opencode`. If the target directory already contains `skillprism.yaml`, the command fails with a usage error (exit code 2).
 - `init skill <name>`: Scaffold a new skill into an existing project
 - `init harness <name>`: Scaffold a custom harness definition in `harnesses/`
 

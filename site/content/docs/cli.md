@@ -78,6 +78,8 @@ Creates a new project directory with `skillprism.yaml`, a sample skill, `.gitign
 | `--out <dir>` | Output directory (default: `./<name>`) |
 | `-H, --harnesses <list>` | Comma-separated harness IDs (default when no prompt is shown: `claude`, `opencode`). Without this flag, the prompt appears only when stdin and stdout are both a terminal. |
 
+If the target directory already contains `skillprism.yaml`, the command fails with a usage error (exit code 2).
+
 ### init skill
 
 ```bash

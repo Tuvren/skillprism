@@ -111,11 +111,19 @@ closeout:
     - stage: tech-spec
       item: "Add an init-project live-verification recipe (launch cargo build; drive `skillprism init project demo </dev/null` in a temp dir; evidence: skillprism.yaml lists claude and opencode) so CLI init changes can carry live_probe."
   follow_ups:
-    - "An explicitly empty `-H \"\"` or `-H \",\"` outside a terminal now gets the default (parse_harness_list drops empty entries) instead of a usage error. Decide whether an explicit empty list should be rejected (check harnesses.is_none() before parsing)."
-    - "src/cli.rs: the `/// Comma-separated list of harness IDs` doc comment on the -H arg is now shadowed by the explicit help = format!(...) and could drift."
+    - "In a terminal the harness MultiSelect starts with nothing pre-selected, so the claude, opencode default applies only when no prompt is shown. Consider pre-checking DEFAULT_PROJECT_HARNESSES (as add does with items_checked); the step-0 ruling kept interactive prompting unchanged for this epic."
+    - "init project still overwrites README.md, .gitignore and the sample skill in a non-empty target directory that has no skillprism.yaml (pre-existing scaffold behavior). Decide whether a non-empty directory should also be refused."
   code_decisions:
     - summary: "DEFAULT_PROJECT_HARNESSES constant in cli.rs is the single source for the non-interactive init fallback, the -H help text, and the stderr notice."
       kind: convention
       paths: [src/cli.rs]
       commit: b9eb939
+    - summary: "init project refuses with a usage error (exit 2) when the target directory already contains skillprism.yaml, in every mode; previously re-running init silently overwrote the project. Added because the non-interactive default made a bare scripted retry overwrite silently."
+      kind: contract_shape
+      paths: [src/cli.rs, tests/integration.rs]
+      commit: 7d16228
+    - summary: "The non-interactive harness default applies only when -H is absent; an explicitly provided but empty -H list (\"\", \",\", whitespace) keeps the usage error."
+      kind: convention
+      paths: [src/cli.rs]
+      commit: 7d16228
   settled: []
