@@ -59,6 +59,107 @@ fn bin(home: &Path) -> Command {
 }
 
 #[test]
+fn init_project_non_tty_without_harnesses_applies_default() {
+    let tmp = TempDir::new().unwrap();
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo"])
+        .write_stdin("")
+        .assert()
+        .success();
+
+    let config: yaml_serde::Value =
+        yaml_serde::from_str(&fs::read_to_string(tmp.path().join("demo/skillprism.yaml")).unwrap())
+            .unwrap();
+    assert_eq!(
+        config["harnesses"],
+        yaml_serde::to_value(["claude", "opencode"]).unwrap()
+    );
+
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 1);
+    assert!(stderr.contains("default"));
+    assert!(stderr.contains("claude, opencode"));
+    assert!(stderr.contains("-H"));
+}
+
+#[test]
+fn init_project_non_tty_explicit_harnesses_override_default() {
+    let tmp = TempDir::new().unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo", "-H", "codex"])
+        .write_stdin("")
+        .assert()
+        .success()
+        .stderr("");
+
+    let config: yaml_serde::Value =
+        yaml_serde::from_str(&fs::read_to_string(tmp.path().join("demo/skillprism.yaml")).unwrap())
+            .unwrap();
+    assert_eq!(
+        config["harnesses"],
+        yaml_serde::to_value(["codex"]).unwrap()
+    );
+}
+
+#[test]
+fn init_project_existing_project_fails_without_overwriting() {
+    for harnesses in [None, Some("codex")] {
+        let tmp = TempDir::new().unwrap();
+        let project_dir = tmp.path().join("demo");
+        bin(tmp.path())
+            .current_dir(tmp.path())
+            .args(["init", "project", "demo", "-H", "claude"])
+            .write_stdin("")
+            .assert()
+            .success();
+
+        let config_path = project_dir.join("skillprism.yaml");
+        let readme_path = project_dir.join("README.md");
+        let mut config = fs::read(&config_path).unwrap();
+        config.extend_from_slice(b"# Keep this project configuration.\n");
+        fs::write(&config_path, &config).unwrap();
+        let mut readme = fs::read(&readme_path).unwrap();
+        readme.extend_from_slice(b"\nKeep this project documentation.\n");
+        fs::write(&readme_path, &readme).unwrap();
+
+        let mut command = bin(tmp.path());
+        command
+            .current_dir(tmp.path())
+            .args(["init", "project", "demo", "--out"])
+            .arg(&project_dir)
+            .write_stdin("");
+        if let Some(harnesses) = harnesses {
+            command.args(["-H", harnesses]);
+        }
+        command.assert().code(2).stderr(
+            predicate::str::contains("project already exists")
+                .and(predicate::str::contains(project_dir.display().to_string())),
+        );
+
+        assert_eq!(fs::read(&config_path).unwrap(), config);
+        assert_eq!(fs::read(&readme_path).unwrap(), readme);
+    }
+}
+
+#[test]
+fn init_project_non_tty_explicit_empty_harnesses_fails_with_usage_error() {
+    for harnesses in ["", ",", " , "] {
+        let tmp = TempDir::new().unwrap();
+        bin(tmp.path())
+            .current_dir(tmp.path())
+            .args(["init", "project", "demo", "-H", harnesses])
+            .write_stdin("")
+            .assert()
+            .code(2)
+            .stderr(predicate::str::contains("No harnesses selected."));
+
+        assert!(!tmp.path().join("demo").exists());
+    }
+}
+
+#[test]
 fn full_build_pipeline() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();

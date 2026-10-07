@@ -15,7 +15,9 @@ skillprism init project my-skills
 cd my-skills
 ```
 
-`skillprism init project` interactively prompts for target harnesses (default: `claude`, `opencode`) and creates:
+Without `-H` (`--harnesses`), the prompt appears only when stdin and stdout are both a terminal. Otherwise, the command uses the default harnesses: `claude`, `opencode`. Pass `-H codex`, for example, to choose other harnesses.
+
+The command creates:
 
 ```
 my-skills/
@@ -28,7 +30,7 @@ my-skills/
         └── SKILL.md     # Template (MiniJinja)
 ```
 
-The generated `skillprism.yaml` configures the target harnesses:
+With the default harnesses or a terminal selection of `claude` and `opencode`, the generated `skillprism.yaml` configures these targets:
 
 ```yaml
 name: my-skills

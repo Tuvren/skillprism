@@ -59,7 +59,7 @@ tickets:
         No live_probe: guidelines declare no init-project recipe, and this plan must not invent one. The gap is routed to Stage 3 (specifying-technical-implementation). The behavior proof is the automated tests.
     flows: []
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-J002
     title: Align CLI docs, quickstart, README, and CHANGELOG with the non-interactive default
     type: Chore
@@ -92,4 +92,38 @@ tickets:
             Then the Unreleased section has a Fixed entry for the init project default referencing #33
     flows: []
     certainty: settled
-    status: planned
+    status: done
+closeout:
+  tickets_completed: [SKP-J001, SKP-J002]
+  tickets_deferred: []
+  points_completed: 3
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: fixed
+      text: "EPIC-J (github#33): init project applies the documented claude, opencode harness default when no interactive prompt is shown."
+  candidate_terms: []
+  routed_upstream:
+    - stage: prd
+      item: "CAP-013 says init scaffolds 'a harnesses/ directory', but since v0.2.0 the init project scaffold no longer creates one (CHANGELOG v0.2.0, Custom Harnesses On-Demand). It can't be settled until the statement matches the scaffold."
+    - stage: architecture
+      item: "No architecture flow covers init/scaffolding (CAP-013, CAP-014); EPIC-J tickets carry flows: []."
+    - stage: tech-spec
+      item: "Add an init-project live-verification recipe (launch cargo build; drive `skillprism init project demo </dev/null` in a temp dir; evidence: skillprism.yaml lists claude and opencode) so CLI init changes can carry live_probe."
+  follow_ups:
+    - "In a terminal the harness MultiSelect starts with nothing pre-selected, so the claude, opencode default applies only when no prompt is shown. Consider pre-checking DEFAULT_PROJECT_HARNESSES (as add does with items_checked); the step-0 ruling kept interactive prompting unchanged for this epic."
+    - "init project still overwrites README.md, .gitignore and the sample skill in a non-empty target directory that has no skillprism.yaml (pre-existing scaffold behavior). Decide whether a non-empty directory should also be refused."
+  code_decisions:
+    - summary: "DEFAULT_PROJECT_HARNESSES constant in cli.rs is the single source for the non-interactive init fallback, the -H help text, and the stderr notice."
+      kind: convention
+      paths: [src/cli.rs]
+      commit: b9eb939
+    - summary: "init project refuses with a usage error (exit 2) when the target directory already contains skillprism.yaml, in every mode; previously re-running init silently overwrote the project. Added because the non-interactive default made a bare scripted retry overwrite silently."
+      kind: contract_shape
+      paths: [src/cli.rs, tests/integration.rs]
+      commit: 7d16228
+    - summary: "The non-interactive harness default applies only when -H is absent; an explicitly provided but empty -H list (\"\", \",\", whitespace) keeps the usage error."
+      kind: convention
+      paths: [src/cli.rs]
+      commit: 7d16228
+  settled: []

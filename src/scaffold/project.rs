@@ -19,7 +19,7 @@ use std::path::Path;
 /// Scaffolds a new skillprism project with directory structure, config, sample skill,
 /// and a project-level .gitignore so generated harness output isn't committed.
 ///
-/// When `harnesses` is empty, defaults to `["claude", "opencode"]`.
+/// Writes the supplied `harnesses` list without applying a default.
 pub fn scaffold_project(dir: &Path, name: &str, harnesses: &[String]) -> io::Result<()> {
     fs::create_dir_all(dir)?;
 

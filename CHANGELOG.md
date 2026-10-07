@@ -4,11 +4,13 @@
 
 ### Fixed
 
+- **`init project` default harnesses** — Without `-H`, non-interactive runs apply the documented `claude`, `opencode` default and print how to choose other harnesses. The prompt appears only when stdin and stdout are both a terminal. Fixes [#33](https://github.com/tuvren/skillprism/issues/33).
 - **`skill_ref` template helper** — `skillprism validate` and `skillprism build` no longer reject templates that call the registered `skill_ref` helper as an `Undefined template variable`, and `skill_ref(name)` now renders the current harness's `skill_ref_pattern` (falling back to `/{name}`) instead of hardcoding `/{name}`.
 - **MiniJinja built-in global functions** — `validate` no longer rejects MiniJinja's built-in global functions (`range`, `dict`, `cycler`, `joiner`, `lipsum`, `debug`, `namespace`) as undefined variables.
 
 ### Changed
 
+- **`init project` overwrite protection** — Project initialization refuses a target directory containing `skillprism.yaml` with a usage error, preserving the existing project files.
 - **Reserved helper function names** — A skill variable named after a skillprism helper function (currently `skill_ref`) is now rejected by `validate` as a reserved name because it shadowed the helper.
 
 ## v0.2.0 — 2026-07-26
