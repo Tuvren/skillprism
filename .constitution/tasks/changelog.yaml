@@ -1,4 +1,26 @@
 entries:
+  - version: v2.1.3
+    date: 2026-10-07
+    changed:
+      - "SKP-L005 deferred to designing-solution-architecture, then specifying-technical-implementation: flow-validate.md and ADR-0002 define validate as parse-only; the validate-time rendered-frontmatter check needs a Stage 2 flow change and a Stage 3 ADR-0002 revision before execution."
+      - "EPIC-L YAML-safe frontmatter rendering and JSON-safe built-in manifests archived: 4 tickets, 14 points, 2872 diff lines, 0 review rounds"
+    added:
+      - "Follow-up from EPIC-L: src/distribution add/update wrap Engine::render errors in InstallError::Render / UpdateError::Render with #[error(\"{0}\")] and generic help, so the frontmatter diagnostic loses its yaml_str hint and label and shows a temporary template path; use #[diagnostic(transparent)] or forward the report."
+      - "Follow-up from EPIC-L: src/distribution install_skillprism_skill renders and writes one harness at a time, so a frontmatter error on a later harness leaves earlier harness files installed (pre-existing interleaving, now reachable when frontmatter differs per harness)."
+      - "Follow-up from EPIC-L: The validator's environments register no filters, so a misspelled filter (| yaml_strr) passes validate and only fails at build."
+      - "Follow-up from EPIC-L: SKP-L001's description says the filter turns any value into a double-quoted scalar; the delivered behavior follows OD-01's interim (null for undefined/none, error for sequences and maps)."
+      - "Follow-up from EPIC-L: The frontmatter string check follows YAML 1.2 (yaml_serde): yes/on/no stay strings, so YAML 1.1 consumers such as PyYAML may still read a name or description as a boolean."
+      - "Follow-up from EPIC-L: Manifest render and JSON errors stop at the first bad entry, unlike skill render errors, which are collected across every pair."
+      - "Follow-up from EPIC-L: The bottom-up YAML merge resolver stops at 64 alias levels; past that a cut branch contributes no keys, which can change which merge source wins (alias chains over about 64 links only)."
+      - "Follow-up from EPIC-L: A quoted \"<<\" key whose value is a mapping is treated as a merge by the resolver (as yaml_serde's apply_merge did); a strict YAML reader treats it as a literal key."
+    by: reconcile
+    fixed:
+      - "EPIC-L (github#34): yaml_str filter for frontmatter values, scaffolds/examples/docs migrated, build rejects invalid rendered frontmatter, and built-in JSON manifests use tojson with a JSON check before any write."
+    fast_lane_through: 33b09d4661efa7f99e5f7e989adcbdc3f272a5b6
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+      tech-spec: v1.0.2
   - version: v2.1.2
     date: 2026-10-07
     changed:

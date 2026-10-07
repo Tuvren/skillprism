@@ -1,0 +1,34 @@
+date: 2026-10-07
+commit: 33b09d4
+epics: [L]
+routed:
+  - stage: architecture
+    item: "SKP-L005: move the rendered-frontmatter check into validate; flow-validate.md has no engine participant today."
+    from: L
+  - stage: tech-spec
+    item: "ADR-0002 says custom helpers are registered with add_function; record add_filter (yaml_str) as a helper registration pattern, and revise its parse-only validation statement if Stage 2 approves SKP-L005."
+    from: L
+  - stage: tech-spec
+    item: "Add a live-verification recipe that builds a project and checks rendered SKILL.md frontmatter and manifest JSON (a build-manifest recipe), so rendering changes can carry a live_probe that exercises them."
+    from: L
+  - stage: tech-spec
+    item: "code decision (pattern): yaml_str MiniJinja filter registered via add_filter in register_helpers: double-quoted YAML scalars for strings, numbers and booleans; YAML null for undefined/none; InvalidOperation for sequences and maps (OD-01 interim); returns a safe string so filename autoescape can't re-quote it. Introduced in 813614b; null/collection rule refined in ba089e8 (OD-01). [src/engine/helpers.rs] at 813614b"
+    from: L
+  - stage: tech-spec
+    item: "code decision (convention): Frontmatter convention: only string-typed fields are piped through yaml_str in scaffolds, examples, fixtures and docs; lists, maps, booleans and numbers stay unfiltered; a test scans doc examples to keep it that way. Doc-scan test added in 820092c. [src/scaffold/skill.rs, src/scaffold/project.rs, examples, site/content/docs/templating.md, tests/integration.rs] at c1e901a"
+    from: L
+  - stage: tech-spec
+    item: "code decision (contract_shape): Engine::render validates rendered SKILL.md frontmatter (leading fence after an optional BOM, closed YAML mapping, string name/description) and fails with EngineError::Frontmatter; build renders every pair and validates manifests before any write. BOM handling added in d0a16de; whitespace-tolerant fences, MiniJinja error detail, skill_filename-aware diagnostics and a bottom-up YAML merge resolver for the name/description check added in 8e94360, 8b50cfa and d63540c. [src/engine/frontmatter.rs, src/engine/mod.rs, src/cli.rs] at 9e17fc1"
+    from: L
+  - stage: tech-spec
+    item: "code decision (dependency): serde_json added as a direct dependency (1.0.150, previously transitive through minijinja) to parse aggregated manifest JSON before writing; RouterError::ManifestJson naming the skill and harness; each manifest entry is parsed before aggregation; ManifestEntry carries its skill and harness; diff_manifests returns Result. Per-entry parsing and skill naming added in 0118b6e. [Cargo.toml, Cargo.lock, src/router/manifest.rs, src/router/mod.rs] at 55f7ecb"
+    from: L
+  - stage: tech-spec
+    item: "code decision (convention): Built-in JSON manifest templates interpolate every string with | tojson and no surrounding quotes, including skill_ref. [src/builtin_harnesses/claude.yaml, src/builtin_harnesses/codex.yaml] at 55f7ecb"
+    from: L
+proposed_decisions: [OD-01]
+candidate_terms: []
+stale_owners:
+  - ".constitution/evidence/SKP-L002/manifest.yaml: SKP-L002"
+  - ".constitution/evidence/SKP-L003/manifest.yaml: SKP-L003"
+  - ".constitution/evidence/SKP-L004/manifest.yaml: SKP-L004"
