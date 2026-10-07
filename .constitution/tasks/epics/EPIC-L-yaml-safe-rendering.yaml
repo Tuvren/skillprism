@@ -28,6 +28,29 @@ scope:
     - .constitution/tech-spec/adrs/ADR-0002-minijinja.md
     - .constitution/tech-spec/guidelines.md
 estimated_diff_lines: 1500
+decisions:
+  - id: OD-01
+    question: "What should the yaml_str filter render for an undefined or none value, and for a sequence or map?"
+    blocks: [SKP-L002, SKP-L003, src/engine/helpers.rs]
+    options:
+      - name: "null for undefined/none; error for sequences and maps"
+        pros: ["Keeps today's semantics: an unset optional field (license, compatibility) stays YAML null, as with the bare `license: ` the scaffold renders now", "A list-typed field piped through the filter fails loudly instead of becoming a wrong-typed string", "M2 can migrate every string field uniformly without wrapping each optional in an if"]
+        cons: ["The filter no longer always yields a string; authors must know null is possible", "An error on sequences means templates must not pipe list fields through yaml_str"]
+      - name: "always a string (empty for undefined, 'none' for none, display form for collections)"
+        pros: ["Simplest contract: the output is always a quoted string"]
+        cons: ["Unset optional fields become present empty strings (license: \"\"), a semantic change from today", "A skill variable set to ~ becomes the text 'none'", "Lists become their MiniJinja display string, a silent type change M3's check would not catch"]
+      - name: "always a string, and M2 wraps optional fields in {% if %} blocks"
+        pros: ["Keeps the string-only contract while preserving absence"]
+        cons: ["Every optional frontmatter line in scaffold, examples and docs needs template logic, which is noisier for authors", "Still silently stringifies collections"]
+    recommendation: "null for undefined/none; error for sequences and maps"
+    closure: ruling
+    ruler: "the user (project owner), after the EPIC-L merge"
+    interim:
+      assumption: "yaml_str renders undefined and none as YAML null, renders strings/numbers/booleans as double-quoted strings, and raises an invalid-operation error naming yaml_str for sequences and maps; M2 applies the filter only to string-typed fields."
+      applied_by: [src/engine/helpers.rs, SKP-L002]
+    status: proposed
+    asked: { date: "2026-10-07", in: EPIC-L }
+    proposed_by: "EPIC-L, milestone M1 review of 813614b"
 tickets:
   - id: SKP-L001
     title: Add a yaml_str template filter that emits a quoted YAML scalar
@@ -74,7 +97,10 @@ tickets:
         No live_probe: guidelines declare no build-manifest recipe, and this plan must not invent one. The gap is routed to Stage 3 (specifying-technical-implementation). The behavior proof is the automated tests.
     flows: [flow-compile-template, flow-validate]
     certainty: assumed
-    status: planned
+    deviations:
+      - files: [tests/integration.rs]
+        justification: "The gherkin scenario 'the validator accepts the filter' runs skillprism validate, so it needs a CLI-level test; tests/integration.rs is in the epic's scope.paths but not in SKP-L001's scope.in."
+    status: done
   - id: SKP-L002
     title: Move scaffold, examples, fixtures, and docs to the yaml_str filter for frontmatter values
     type: Chore
@@ -114,7 +140,7 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed" with the migrated example templates. This probe is a regression check only; it does not exercise a hostile description. The behavior proof is the automated tests.
     flows: [flow-compile-template, flow-build-project]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-L003
     title: Parse rendered SKILL.md frontmatter after Engine::render and fail the build with a field-naming diagnostic
     type: Feature
@@ -175,7 +201,10 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed". This probe is a regression check only; it does not exercise the build-time frontmatter failure. The behavior proof is the automated tests.
     flows: [flow-build-project, flow-fail-on-error, flow-compile-template]
     certainty: assumed
-    status: planned
+    deviations:
+      - files: [src/engine/mod.rs]
+        justification: "The M1 unit test unfiltered_interpolation_remains_unescaped placed a raw interpolation in frontmatter, which L003 now rejects by design; the test was moved to assert the unescaped value in the body. src/engine is in L003 scope.in; recorded because it rewrote an earlier ticket's test."
+    status: done
   - id: SKP-L004
     title: Make built-in JSON manifest templates escape values and reject invalid manifest JSON
     type: Feature
@@ -227,7 +256,10 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed". This probe is a regression check only; it does not exercise manifest JSON. The behavior proof is the automated tests.
     flows: [flow-generate-manifest, flow-builtin-harness]
     certainty: assumed
-    status: planned
+    deviations:
+      - files: [src/cli.rs]
+        justification: "The M3 milestone review found manifest-entry rendering ran inside the build write loop, so a manifest error could leave a partial build; plan amendment (2026-10-06) added src/cli.rs to M4 so manifest rendering and the JSON check run before any write. src/cli.rs is in the epic's scope.paths but not in SKP-L004's scope.in."
+    status: done
   - id: SKP-L005
     title: Check rendered frontmatter during validate
     type: Feature
@@ -269,3 +301,54 @@ tickets:
     certainty: assumed
     status: deferred
     deferred_to: "Stage 2 architecture pass, then a Stage 3 revision of ADR-0002: flow-validate.md has no engine participant and ADR-0002 defines validate as parse-only; both upstream revisions must precede execution."
+closeout:
+  tickets_completed: [SKP-L001, SKP-L002, SKP-L003, SKP-L004]
+  tickets_deferred:
+    - id: SKP-L005
+      route: "designing-solution-architecture, then specifying-technical-implementation"
+      reason: "flow-validate.md and ADR-0002 define validate as parse-only; the validate-time rendered-frontmatter check needs a Stage 2 flow change and a Stage 3 ADR-0002 revision before execution."
+  points_completed: 14
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: fixed
+      text: "EPIC-L (github#34): yaml_str filter for frontmatter values, scaffolds/examples/docs migrated, build rejects invalid rendered frontmatter, and built-in JSON manifests use tojson with a JSON check before any write."
+  candidate_terms: []
+  routed_upstream:
+    - stage: architecture
+      item: "SKP-L005: move the rendered-frontmatter check into validate; flow-validate.md has no engine participant today."
+    - stage: tech-spec
+      item: "ADR-0002 says custom helpers are registered with add_function; record add_filter (yaml_str) as a helper registration pattern, and revise its parse-only validation statement if Stage 2 approves SKP-L005."
+    - stage: tech-spec
+      item: "Add a live-verification recipe that builds a project and checks rendered SKILL.md frontmatter and manifest JSON (a build-manifest recipe), so rendering changes can carry a live_probe that exercises them."
+  follow_ups:
+    - "src/distribution add/update wrap Engine::render errors in InstallError::Render / UpdateError::Render with #[error(\"{0}\")] and generic help, so the frontmatter diagnostic loses its yaml_str hint and label and shows a temporary template path; use #[diagnostic(transparent)] or forward the report."
+    - "src/distribution install_skillprism_skill renders and writes one harness at a time, so a frontmatter error on a later harness leaves earlier harness files installed (pre-existing interleaving, now reachable when frontmatter differs per harness)."
+    - "The validator's environments register no filters, so a misspelled filter (| yaml_strr) passes validate and only fails at build."
+    - "SKP-L001's description says the filter turns any value into a double-quoted scalar; the delivered behavior follows OD-01's interim (null for undefined/none, error for sequences and maps)."
+    - "The frontmatter string check follows YAML 1.2 (yaml_serde): yes/on/no stay strings, so YAML 1.1 consumers such as PyYAML may still read a name or description as a boolean."
+    - "Manifest render and JSON errors stop at the first bad entry, unlike skill render errors, which are collected across every pair."
+    - "The bottom-up YAML merge resolver stops at 64 alias levels; past that a cut branch contributes no keys, which can change which merge source wins (alias chains over about 64 links only)."
+    - "A quoted \"<<\" key whose value is a mapping is treated as a merge by the resolver (as yaml_serde's apply_merge did); a strict YAML reader treats it as a literal key."
+  code_decisions:
+    - summary: "yaml_str MiniJinja filter registered via add_filter in register_helpers: double-quoted YAML scalars for strings, numbers and booleans; YAML null for undefined/none; InvalidOperation for sequences and maps (OD-01 interim); returns a safe string so filename autoescape can't re-quote it. Introduced in 813614b; null/collection rule refined in ba089e8 (OD-01)."
+      kind: pattern
+      paths: [src/engine/helpers.rs]
+      commit: "813614b"
+    - summary: "Frontmatter convention: only string-typed fields are piped through yaml_str in scaffolds, examples, fixtures and docs; lists, maps, booleans and numbers stay unfiltered; a test scans doc examples to keep it that way. Doc-scan test added in 820092c."
+      kind: convention
+      paths: [src/scaffold/skill.rs, src/scaffold/project.rs, examples, site/content/docs/templating.md, tests/integration.rs]
+      commit: "c1e901a"
+    - summary: "Engine::render validates rendered SKILL.md frontmatter (leading fence after an optional BOM, closed YAML mapping, string name/description) and fails with EngineError::Frontmatter; build renders every pair and validates manifests before any write. BOM handling added in d0a16de; whitespace-tolerant fences, MiniJinja error detail, skill_filename-aware diagnostics and a bottom-up YAML merge resolver for the name/description check added in 8e94360, 8b50cfa and d63540c."
+      kind: contract_shape
+      paths: [src/engine/frontmatter.rs, src/engine/mod.rs, src/cli.rs]
+      commit: "9e17fc1"
+    - summary: "serde_json added as a direct dependency (1.0.150, previously transitive through minijinja) to parse aggregated manifest JSON before writing; RouterError::ManifestJson naming the skill and harness; each manifest entry is parsed before aggregation; ManifestEntry carries its skill and harness; diff_manifests returns Result. Per-entry parsing and skill naming added in 0118b6e."
+      kind: dependency
+      paths: [Cargo.toml, Cargo.lock, src/router/manifest.rs, src/router/mod.rs]
+      commit: "55f7ecb"
+    - summary: "Built-in JSON manifest templates interpolate every string with | tojson and no surrounding quotes, including skill_ref."
+      kind: convention
+      paths: [src/builtin_harnesses/claude.yaml, src/builtin_harnesses/codex.yaml]
+      commit: "55f7ecb"
+  settled: []

@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use minijinja::Environment;
+use std::fmt::Write;
 
-/// Registers custom Jinja2 helper functions into the rendering environment, and
-/// configures rendering options shared by every render call site.
+use minijinja::value::ValueKind;
+use minijinja::{Environment, Error, ErrorKind, Value};
+
+/// Registers custom Jinja2 helper functions and filters into the rendering environment,
+/// and configures rendering options shared by every render call site.
 ///
 /// `skill_ref_pattern` is the current harness's `skill_ref_pattern` (e.g. `"/{name}"`).
 /// The `skill_ref` helper substitutes `{name}` in that pattern; when the harness has no
@@ -27,6 +30,52 @@ pub fn register_helpers(env: &mut Environment, skill_ref_pattern: Option<&str>) 
     // strip the trailing newline its own source template ended with.
     env.set_keep_trailing_newline(true);
     env.add_function("skill_ref", make_skill_ref(skill_ref_pattern));
+    env.add_filter("yaml_str", yaml_str);
+}
+
+/// Renders undefined and none as the unquoted YAML null scalar `null`.
+/// Strings, numbers, and booleans use `MiniJinja`'s display rules and become
+/// double-quoted YAML strings. Non-scalar values, including sequences and maps,
+/// produce an invalid-operation error; leave list fields unfiltered.
+/// The output is marked safe to prevent a second round of autoescaping.
+fn yaml_str(value: &Value) -> Result<Value, Error> {
+    match value.kind() {
+        ValueKind::Undefined | ValueKind::None => {
+            return Ok(Value::from_safe_string("null".to_string()));
+        }
+        ValueKind::String | ValueKind::Number | ValueKind::Bool => {}
+        _ => {
+            return Err(Error::new(
+                ErrorKind::InvalidOperation,
+                "yaml_str only accepts scalar values; leave list fields unfiltered",
+            ));
+        }
+    }
+    let text = value.to_string();
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            // Escape Unicode line separators to avoid parser-specific line folding,
+            // and the two BMP noncharacters excluded from YAML's printable set.
+            ch if ch.is_control()
+                || matches!(ch, '\u{2028}' | '\u{2029}' | '\u{fffe}' | '\u{ffff}') =>
+            {
+                write!(quoted, "\\u{:04X}", u32::from(ch))
+                    .expect("writing to a String cannot fail");
+            }
+            ch => quoted.push(ch),
+        }
+    }
+    quoted.push('"');
+    // YAML/JSON template filenames enable MiniJinja's automatic JSON escaping.
+    // This scalar is already escaped; suppress a second round of quoting.
+    Ok(Value::from_safe_string(quoted))
 }
 
 /// Placeholder token inside a harness's `skill_ref_pattern` that the helper replaces
@@ -47,6 +96,44 @@ mod tests {
     use crate::types::HELPER_FUNCTIONS;
     use minijinja::Environment;
     use std::collections::BTreeSet;
+
+    #[test]
+    fn yaml_str_rejects_sequences() {
+        let mut env = Environment::new();
+        register_helpers(&mut env, None);
+        env.add_template("t.yaml", "value: {{ value | yaml_str }}\n")
+            .unwrap();
+        let error = env
+            .get_template("t.yaml")
+            .unwrap()
+            .render(minijinja::context! { value => vec!["one", "two"] })
+            .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::InvalidOperation);
+        let message = error.to_string();
+        assert!(message.contains("yaml_str"), "{message}");
+        assert!(message.contains("only accepts scalar values"), "{message}");
+        assert!(
+            message.contains("leave list fields unfiltered"),
+            "{message}"
+        );
+    }
+
+    #[test]
+    fn yaml_str_rejects_maps() {
+        let mut env = Environment::new();
+        register_helpers(&mut env, None);
+        env.add_template("t.yaml", "value: {{ value | yaml_str }}\n")
+            .unwrap();
+        let error = env
+            .get_template("t.yaml")
+            .unwrap()
+            .render(minijinja::context! { value => minijinja::context! { key => "value" } })
+            .unwrap_err();
+        assert_eq!(error.kind(), ErrorKind::InvalidOperation);
+        let message = error.to_string();
+        assert!(message.contains("yaml_str"), "{message}");
+        assert!(message.contains("only accepts scalar values"), "{message}");
+    }
 
     #[test]
     fn skill_ref_uses_default_pattern_when_unset() {

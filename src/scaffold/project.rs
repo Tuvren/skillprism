@@ -109,11 +109,11 @@ mod tests {
             "sample SKILL.md must start with YAML frontmatter, got: {template:?}"
         );
         assert!(
-            template.contains("name: {{ skill_name }}"),
+            template.contains("name: {{ skill_name | yaml_str }}"),
             "template must render skill_name in frontmatter"
         );
         assert!(
-            template.contains("description: {{ skill_description }}"),
+            template.contains("description: {{ skill_description | yaml_str }}"),
             "template must render skill_description in frontmatter"
         );
         assert!(

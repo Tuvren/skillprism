@@ -288,15 +288,15 @@ fn examples_skill_metadata_fields_render_correctly() {
     // aren't meant to be echoed into every rendered body just to prove it.
     let claude_mcp =
         fs::read_to_string(skill_output_path(project_dir, "dist/claude", "mcp-builder")).unwrap();
-    assert!(claude_mcp.contains("license: Apache-2.0"));
-    assert!(claude_mcp.contains("allowed-tools: Read, Write, Bash, WebFetch, WebSearch"));
+    assert!(claude_mcp.contains("license: \"Apache-2.0\""));
+    assert!(claude_mcp.contains("allowed-tools: \"Read, Write, Bash, WebFetch, WebSearch\""));
     assert!(claude_mcp.contains(r#"Trigger phrases: "build an MCP server for X""#));
 
     for (_harness, scope_dir) in &HARNESSES {
         let webapp_content =
             fs::read_to_string(skill_output_path(project_dir, scope_dir, "webapp-testing"))
                 .unwrap();
-        assert!(webapp_content.contains("license: Apache-2.0"));
+        assert!(webapp_content.contains("license: \"Apache-2.0\""));
         assert!(webapp_content.contains(r#"Trigger phrases: "test this web app""#));
     }
 }

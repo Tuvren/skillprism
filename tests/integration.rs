@@ -92,6 +92,136 @@ fn graphical_diagnostics_piped_no_color() {
 }
 
 #[test]
+fn documentation_frontmatter_strings_use_yaml_str() {
+    const NON_STRING_FIELDS: &[&str] = &[
+        "metadata",
+        "arguments",
+        "disable_model_invocation",
+        "user_invocable",
+        "disallowed_tools",
+        "context_fork",
+        "hooks",
+        "activation_paths",
+        "required_capabilities",
+    ];
+
+    for (page, read_error) in [
+        (
+            "site/content/docs/templating.md",
+            "read site/content/docs/templating.md",
+        ),
+        (
+            "site/content/docs/quickstart.md",
+            "read site/content/docs/quickstart.md",
+        ),
+        (
+            "site/content/docs/spec-compliance.md",
+            "read site/content/docs/spec-compliance.md",
+        ),
+        ("examples/README.md", "read examples/README.md"),
+    ] {
+        let content = fs::read_to_string(project_root().join(page)).expect(read_error);
+        let mut lines = content.lines().enumerate();
+        while let Some((_, line)) = lines.next() {
+            let line = line.trim_start();
+            let fence = if line.starts_with("```") {
+                "```"
+            } else if line.starts_with("~~~") {
+                "~~~"
+            } else {
+                continue;
+            };
+            let mut block = lines
+                .by_ref()
+                .take_while(|(_, line)| !line.trim_start().starts_with(fence));
+            let mut in_frontmatter = block.next().is_some_and(|(_, line)| line.trim() == "---");
+            for (line_number, line) in block {
+                if line.trim() == "---" {
+                    in_frontmatter = false;
+                }
+                if !in_frontmatter || line.contains("yaml_str") {
+                    continue;
+                }
+                for expression in line.split("{{").skip(1) {
+                    let name = expression.split(['|', '}']).next().unwrap_or("").trim();
+                    assert!(
+                        NON_STRING_FIELDS.contains(&name),
+                        "{page}:{}: frontmatter string interpolation needs yaml_str: {line}",
+                        line_number + 1
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn validate_accepts_yaml_str_filter() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skills/alpha/SKILL.md.j2"),
+        "---\nname: {{ skill_name | yaml_str }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Validation passed"));
+}
+
+#[test]
+fn scaffolded_skills_preserve_hostile_description_in_frontmatter() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("demo");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo", "-H", "claude"])
+        .assert()
+        .success();
+    bin(tmp.path())
+        .current_dir(&project)
+        .args(["init", "skill", "additional"])
+        .assert()
+        .success();
+
+    let description = "Router: use mode X. Say \"hello\" ok";
+    for name in ["sample", "additional"] {
+        let config_path = project.join(format!("skills/{name}/skill.yaml"));
+        let mut config: yaml_serde::Value =
+            yaml_serde::from_str(&fs::read_to_string(&config_path).unwrap()).unwrap();
+        config["description"] = yaml_serde::Value::String(description.to_string());
+        fs::write(config_path, yaml_serde::to_string(&config).unwrap()).unwrap();
+    }
+
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("build")
+        .assert()
+        .success();
+
+    for name in ["sample", "additional"] {
+        let content =
+            fs::read_to_string(project.join(format!("dist/claude/{name}/SKILL.md"))).unwrap();
+        let (frontmatter, body) = content
+            .strip_prefix("---\n")
+            .unwrap()
+            .split_once("\n---\n")
+            .unwrap();
+        let parsed: yaml_serde::Value = yaml_serde::from_str(frontmatter).unwrap();
+        let config: yaml_serde::Value = yaml_serde::from_str(
+            &fs::read_to_string(project.join(format!("skills/{name}/skill.yaml"))).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(parsed["name"].as_str(), Some(name));
+        assert_eq!(parsed["description"].as_str(), Some(description));
+        assert_eq!(parsed["description"], config["description"]);
+        assert_eq!(body, format!("\n# {name}\n\n{description}\n"));
+    }
+}
+
+#[test]
 fn graphical_diagnostics_source_snippet_when_piped() {
     let tmp = copy_fixture("invalid-unknown-project-field");
     let assertion = bin(tmp.path())
@@ -609,8 +739,8 @@ fn full_build_pipeline() {
         "rendered SKILL.md must start with YAML frontmatter, got: {}",
         &alpha_claude[..alpha_claude.len().min(80)]
     );
-    assert!(alpha_claude.contains("name: alpha"));
-    assert!(alpha_claude.contains("description: First test skill"));
+    assert!(alpha_claude.contains("name: \"alpha\""));
+    assert!(alpha_claude.contains("description: \"First test skill\""));
     assert!(alpha_claude.contains("# alpha"));
     assert!(alpha_claude.contains("Hello from Alpha"));
     assert!(alpha_claude.contains("Theme: dark"));
@@ -623,8 +753,8 @@ fn full_build_pipeline() {
         beta_opencode.starts_with("---\n"),
         "rendered SKILL.md must start with YAML frontmatter"
     );
-    assert!(beta_opencode.contains("name: beta"));
-    assert!(beta_opencode.contains("description: Second test skill"));
+    assert!(beta_opencode.contains("name: \"beta\""));
+    assert!(beta_opencode.contains("description: \"Second test skill\""));
     assert!(beta_opencode.contains("# beta"));
     assert!(beta_opencode.contains("Hello from Beta"));
     assert!(beta_opencode.contains("Message:"));
