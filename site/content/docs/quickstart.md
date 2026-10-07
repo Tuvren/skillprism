@@ -15,7 +15,7 @@ skillprism init project my-skills
 cd my-skills
 ```
 
-Without `-H` (`--harnesses`), a terminal session prompts for target harnesses. When no prompt is shown, `-H` defaults to `claude`, `opencode`. Pass `-H codex`, for example, to choose other harnesses.
+Without `-H` (`--harnesses`), the prompt appears only when stdin and stdout are both a terminal. Otherwise, the command uses the default harnesses: `claude`, `opencode`. Pass `-H codex`, for example, to choose other harnesses.
 
 The command creates:
 

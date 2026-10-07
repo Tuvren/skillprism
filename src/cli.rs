@@ -186,11 +186,10 @@ enum InitKind {
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
 
-        /// Comma-separated list of harness IDs
         #[arg(
             short = 'H',
             long = "harnesses",
-            help = format!("Comma-separated list of harness IDs (default: {DEFAULT_PROJECT_HARNESSES} when no prompt is shown)")
+            help = format!("Comma-separated list of harness IDs (default when no prompt is shown: {DEFAULT_PROJECT_HARNESSES})")
         )]
         harnesses: Option<String>,
     },
@@ -736,9 +735,17 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
             harnesses,
         } => {
             let dir = out.map_or_else(|| PathBuf::from(&name), PathBuf::from);
+            if dir.join("skillprism.yaml").exists() {
+                return Err(CommandError::Usage(miette::miette!(
+                    "The project already exists at `{}`.",
+                    dir.display()
+                )));
+            }
+
+            let harnesses_omitted = harnesses.is_none();
             let mut selected = parse_harness_list(harnesses);
 
-            if selected.is_empty() {
+            if harnesses_omitted {
                 if is_interactive_terminal() {
                     let registry = HarnessRegistry::with_builtins();
                     let available_ids = registry.all_ids();
@@ -749,11 +756,6 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
                         .into_diagnostic()
                         .map_err(CommandError::Runtime)?;
 
-                    if selections.is_empty() {
-                        return Err(CommandError::Usage(miette::miette!(
-                            "No harnesses selected. At least one target harness must be selected for project initialization."
-                        )));
-                    }
                     selected = selections
                         .into_iter()
                         .map(|i| available_ids[i].clone())
@@ -764,6 +766,12 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
                         "Using default harnesses: {DEFAULT_PROJECT_HARNESSES}. Choose others with -H <harnesses>."
                     );
                 }
+            }
+
+            if selected.is_empty() {
+                return Err(CommandError::Usage(miette::miette!(
+                    "No harnesses selected. At least one target harness must be selected for project initialization."
+                )));
             }
 
             crate::scaffold::project::scaffold_project(&dir, &name, &selected)
@@ -1097,6 +1105,17 @@ mod tests {
     }
 
     #[test]
+    fn default_project_harnesses_are_builtins() {
+        let registry = HarnessRegistry::with_builtins();
+        for id in DEFAULT_PROJECT_HARNESSES.split(',').map(str::trim) {
+            assert!(
+                registry.resolve(id).is_ok(),
+                "default project harness `{id}` must be built in"
+            );
+        }
+    }
+
+    #[test]
     fn init_project_help_states_default_when_no_prompt_is_shown() {
         let help = Cli::try_parse_from(["skillprism", "init", "project", "--help"])
             .err()
@@ -1107,7 +1126,8 @@ mod tests {
             .lines()
             .find(|line| line.contains("-H, --harnesses"))
             .unwrap();
-        assert!(harness_line.contains("default: claude, opencode"));
-        assert!(harness_line.contains("when no prompt is shown"));
+        assert!(harness_line.contains(&format!(
+            "Comma-separated list of harness IDs (default when no prompt is shown: {DEFAULT_PROJECT_HARNESSES})"
+        )));
     }
 }
