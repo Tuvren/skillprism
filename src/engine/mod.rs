@@ -241,6 +241,126 @@ mod tests {
     }
 
     #[test]
+    fn yaml_str_descriptions_round_trip_through_frontmatter() {
+        let values = [
+            "Router: use mode X. See also: reference docs. Say \"hello\" and use the gh CLI.",
+            "it's a 'quoted' value",
+            "back\\slash and a # hash",
+            "- starts with a dash",
+            "line one\nline two",
+            "\tcontrol\0\u{7}\u{8}\u{b}\u{c}\r\u{1b}\u{1f}\u{7f}\u{80}\u{85}\u{9f}",
+            "unicode\u{2028}line\u{2029}paragraph\u{fffe}\u{ffff}",
+            "Yáñez 日本語 🦀",
+            "",
+            "  leading and trailing whitespace  ",
+            "true",
+            "null",
+            "123",
+            "# comment",
+            "!tag",
+            "&anchor",
+            "*alias",
+            "[sequence]",
+            "{mapping: value}",
+            "---\nname: injected\n...",
+        ];
+        let registry = HarnessRegistry::with_builtins();
+        for value in values {
+            let (_dir, mut skill) = create_skill_with_template(
+                "yaml-scalar",
+                "---\nname: {{ skill_name }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n",
+                BTreeMap::new(),
+            );
+            skill.description = value.to_string();
+            let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+            let output = Engine::render(&pair).unwrap();
+            let frontmatter = output
+                .skill_content
+                .strip_prefix("---\n")
+                .unwrap()
+                .split_once("\n---\n")
+                .unwrap()
+                .0;
+            assert!(frontmatter.contains("description: \""), "{value:?}");
+            let parsed: yaml_serde::Value = yaml_serde::from_str(frontmatter).unwrap();
+            assert_eq!(parsed["description"].as_str(), Some(value), "{value:?}");
+        }
+    }
+
+    #[test]
+    fn yaml_str_stringifies_non_string_scalars() {
+        let cases = [
+            (yaml_serde::Value::Bool(true), "true"),
+            (yaml_serde::Value::Bool(false), "false"),
+            (yaml_serde::Value::Number(42.into()), "42"),
+            (yaml_serde::Value::Number((-7).into()), "-7"),
+            (yaml_serde::Value::Number(1.5.into()), "1.5"),
+            (yaml_serde::Value::Null, "none"),
+        ];
+        let registry = HarnessRegistry::with_builtins();
+        for (value, expected) in cases {
+            let (_dir, skill) = create_skill_with_template(
+                "yaml-scalar",
+                "value: {{ value | yaml_str }}\n",
+                BTreeMap::from([("value".to_string(), value)]),
+            );
+            let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+            let output = Engine::render(&pair).unwrap();
+            assert_eq!(output.skill_content, format!("value: \"{expected}\"\n"));
+            let parsed: yaml_serde::Value = yaml_serde::from_str(&output.skill_content).unwrap();
+            assert_eq!(parsed["value"].as_str(), Some(expected));
+        }
+    }
+
+    #[test]
+    fn yaml_str_is_available_in_sidecars_and_manifests() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, mut skill) =
+            create_skill_with_template("yaml-scalar", "Body\n", BTreeMap::new());
+        skill.description = "Router: say \"hello\"\nback\\slash".to_string();
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let template = "description: {{ skill_description | yaml_str }}\n";
+        pair.harness.sidecars = vec![crate::registry::SidecarDef {
+            filename: "config.yaml".to_string(),
+            template: template.to_string(),
+            output_dir: None,
+        }];
+        pair.harness.manifest = Some(ManifestDef {
+            template: "{\"description\": {{ skill_description | yaml_str }}}\n".to_string(),
+        });
+        let output = Engine::render(&pair).unwrap();
+        assert_eq!(output.sidecars.len(), 1);
+        let manifest = Engine::render_manifest_entry(&pair).unwrap().unwrap();
+        for content in [&output.sidecars[0].content, &manifest] {
+            let parsed: yaml_serde::Value = yaml_serde::from_str(content).unwrap();
+            assert_eq!(
+                parsed["description"].as_str(),
+                Some(skill.description.as_str())
+            );
+        }
+    }
+
+    #[test]
+    fn unfiltered_interpolation_remains_unescaped() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, mut skill) = create_skill_with_template(
+            "raw-description",
+            "---\ndescription: \"{{ skill_description }}\"\n---\n{{ skill_description }}\n",
+            BTreeMap::new(),
+        );
+        skill.description = "Router: \"hello\" & <world>".to_string();
+        let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = Engine::render(&pair).unwrap();
+        assert_eq!(
+            output.skill_content,
+            format!(
+                "---\ndescription: \"{}\"\n---\n{}\n",
+                skill.description, skill.description
+            )
+        );
+    }
+
+    #[test]
     fn renders_with_variable_substitution() {
         let mut vars = BTreeMap::new();
         vars.insert(

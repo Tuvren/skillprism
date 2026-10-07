@@ -12,10 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use minijinja::Environment;
+use std::fmt::Write;
 
-/// Registers custom Jinja2 helper functions into the rendering environment, and
-/// configures rendering options shared by every render call site.
+use minijinja::{Environment, Value};
+
+/// Registers custom Jinja2 helper functions and filters into the rendering environment,
+/// and configures rendering options shared by every render call site.
 ///
 /// `skill_ref_pattern` is the current harness's `skill_ref_pattern` (e.g. `"/{name}"`).
 /// The `skill_ref` helper substitutes `{name}` in that pattern; when the harness has no
@@ -27,6 +29,36 @@ pub fn register_helpers(env: &mut Environment, skill_ref_pattern: Option<&str>) 
     // strip the trailing newline its own source template ended with.
     env.set_keep_trailing_newline(true);
     env.add_function("skill_ref", make_skill_ref(skill_ref_pattern));
+    env.add_filter("yaml_str", yaml_str);
+}
+
+/// Stringifies a value using `MiniJinja`'s display rules and double-quotes it as a YAML scalar.
+fn yaml_str(value: &Value) -> Value {
+    let text = value.to_string();
+    let mut quoted = String::with_capacity(text.len() + 2);
+    quoted.push('"');
+    for ch in text.chars() {
+        match ch {
+            '"' => quoted.push_str("\\\""),
+            '\\' => quoted.push_str("\\\\"),
+            '\n' => quoted.push_str("\\n"),
+            '\r' => quoted.push_str("\\r"),
+            '\t' => quoted.push_str("\\t"),
+            // Escape Unicode line separators to avoid parser-specific line folding,
+            // and the two BMP noncharacters excluded from YAML's printable set.
+            ch if ch.is_control()
+                || matches!(ch, '\u{2028}' | '\u{2029}' | '\u{fffe}' | '\u{ffff}') =>
+            {
+                write!(quoted, "\\u{:04X}", u32::from(ch))
+                    .expect("writing to a String cannot fail");
+            }
+            ch => quoted.push(ch),
+        }
+    }
+    quoted.push('"');
+    // YAML/JSON template filenames enable MiniJinja's automatic JSON escaping.
+    // This scalar is already escaped; suppress a second round of quoting.
+    Value::from_safe_string(quoted)
 }
 
 /// Placeholder token inside a harness's `skill_ref_pattern` that the helper replaces

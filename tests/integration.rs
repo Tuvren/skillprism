@@ -92,6 +92,22 @@ fn graphical_diagnostics_piped_no_color() {
 }
 
 #[test]
+fn validate_accepts_yaml_str_filter() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skills/alpha/SKILL.md.j2"),
+        "---\nname: {{ skill_name }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .success()
+        .stdout(predicate::str::contains("Validation passed"));
+}
+
+#[test]
 fn graphical_diagnostics_source_snippet_when_piped() {
     let tmp = copy_fixture("invalid-unknown-project-field");
     let assertion = bin(tmp.path())
