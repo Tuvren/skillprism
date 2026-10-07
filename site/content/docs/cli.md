@@ -76,7 +76,7 @@ Creates a new project directory with `skillprism.yaml`, a sample skill, `.gitign
 | Flag | Description |
 |------|-------------|
 | `--out <dir>` | Output directory (default: `./<name>`) |
-| `-H, --harnesses <list>` | Comma-separated harness IDs (default: `claude,opencode`) |
+| `-H, --harnesses <list>` | Comma-separated harness IDs (default: `claude`, `opencode` when no prompt is shown). Without this flag, a terminal session prompts for harnesses instead. |
 
 ### init skill
 

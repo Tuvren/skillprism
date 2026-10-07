@@ -214,7 +214,7 @@ skillprism update [<skills>...] [--target project|user] [-H <harnesses>] [--diff
 
 ### Init flags
 
-- `init project <name>`: Scaffold a new project (`--out` for output dir, `-H`/`--harnesses` for comma-separated harness list; default: `claude,opencode`)
+- `init project <name>`: Scaffold a new project (`--out` for output dir, `-H`/`--harnesses` for comma-separated harness list). When no prompt is shown, `-H` defaults to `claude`, `opencode`. Without `-H`, a terminal session prompts for harnesses instead.
 - `init skill <name>`: Scaffold a new skill into an existing project
 - `init harness <name>`: Scaffold a custom harness definition in `harnesses/`
 

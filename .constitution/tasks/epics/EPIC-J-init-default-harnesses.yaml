@@ -59,7 +59,7 @@ tickets:
         No live_probe: guidelines declare no init-project recipe, and this plan must not invent one. The gap is routed to Stage 3 (specifying-technical-implementation). The behavior proof is the automated tests.
     flows: []
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-J002
     title: Align CLI docs, quickstart, README, and CHANGELOG with the non-interactive default
     type: Chore
@@ -92,4 +92,4 @@ tickets:
             Then the Unreleased section has a Fixed entry for the init project default referencing #33
     flows: []
     certainty: settled
-    status: planned
+    status: done

@@ -29,6 +29,8 @@ use crate::resolver::HarnessResolver;
 use crate::router::{ManifestEntry, Router};
 use crate::validator::Validator;
 
+const DEFAULT_PROJECT_HARNESSES: &str = "claude, opencode";
+
 #[derive(Parser)]
 #[command(name = "skillprism", version, about)]
 struct Cli {
@@ -184,8 +186,12 @@ enum InitKind {
         #[arg(short = 'o', long = "out")]
         out: Option<String>,
 
-        /// Comma-separated list of harness IDs (default: claude, opencode)
-        #[arg(short = 'H', long = "harnesses")]
+        /// Comma-separated list of harness IDs
+        #[arg(
+            short = 'H',
+            long = "harnesses",
+            help = format!("Comma-separated list of harness IDs (default: {DEFAULT_PROJECT_HARNESSES} when no prompt is shown)")
+        )]
         harnesses: Option<String>,
     },
     /// Scaffold a single skill into an existing project
@@ -753,9 +759,10 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
                         .map(|i| available_ids[i].clone())
                         .collect();
                 } else {
-                    return Err(CommandError::Usage(miette::miette!(
-                        "`--harnesses` (`-H`) is required in non-interactive mode. Pass at least one harness name (e.g. `-H claude`)."
-                    )));
+                    selected = parse_harness_list(Some(DEFAULT_PROJECT_HARNESSES.to_string()));
+                    eprintln!(
+                        "Using default harnesses: {DEFAULT_PROJECT_HARNESSES}. Choose others with -H <harnesses>."
+                    );
                 }
             }
 
@@ -1048,7 +1055,7 @@ mod tests {
     }
 
     #[test]
-    fn run_init_project_non_tty_without_harnesses_fails_with_usage_error() {
+    fn run_init_project_non_tty_without_harnesses_applies_default() {
         let tmp = tempfile::TempDir::new().unwrap();
         let dir = tmp.path().join("my-project");
 
@@ -1060,13 +1067,11 @@ mod tests {
 
         // Standard cargo test runner execution is non-interactive (non-TTY)
         let res = run_init(kind);
-        assert!(res.is_err());
-        match res.unwrap_err() {
-            CommandError::Usage(report) => {
-                assert!(report.to_string().contains("`-H`"));
-            }
-            CommandError::Runtime(e) => panic!("expected CommandError::Usage, got {e:?}"),
-        }
+        assert!(res.is_ok(), "init project failed: {res:?}");
+        let config: crate::types::ProjectConfig =
+            yaml_serde::from_str(&std::fs::read_to_string(dir.join("skillprism.yaml")).unwrap())
+                .unwrap();
+        assert_eq!(config.harnesses, ["claude", "opencode"]);
     }
 
     #[test]
@@ -1077,7 +1082,7 @@ mod tests {
         let kind = InitKind::Project {
             name: "my-project".to_string(),
             out: Some(dir.to_string_lossy().to_string()),
-            harnesses: Some("claude,opencode".to_string()),
+            harnesses: Some("codex".to_string()),
         };
 
         let res = run_init(kind);
@@ -1085,5 +1090,24 @@ mod tests {
         assert!(dir.join("skillprism.yaml").exists());
         assert!(!dir.join("harnesses").exists());
         assert!(dir.join("skills/sample/skill.yaml").exists());
+        let config: crate::types::ProjectConfig =
+            yaml_serde::from_str(&std::fs::read_to_string(dir.join("skillprism.yaml")).unwrap())
+                .unwrap();
+        assert_eq!(config.harnesses, ["codex"]);
+    }
+
+    #[test]
+    fn init_project_help_states_default_when_no_prompt_is_shown() {
+        let help = Cli::try_parse_from(["skillprism", "init", "project", "--help"])
+            .err()
+            .unwrap();
+        assert_eq!(help.kind(), clap::error::ErrorKind::DisplayHelp);
+        let help = help.to_string();
+        let harness_line = help
+            .lines()
+            .find(|line| line.contains("-H, --harnesses"))
+            .unwrap();
+        assert!(harness_line.contains("default: claude, opencode"));
+        assert!(harness_line.contains("when no prompt is shown"));
     }
 }

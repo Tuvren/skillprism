@@ -59,6 +59,51 @@ fn bin(home: &Path) -> Command {
 }
 
 #[test]
+fn init_project_non_tty_without_harnesses_applies_default() {
+    let tmp = TempDir::new().unwrap();
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo"])
+        .write_stdin("")
+        .assert()
+        .success();
+
+    let config: yaml_serde::Value =
+        yaml_serde::from_str(&fs::read_to_string(tmp.path().join("demo/skillprism.yaml")).unwrap())
+            .unwrap();
+    assert_eq!(
+        config["harnesses"],
+        yaml_serde::to_value(["claude", "opencode"]).unwrap()
+    );
+
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    assert_eq!(stderr.lines().count(), 1);
+    assert!(stderr.contains("default"));
+    assert!(stderr.contains("claude, opencode"));
+    assert!(stderr.contains("-H"));
+}
+
+#[test]
+fn init_project_non_tty_explicit_harnesses_override_default() {
+    let tmp = TempDir::new().unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "demo", "-H", "codex"])
+        .write_stdin("")
+        .assert()
+        .success()
+        .stderr("");
+
+    let config: yaml_serde::Value =
+        yaml_serde::from_str(&fs::read_to_string(tmp.path().join("demo/skillprism.yaml")).unwrap())
+            .unwrap();
+    assert_eq!(
+        config["harnesses"],
+        yaml_serde::to_value(["codex"]).unwrap()
+    );
+}
+
+#[test]
 fn full_build_pipeline() {
     let tmp = copy_fixture("valid");
     let project_dir = tmp.path().to_path_buf();
