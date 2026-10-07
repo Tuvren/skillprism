@@ -15,7 +15,7 @@
       "description": "Human-readable display name (e.g., Claude Code, Codex CLI)"
     },
     "version": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Optional version string of this harness definition. The loader accepts any string."
     },
     "capabilities": {
@@ -85,11 +85,11 @@
           "description": "Filename for the rendered skill file (e.g., SKILL.md)"
         },
         "manifest_scope_path": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "Directory for manifest output (e.g., .claude). Omit if the harness has no manifest system."
         },
         "manifest_filename": {
-          "type": "string",
+          "type": ["string", "null"],
           "description": "Filename for the manifest file (e.g., plugin.json). Omit if the harness has no manifest system."
         }
       },
@@ -121,7 +121,7 @@
           "filename": { "type": "string", "description": "Filename for the sidecar output" },
           "template": { "type": "string", "description": "Jinja2 template for the sidecar content" },
           "output_dir": {
-            "type": "string",
+            "type": ["string", "null"],
             "description": "Optional subdirectory within the skill output directory"
           }
         },
@@ -130,7 +130,7 @@
       }
     },
     "manifest": {
-      "type": "object",
+      "type": ["object", "null"],
       "description": "Optional manifest definition. The loader reads only the template string.",
       "properties": {
         "template": {
@@ -142,7 +142,7 @@
       "additionalProperties": false
     },
     "skill_ref_pattern": {
-      "type": "string",
+      "type": ["string", "null"],
       "description": "Pattern for referencing skills in this harness (e.g., /{name}). {name} is replaced at runtime."
     }
   },

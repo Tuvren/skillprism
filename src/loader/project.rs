@@ -463,6 +463,47 @@ mod tests {
         }
     }
 
+    #[test]
+    fn skill_schema_field_coverage() {
+        use crate::types::schema_contract::assert_struct_contract;
+        use serde_json::json;
+
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../schemas/skill-schema.json")).unwrap();
+        let sample = json!({
+            "skillprism": "1", "name": "demo", "description": "Example", "version": "1",
+            "license": "Apache-2.0", "compatibility": "skillprism", "metadata": {"author": "example"},
+            "allowed-tools": "Read", "when_to_use": "Example", "argument-hint": "[file]",
+            "arguments": ["file"], "disable-model-invocation": false, "user-invocable": true,
+            "disallowed-tools": ["Write"], "model": "default", "effort": "low", "context": "fork",
+            "agent": "example", "hooks": {}, "paths": ["*.rs"], "shell": "zsh",
+            "required-capabilities": ["subagent"], "variables": {}, "overrides": {}
+        });
+        // This calls the real parser so the pre-deserialization version rule is
+        // included, even though SkillYamlRaw.skillprism is an Option in serde.
+        assert_struct_contract::<SkillYamlRaw>(&schema, &sample, |value| {
+            parse_skill_config(
+                &yaml_serde::to_string(value).unwrap(),
+                Path::new("skill.yaml"),
+            )
+            .is_ok()
+        });
+    }
+
+    #[test]
+    fn harness_override_schema_field_coverage() {
+        use crate::types::schema_contract::{assert_struct_contract, serde_accepts};
+        use serde_json::json;
+
+        let schema: serde_json::Value =
+            serde_json::from_str(include_str!("../../schemas/skill-schema.json")).unwrap();
+        assert_struct_contract::<HarnessOverrideRaw>(
+            &schema["properties"]["overrides"]["additionalProperties"],
+            &json!({"variables": {}, "macros": {}}),
+            serde_accepts::<HarnessOverrideRaw>,
+        );
+    }
+
     fn setup_test_dir() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()
     }
