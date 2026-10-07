@@ -15,8 +15,11 @@
 //! `skillprism remove` command implementation.
 
 use std::borrow::Cow;
+use std::collections::HashSet;
 use std::io::{self, IsTerminal, Write};
 use std::path::{Path, PathBuf};
+
+use crate::registry::HarnessRegistry;
 
 use miette::IntoDiagnostic;
 
@@ -90,9 +93,7 @@ pub fn run_remove(
     }
 
     for (skill, harnesses_to_remove) in &removals {
-        for harness_id in harnesses_to_remove {
-            remove_skill_files(skill, harness_id)?;
-        }
+        remove_skill_files(skill, harnesses_to_remove)?;
     }
 
     apply_removals_to_state(&mut store, removals)?;
@@ -240,30 +241,62 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
     Ok(())
 }
 
-fn remove_skill_files(skill: &InstalledSkill, harness_id: &str) -> Result<(), CommandError> {
-    let registry =
-        super::install::build_registry_for_harnesses(project_root_for_registry(skill).as_deref())
-            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+fn remove_skill_files(skill: &InstalledSkill, harness_ids: &[String]) -> Result<(), CommandError> {
+    let registry = load_registry(skill)?;
+    let kept_dirs = kept_output_dirs(skill, harness_ids, &registry)?;
+    let mut removed = HashSet::new();
+    for harness_id in harness_ids {
+        let dir = output_dir(skill, harness_id, &registry)?;
+        // Codex, OpenCode, Factory, and Pi share one project skill directory.
+        // Leave it in place while any harness that is still installed resolves there.
+        if kept_dirs.contains(&dir) || !removed.insert(dir.clone()) {
+            continue;
+        }
+        if dir.exists() {
+            std::fs::remove_dir_all(&dir)
+                .into_diagnostic()
+                .map_err(CommandError::Runtime)?;
+        }
+    }
+    Ok(())
+}
+
+fn load_registry(skill: &InstalledSkill) -> Result<HarnessRegistry, CommandError> {
+    super::install::build_registry_for_harnesses(project_root_for_registry(skill).as_deref())
+        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))
+}
+
+fn output_dir(
+    skill: &InstalledSkill,
+    harness_id: &str,
+    registry: &HarnessRegistry,
+) -> Result<PathBuf, CommandError> {
     let harness = registry
         .resolve(harness_id)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
     let target = install_scope_to_target(skill.scope);
     let root = resolve_removal_root(skill)?;
-
     let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &skill.name, target)
         .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    let skill_dir = skill_path
+    Ok(skill_path
         .parent()
         .expect("skill path should have a parent directory")
-        .to_path_buf();
+        .to_path_buf())
+}
 
-    if skill_dir.exists() {
-        std::fs::remove_dir_all(&skill_dir)
-            .into_diagnostic()
-            .map_err(CommandError::Runtime)?;
+fn kept_output_dirs(
+    skill: &InstalledSkill,
+    removing: &[String],
+    registry: &HarnessRegistry,
+) -> Result<HashSet<PathBuf>, CommandError> {
+    let mut dirs = HashSet::new();
+    for harness_id in &skill.harnesses {
+        if removing.contains(harness_id) {
+            continue;
+        }
+        dirs.insert(output_dir(skill, harness_id, registry)?);
     }
-
-    Ok(())
+    Ok(dirs)
 }
 
 fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, CommandError> {
@@ -304,41 +337,23 @@ fn apply_removals_to_state(
             continue;
         }
 
+        let registry = load_registry(&skill)?;
+        let kept_dirs = kept_output_dirs(&skill, &harnesses_to_remove, &registry)?;
         let mut record = skill;
         for harness_id in &harnesses_to_remove {
-            remove_harness_files_from_record(&mut record, harness_id)?;
+            let skill_dir = output_dir(&record, harness_id, &registry)?;
+            if kept_dirs.contains(&skill_dir) {
+                continue;
+            }
+            record
+                .files
+                .retain(|f| !Path::new(&f.path).starts_with(&skill_dir));
         }
         record
             .harnesses
             .retain(|h| !harnesses_to_remove.contains(h));
         store.upsert(record);
     }
-    Ok(())
-}
-
-fn remove_harness_files_from_record(
-    record: &mut InstalledSkill,
-    harness_id: &str,
-) -> Result<(), CommandError> {
-    let registry =
-        super::install::build_registry_for_harnesses(project_root_for_registry(record).as_deref())
-            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    let harness = registry
-        .resolve(harness_id)
-        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    let target = install_scope_to_target(record.scope);
-    let root = resolve_removal_root(record)?;
-
-    let skill_path = router::resolve_skill_path(root.as_ref(), &harness, &record.name, target)
-        .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
-    let skill_dir = skill_path
-        .parent()
-        .expect("skill path should have a parent directory")
-        .to_path_buf();
-
-    record
-        .files
-        .retain(|f| !Path::new(&f.path).starts_with(&skill_dir));
     Ok(())
 }
 
@@ -487,5 +502,63 @@ mod tests {
         assert_eq!(updated.harnesses, vec!["opencode"]);
         assert_eq!(updated.files.len(), 1);
         assert!(updated.files[0].path.contains(".agents"));
+    }
+
+    #[test]
+    fn filtered_removal_keeps_files_owned_by_another_shared_harness() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let shared = root.join(".agents/skills/plain-skill/SKILL.md");
+        std::fs::create_dir_all(shared.parent().unwrap()).unwrap();
+        std::fs::write(&shared, b"shared").unwrap();
+
+        let skill = InstalledSkill {
+            name: "plain-skill".to_string(),
+            source: "owner/plain-skill".to_string(),
+            source_url: "https://github.com/owner/plain-skill.git".to_string(),
+            source_type: SourceType::GitHub,
+            r#ref: Some("main".to_string()),
+            resolved_ref: None,
+            skill_path: None,
+            project_root: Some(root.to_string_lossy().to_string()),
+            scope: InstallScope::Project,
+            harnesses: vec!["codex".to_string(), "opencode".to_string()],
+            format: SkillFormat::Plain,
+            installed_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            files: vec![InstalledFile {
+                path: shared.to_string_lossy().to_string(),
+                hash: "sha256:shared".to_string(),
+            }],
+        };
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            shared.exists(),
+            "removing opencode must keep the skill file codex still owns"
+        );
+
+        let state_dir = tmp.path().join("state");
+        let mut store = StateStore::open_at(&state_dir).unwrap();
+        store.upsert(skill);
+        let action = (store.skills()[0].clone(), vec!["opencode".to_string()]);
+        apply_removals_to_state(&mut store, vec![action]).unwrap();
+
+        assert_eq!(store.skills().len(), 1);
+        assert_eq!(store.skills()[0].harnesses, vec!["codex"]);
+        assert!(
+            store.skills()[0]
+                .files
+                .iter()
+                .any(|file| file.path.ends_with("SKILL.md"))
+        );
+        assert!(shared.exists());
+
+        let remaining = store.skills()[0].clone();
+        remove_skill_files(&remaining, &["codex".to_string()]).unwrap();
+        assert!(
+            !shared.exists(),
+            "the shared directory is removed once no installed harness owns it"
+        );
     }
 }

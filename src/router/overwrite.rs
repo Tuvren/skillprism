@@ -12,9 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+use std::collections::BTreeMap;
 #[allow(unused_imports)]
 use std::io::{self, IsTerminal, Write};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 /// User response to an overwrite prompt.
 #[allow(dead_code)]
@@ -112,6 +113,77 @@ pub fn resolve_overwrite(
         None => Err(RouterError::NonInteractiveOverwrite {
             path: path.to_string_lossy().to_string(),
         }),
+    }
+}
+
+/// How to treat one file while several harnesses write during a single command.
+#[derive(Debug, PartialEq, Eq)]
+pub enum SharedWrite {
+    /// The caller should write `content` and then [`WriteSession::record`] it.
+    Write,
+    /// This command already wrote identical bytes to the path.
+    Deduped,
+    /// The user declined to replace a file that already existed.
+    Skipped,
+}
+
+/// Bytes already written by the current install or update command.
+///
+/// A later harness that targets one of these paths with the same bytes is not an
+/// overwrite. Different bytes are a collision. Files that existed before the
+/// command are not recorded here, so they still require `--force`.
+#[derive(Debug, Default)]
+pub struct WriteSession {
+    written: BTreeMap<PathBuf, Vec<u8>>,
+}
+
+impl WriteSession {
+    /// Decides whether `content` should be written to `path`.
+    ///
+    /// `yes` skips prompts and refuses files that were not created by this
+    /// session. `--force` still replaces those pre-existing files.
+    // reason: overwrite policy is force/yes/skip/overwrite-all plus the session;
+    // packing them into another struct would hide the call-site flags.
+    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+    pub fn resolve(
+        &self,
+        path: &Path,
+        content: &[u8],
+        force: bool,
+        yes: bool,
+        skip_all: &mut bool,
+        overwrite_all: &mut bool,
+        skipped: &mut Vec<String>,
+        conflict_label: &str,
+    ) -> Result<SharedWrite, RouterError> {
+        if let Some(previous) = self.written.get(path) {
+            if previous.as_slice() == content {
+                return Ok(SharedWrite::Deduped);
+            }
+            return Err(RouterError::PathCollision {
+                path: path.to_string_lossy().to_string(),
+                colliding_skills: format!(
+                    "{conflict_label} conflicts with an earlier write in this install"
+                ),
+            });
+        }
+        // `--yes` means "do not prompt", not "overwrite". A file that already
+        // existed before this command is still refused unless `--force` is set.
+        if yes && !force && path.exists() {
+            return Err(RouterError::NonInteractiveOverwrite {
+                path: path.to_string_lossy().to_string(),
+            });
+        }
+        if resolve_overwrite(path, force, skip_all, overwrite_all, skipped)? {
+            Ok(SharedWrite::Write)
+        } else {
+            Ok(SharedWrite::Skipped)
+        }
+    }
+
+    /// Records bytes this command has successfully written.
+    pub fn record(&mut self, path: PathBuf, content: Vec<u8>) {
+        self.written.insert(path, content);
     }
 }
 
@@ -213,5 +285,86 @@ mod tests {
         .unwrap_err();
 
         assert!(matches!(err, RouterError::NonInteractiveOverwrite { .. }));
+    }
+
+    #[test]
+    fn session_dedups_identical_bytes_and_rejects_different_bytes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("SKILL.md");
+        let mut session = WriteSession::default();
+        let mut skip_all = false;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        let action = session
+            .resolve(
+                &file,
+                b"same",
+                false,
+                true,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped,
+                "demo → codex",
+            )
+            .unwrap();
+        assert_eq!(action, SharedWrite::Write);
+        fs::write(&file, b"same").unwrap();
+        session.record(file.clone(), b"same".to_vec());
+
+        let again = session
+            .resolve(
+                &file,
+                b"same",
+                false,
+                true,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped,
+                "demo → opencode",
+            )
+            .unwrap();
+        assert_eq!(again, SharedWrite::Deduped);
+
+        let err = session
+            .resolve(
+                &file,
+                b"different",
+                false,
+                true,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped,
+                "demo → factory",
+            )
+            .unwrap_err();
+        assert!(matches!(err, RouterError::PathCollision { .. }));
+        assert_eq!(fs::read(&file).unwrap(), b"same");
+    }
+
+    #[test]
+    fn yes_refuses_file_that_existed_before_the_session() {
+        let tmp = tempfile::tempdir().unwrap();
+        let file = tmp.path().join("SKILL.md");
+        fs::write(&file, b"user-owned").unwrap();
+        let session = WriteSession::default();
+        let mut skip_all = false;
+        let mut overwrite_all = false;
+        let mut skipped = Vec::new();
+
+        let err = session
+            .resolve(
+                &file,
+                b"incoming",
+                false,
+                true,
+                &mut skip_all,
+                &mut overwrite_all,
+                &mut skipped,
+                "demo → codex",
+            )
+            .unwrap_err();
+        assert!(matches!(err, RouterError::NonInteractiveOverwrite { .. }));
+        assert_eq!(fs::read(&file).unwrap(), b"user-owned");
     }
 }

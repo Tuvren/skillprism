@@ -111,6 +111,9 @@ pub fn run_add(
         return Ok(());
     }
 
+    // `--yes` skips selection prompts only. It is not `--force`: files that
+    // already existed are still refused, while identical shared writes inside
+    // this command are deduplicated by the installer.
     let ctx = InstallContext {
         source_input: source,
         parsed,
@@ -118,6 +121,7 @@ pub fn run_add(
         harnesses: selected_harnesses,
         project_root,
         force,
+        yes,
         skill_filter,
     };
 

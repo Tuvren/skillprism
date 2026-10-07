@@ -27,7 +27,7 @@ use thiserror::Error;
 use crate::engine::HarnessOutput;
 use crate::resolver::ResolvedPair;
 
-pub use overwrite::resolve_overwrite;
+pub use overwrite::{SharedWrite, WriteSession, resolve_overwrite};
 pub use paths::*;
 pub use write::*;
 
@@ -228,6 +228,37 @@ impl Router {
         skip_all: &mut bool,
         overwrite_all: &mut bool,
     ) -> Result<WriteResult, RouterError> {
+        let mut session = WriteSession::default();
+        Self::write_with_session(
+            pair,
+            output,
+            project_root,
+            target,
+            force,
+            false,
+            skip_all,
+            overwrite_all,
+            &mut session,
+        )
+    }
+
+    /// Writes one harness, deduplicating paths already written into `session`.
+    ///
+    /// `yes` refuses files that existed before this command instead of prompting.
+    /// It does not overwrite them; pass `force` for that.
+    // reason: adds the `--yes` flag and the shared-write session on top of `write`.
+    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+    pub fn write_with_session(
+        pair: &ResolvedPair,
+        output: &HarnessOutput,
+        project_root: &Path,
+        target: TargetScope,
+        force: bool,
+        yes: bool,
+        skip_all: &mut bool,
+        overwrite_all: &mut bool,
+        session: &mut WriteSession,
+    ) -> Result<WriteResult, RouterError> {
         let skill_name = &pair.skill.name;
         let harness_id = &pair.harness.id;
 
@@ -238,20 +269,32 @@ impl Router {
             .to_path_buf();
 
         let mut skipped = Vec::new();
-
-        if overwrite::resolve_overwrite(&skill_path, force, skip_all, overwrite_all, &mut skipped)?
-        {
-            atomic_write(&skill_path, &output.skill_content).map_err(|e| {
-                RouterError::WriteError {
-                    skill: skill_name.clone(),
-                    harness: harness_id.clone(),
-                    path: skill_path.to_string_lossy().to_string(),
-                    detail: e.to_string(),
-                }
-            })?;
-        }
-
-        let skill_was_skipped = skipped.contains(&skill_path.to_string_lossy().to_string());
+        let action = session.resolve(
+            &skill_path,
+            output.skill_content.as_bytes(),
+            force,
+            yes,
+            skip_all,
+            overwrite_all,
+            &mut skipped,
+            &format!("{skill_name} \u{2192} {harness_id}"),
+        )?;
+        let wrote_skill = match action {
+            SharedWrite::Write => {
+                atomic_write(&skill_path, &output.skill_content).map_err(|e| {
+                    RouterError::WriteError {
+                        skill: skill_name.clone(),
+                        harness: harness_id.clone(),
+                        path: skill_path.to_string_lossy().to_string(),
+                        detail: e.to_string(),
+                    }
+                })?;
+                session.record(skill_path.clone(), output.skill_content.as_bytes().to_vec());
+                true
+            }
+            SharedWrite::Deduped | SharedWrite::Skipped => false,
+        };
+        let skill_was_skipped = matches!(action, SharedWrite::Skipped);
 
         let sidecar_paths = if skill_was_skipped {
             Vec::new()
@@ -261,9 +304,11 @@ impl Router {
                 output,
                 &skill_dir,
                 force,
+                yes,
                 skip_all,
                 overwrite_all,
                 &mut skipped,
+                session,
             )?
         };
 
@@ -277,7 +322,8 @@ impl Router {
                 );
             }
         }
-        let asset_paths = if !pair.skill.asset_dirs.is_empty() && !skill_was_skipped {
+        // Assets were copied with the first harness that created this directory.
+        let asset_paths = if wrote_skill && !pair.skill.asset_dirs.is_empty() {
             write::copy_assets(&pair.skill.asset_dirs, &skill_dir).map_err(|e| {
                 RouterError::AssetCopyError {
                     skill: skill_name.clone(),
@@ -412,14 +458,18 @@ impl Router {
         Ok(result)
     }
 
+    // reason: sidecar writes share the skill write's force/yes/session policy.
+    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
     fn write_sidecars(
         pair: &ResolvedPair,
         output: &HarnessOutput,
         skill_dir: &Path,
         force: bool,
+        yes: bool,
         skip_all: &mut bool,
         overwrite_all: &mut bool,
         skipped: &mut Vec<String>,
+        session: &mut WriteSession,
     ) -> Result<Vec<PathBuf>, RouterError> {
         let skill_name = &pair.skill.name;
         let harness_id = &pair.harness.id;
@@ -434,23 +484,35 @@ impl Router {
                 harness_id,
             )?;
 
-            if !overwrite::resolve_overwrite(
+            let action = session.resolve(
                 &sidecar_path,
+                sidecar.content.as_bytes(),
                 force,
+                yes,
                 skip_all,
                 overwrite_all,
                 skipped,
-            )? {
-                continue;
+                &format!(
+                    "{skill_name} \u{2192} {harness_id} (sidecar: {})",
+                    sidecar.filename
+                ),
+            )?;
+            match action {
+                SharedWrite::Write => {
+                    atomic_write(&sidecar_path, &sidecar.content).map_err(|e| {
+                        RouterError::WriteError {
+                            skill: skill_name.clone(),
+                            harness: harness_id.clone(),
+                            path: sidecar_path.to_string_lossy().to_string(),
+                            detail: e.to_string(),
+                        }
+                    })?;
+                    session.record(sidecar_path.clone(), sidecar.content.as_bytes().to_vec());
+                    sidecar_paths.push(sidecar_path);
+                }
+                SharedWrite::Deduped => sidecar_paths.push(sidecar_path),
+                SharedWrite::Skipped => {}
             }
-
-            atomic_write(&sidecar_path, &sidecar.content).map_err(|e| RouterError::WriteError {
-                skill: skill_name.clone(),
-                harness: harness_id.clone(),
-                path: sidecar_path.to_string_lossy().to_string(),
-                detail: e.to_string(),
-            })?;
-            sidecar_paths.push(sidecar_path);
         }
 
         Ok(sidecar_paths)

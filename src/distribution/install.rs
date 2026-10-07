@@ -26,7 +26,7 @@ use crate::engine::Engine;
 use crate::loader::ProjectLoader;
 use crate::registry::HarnessRegistry;
 use crate::resolver::{HarnessResolver, ResolveError, ResolvedPair};
-use crate::router::{Router, TargetScope};
+use crate::router::{Router, SharedWrite, TargetScope, WriteSession};
 use crate::state::{
     InstallScope, InstalledFile, InstalledSkill, SkillFormat, SourceType, now_rfc3339,
 };
@@ -138,6 +138,8 @@ pub struct InstallContext {
     pub project_root: Option<PathBuf>,
     /// Whether to overwrite existing files without prompting.
     pub force: bool,
+    /// Skip prompts. Does not overwrite files that existed before this command.
+    pub yes: bool,
     /// Optional skill name filter for multi-skill sources.
     pub skill_filter: Option<String>,
 }
@@ -299,6 +301,9 @@ fn install_discovered_skills(
     let mut results = Vec::new();
     let mut skip_all = false;
     let mut overwrite_all = false;
+    // Shared across harnesses so the second writer of an identical path is not
+    // an overwrite of a file this command just created.
+    let mut session = WriteSession::default();
 
     for skill_dir in filtered {
         let name_override = if skill_dir.as_path() == source_path
@@ -325,6 +330,7 @@ fn install_discovered_skills(
                 skill_path,
                 &mut skip_all,
                 &mut overwrite_all,
+                &mut session,
             )?,
             SkillFormat::Plain => install_plain_skill(
                 ctx,
@@ -337,6 +343,7 @@ fn install_discovered_skills(
                 name_override.as_deref(),
                 &mut skip_all,
                 &mut overwrite_all,
+                &mut session,
             )?,
         };
         on_installed(&record)?;
@@ -658,6 +665,7 @@ fn install_skillprism_skill(
     skill_path: Option<&String>,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    session: &mut WriteSession,
 ) -> Result<InstalledSkill, InstallError> {
     let (skill, _temp_project) = load_skill_into_temp_project(skill_dir, &ctx.harnesses)?;
     let registry =
@@ -692,14 +700,16 @@ fn install_skillprism_skill(
         // User-scope installs have no project root; `resolve_skill_path`/`Router`
         // ignore this argument for `TargetScope::User`, so `"."` is an unused
         // placeholder rather than a meaningful path.
-        let result = Router::write(
+        let result = Router::write_with_session(
             pair,
             &output,
             project_root,
             target,
             ctx.force,
+            ctx.yes,
             skip_all,
             overwrite_all,
+            session,
         )
         .map_err(|e| InstallError::Write(miette::Report::new(e)))?;
 
@@ -750,6 +760,7 @@ fn install_plain_skill(
     name_override: Option<&str>,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    session: &mut WriteSession,
 ) -> Result<InstalledSkill, InstallError> {
     let skill_name = name_override.map_or_else(|| skill_dir_name(skill_dir), str::to_string);
     let template = crate::loader::find_template_path(skill_dir)
@@ -787,49 +798,50 @@ fn install_plain_skill(
         let asset_dirs =
             crate::loader::discover_asset_dirs(skill_dir).map_err(InstallError::Project)?;
         let mut skipped = Vec::new();
-
-        if crate::router::resolve_overwrite(
+        let template_bytes = fs::read(&template)?;
+        let action = session.resolve(
             &skill_path_buf,
+            &template_bytes,
             ctx.force,
+            ctx.yes,
             skip_all,
             overwrite_all,
             &mut skipped,
-        )? {
-            let template_bytes = fs::read(&template)?;
-            crate::router::atomic_write_bytes(&skill_path_buf, &template_bytes)?;
-            files.push(InstalledFile {
-                path: skill_path_buf.to_string_lossy().to_string(),
-                hash: format!("sha256:{}", sha256_bytes(&template_bytes)),
-            });
+            &format!("{skill_name} → {harness_id}"),
+        )?;
 
-            for asset_dir in &asset_dirs {
-                let dir_name = asset_dir
-                    .file_name()
-                    .ok_or_else(|| ProjectError::ConfigRead {
-                        path: skill_name.clone(),
-                        source: std::io::Error::other("asset directory has no name"),
-                    })?
-                    .to_string_lossy()
-                    .to_string();
-                // Intentionally stricter than the spec's "escape the skill root":
-                // each asset dir is its own symlink-escape root, so a symlink
-                // pointing outside *this* directory (even elsewhere in the same
-                // skill) is rejected. For untrusted remote sources, failing
-                // closed on cross-directory symlinks is the safer default.
-                copy_dir(asset_dir, &skill_dir_out.join(&dir_name), asset_dir)?;
-                record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
+        match action {
+            SharedWrite::Write => {
+                crate::router::atomic_write_bytes(&skill_path_buf, &template_bytes)?;
+                session.record(skill_path_buf.clone(), template_bytes.clone());
+                files.push(InstalledFile {
+                    path: skill_path_buf.to_string_lossy().to_string(),
+                    hash: format!("sha256:{}", sha256_bytes(&template_bytes)),
+                });
+                copy_plain_assets(&skill_name, &asset_dirs, &skill_dir_out, &mut files)?;
             }
-        } else if skill_path_buf.exists() {
-            // The user declined to overwrite but the file already exists. Record
-            // its hash so update has a baseline for the next run.
-            files.push(InstalledFile {
-                path: skill_path_buf.to_string_lossy().to_string(),
-                hash: format!("sha256:{}", sha256_file(&skill_path_buf)?),
-            });
-
-            // Also record existing asset hashes so update has a stable baseline.
-            for asset_dir in &asset_dirs {
-                record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
+            SharedWrite::Deduped => {
+                // The file was written for an earlier harness in this command.
+                files.push(InstalledFile {
+                    path: skill_path_buf.to_string_lossy().to_string(),
+                    hash: format!("sha256:{}", sha256_bytes(&template_bytes)),
+                });
+                for asset_dir in &asset_dirs {
+                    record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
+                }
+            }
+            SharedWrite::Skipped => {
+                if skill_path_buf.exists() {
+                    // The user declined to overwrite but the file already exists.
+                    // Record its hash so update has a baseline for the next run.
+                    files.push(InstalledFile {
+                        path: skill_path_buf.to_string_lossy().to_string(),
+                        hash: format!("sha256:{}", sha256_file(&skill_path_buf)?),
+                    });
+                    for asset_dir in &asset_dirs {
+                        record_asset_hashes(asset_dir, &skill_dir_out, &mut files)?;
+                    }
+                }
             }
         }
     }
@@ -845,6 +857,32 @@ fn install_plain_skill(
         SkillFormat::Plain,
         files,
     ))
+}
+
+fn copy_plain_assets(
+    skill_name: &str,
+    asset_dirs: &[PathBuf],
+    skill_dir_out: &Path,
+    files: &mut Vec<InstalledFile>,
+) -> Result<(), InstallError> {
+    for asset_dir in asset_dirs {
+        let dir_name = asset_dir
+            .file_name()
+            .ok_or_else(|| ProjectError::ConfigRead {
+                path: skill_name.to_string(),
+                source: std::io::Error::other("asset directory has no name"),
+            })?
+            .to_string_lossy()
+            .to_string();
+        // Intentionally stricter than the spec's "escape the skill root":
+        // each asset dir is its own symlink-escape root, so a symlink
+        // pointing outside *this* directory (even elsewhere in the same
+        // skill) is rejected. For untrusted remote sources, failing
+        // closed on cross-directory symlinks is the safer default.
+        copy_dir(asset_dir, &skill_dir_out.join(&dir_name), asset_dir)?;
+        record_asset_hashes(asset_dir, skill_dir_out, files)?;
+    }
+    Ok(())
 }
 
 /// RAII guard that removes a temporary render project directory on drop.
@@ -1162,6 +1200,8 @@ mod tests {
     use super::*;
     use std::io::Write;
 
+    use crate::state::InstallScope;
+
     #[test]
     fn repo_slug_from_url_extracts_last_segment() {
         assert_eq!(
@@ -1311,5 +1351,158 @@ mod tests {
 
         let result = copy_dir(&src, &dst, &src);
         assert!(result.is_err(), "expected symlink escape to be rejected");
+    }
+
+    fn shared_context(source: PathBuf, project: PathBuf, yes: bool, force: bool) -> InstallContext {
+        InstallContext {
+            source_input: source.to_string_lossy().to_string(),
+            parsed: super::super::source::ParsedSource::Local { path: source },
+            target_scope: InstallScope::Project,
+            harnesses: vec!["codex".to_string(), "opencode".to_string()],
+            project_root: Some(project),
+            force,
+            yes,
+            skill_filter: None,
+        }
+    }
+
+    #[test]
+    fn yes_fresh_shared_plain_install_dedups_without_force() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("project");
+        let source = tmp.path().join("source");
+        let skill = source.join("plain-skill");
+        fs::create_dir_all(&skill).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::write(
+            project.join("skillprism.yaml"),
+            "harnesses: []\nskills_dir: skills\n",
+        )
+        .unwrap();
+        let body = b"---\nname: plain-skill\ndescription: d\n---\n# Plain\n";
+        fs::write(skill.join("SKILL.md"), body).unwrap();
+
+        let ctx = shared_context(source, project.clone(), true, false);
+        let mut saved = false;
+        install_source(&ctx, |record| {
+            assert_eq!(record.harnesses, ["codex", "opencode"]);
+            saved = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(
+            saved,
+            "state callback should run after a fresh shared install"
+        );
+        let written = project.join(".agents/skills/plain-skill/SKILL.md");
+        assert_eq!(fs::read(&written).unwrap(), body);
+    }
+
+    #[test]
+    fn yes_refuses_preexisting_shared_file_without_force() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("project");
+        let source = tmp.path().join("source");
+        let skill = source.join("plain-skill");
+        fs::create_dir_all(&skill).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::write(
+            project.join("skillprism.yaml"),
+            "harnesses: []\nskills_dir: skills\n",
+        )
+        .unwrap();
+        fs::write(skill.join("SKILL.md"), b"# incoming\n").unwrap();
+        let written = project.join(".agents/skills/plain-skill/SKILL.md");
+        fs::create_dir_all(written.parent().unwrap()).unwrap();
+        fs::write(&written, b"user-owned").unwrap();
+
+        let ctx = shared_context(source, project, true, false);
+        let mut saved = false;
+        let err = install_source(&ctx, |_| {
+            saved = true;
+            Ok(())
+        })
+        .unwrap_err();
+        assert!(!saved, "a refused overwrite must not save state");
+        assert!(
+            matches!(
+                err,
+                InstallError::Router(crate::router::RouterError::NonInteractiveOverwrite { .. })
+            ) || format!("{err}").contains("exists"),
+            "expected a non-interactive overwrite error, got {err:?}"
+        );
+        assert_eq!(fs::read(&written).unwrap(), b"user-owned");
+    }
+
+    #[test]
+    fn yes_installs_identical_skillprism_output_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("project");
+        let source = tmp.path().join("source");
+        let skill = source.join("shared-skill");
+        fs::create_dir_all(&skill).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::write(
+            project.join("skillprism.yaml"),
+            "harnesses: []\nskills_dir: skills\n",
+        )
+        .unwrap();
+        fs::write(
+            skill.join("skill.yaml"),
+            "skillprism: '1'\nname: shared-skill\ndescription: shared\n",
+        )
+        .unwrap();
+        fs::write(
+            skill.join("SKILL.md.j2"),
+            "---\nname: {{ skill_name | yaml_str }}\ndescription: {{ skill_description | yaml_str }}\n---\n# shared\n",
+        )
+        .unwrap();
+
+        let ctx = shared_context(source, project.clone(), true, false);
+        install_source(&ctx, |_| Ok(())).unwrap();
+        let written = project.join(".agents/skills/shared-skill/SKILL.md");
+        let text = fs::read_to_string(&written).unwrap();
+        assert!(text.contains("# shared"), "unexpected content: {text}");
+    }
+
+    #[test]
+    fn shared_harnesses_with_different_bytes_are_a_collision() {
+        let tmp = tempfile::tempdir().unwrap();
+        let project = tmp.path().join("project");
+        let source = tmp.path().join("source");
+        let skill = source.join("shared-skill");
+        fs::create_dir_all(&skill).unwrap();
+        fs::create_dir_all(&project).unwrap();
+        fs::write(
+            project.join("skillprism.yaml"),
+            "harnesses: []\nskills_dir: skills\n",
+        )
+        .unwrap();
+        fs::write(
+            skill.join("skill.yaml"),
+            "skillprism: '1'\nname: shared-skill\ndescription: shared\n",
+        )
+        .unwrap();
+        fs::write(
+            skill.join("SKILL.md.j2"),
+            "---\nname: {{ skill_name | yaml_str }}\ndescription: {{ skill_description | yaml_str }}\n---\nHarness: {{ harness.id }}\n",
+        )
+        .unwrap();
+
+        let ctx = shared_context(source, project.clone(), true, false);
+        let err = install_source(&ctx, |_| Ok(())).unwrap_err();
+        assert!(
+            matches!(
+                err,
+                InstallError::Router(crate::router::RouterError::PathCollision { .. })
+            ),
+            "expected a path collision, got {err:?}"
+        );
+        assert!(
+            !project
+                .join(".agents/skills/shared-skill/SKILL.md")
+                .exists(),
+            "a divergent shared write must not leave a file behind"
+        );
     }
 }

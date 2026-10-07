@@ -623,3 +623,141 @@ paths:
         "user-scoped plain-skill should be removed from custom-harness skills_dir"
     );
 }
+
+#[test]
+fn yes_installs_shared_plain_skill_for_codex_and_opencode() {
+    let env = TestEnv::new("dist-simple");
+    let source = fixtures_dir().join("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(&source)
+        .arg("-s")
+        .arg(PLAIN_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("-y")
+        .assert()
+        .success();
+
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(PLAIN_SKILL)
+        .join("SKILL.md");
+    let body = fs::read_to_string(&shared).unwrap();
+    assert!(body.contains("Version: A"), "unexpected body: {body}");
+
+    let list = env.bin().arg("list").assert().success();
+    let stdout = String::from_utf8_lossy(&list.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL) && stdout.contains("codex, opencode"),
+        "fresh --yes install should record both harnesses, got: {stdout}"
+    );
+}
+
+#[test]
+fn yes_refuses_to_overwrite_preexisting_shared_skill_file() {
+    let env = TestEnv::new("dist-simple");
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(PLAIN_SKILL)
+        .join("SKILL.md");
+    fs::create_dir_all(shared.parent().unwrap()).unwrap();
+    fs::write(&shared, b"user-owned").unwrap();
+
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("-s")
+        .arg(PLAIN_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("-y")
+        .assert()
+        .failure();
+
+    assert_eq!(fs::read(&shared).unwrap(), b"user-owned");
+    let list = env.bin().arg("list").assert().success();
+    let stderr = String::from_utf8_lossy(&list.get_output().stderr);
+    assert!(
+        stderr.contains("No installed skills"),
+        "refused install must not save state, got: {stderr}"
+    );
+}
+
+#[test]
+fn yes_errors_when_shared_harnesses_render_different_bytes() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("-s")
+        .arg(SKILLPRISM_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("-y")
+        .assert()
+        .failure();
+
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(SKILLPRISM_SKILL)
+        .join("SKILL.md");
+    assert!(
+        !shared.exists(),
+        "divergent harness output must not be written"
+    );
+}
+
+#[test]
+fn remove_one_shared_harness_keeps_the_other_harness_files() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("-s")
+        .arg(PLAIN_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("--force")
+        .assert()
+        .success();
+
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(PLAIN_SKILL)
+        .join("SKILL.md");
+    assert!(shared.exists());
+
+    env.bin()
+        .arg("remove")
+        .arg(PLAIN_SKILL)
+        .arg("-H")
+        .arg("opencode")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(
+        shared.exists(),
+        "codex still owns {} after removing opencode",
+        shared.display()
+    );
+    let list = env.bin().arg("list").assert().success();
+    let stdout = String::from_utf8_lossy(&list.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL) && stdout.contains("codex") && !stdout.contains("opencode"),
+        "state should still list codex only, got: {stdout}"
+    );
+}
