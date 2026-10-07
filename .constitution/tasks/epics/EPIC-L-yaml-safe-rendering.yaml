@@ -301,3 +301,50 @@ tickets:
     certainty: assumed
     status: deferred
     deferred_to: "Stage 2 architecture pass, then a Stage 3 revision of ADR-0002: flow-validate.md has no engine participant and ADR-0002 defines validate as parse-only; both upstream revisions must precede execution."
+closeout:
+  tickets_completed: [SKP-L001, SKP-L002, SKP-L003, SKP-L004]
+  tickets_deferred:
+    - id: SKP-L005
+      route: "designing-solution-architecture, then specifying-technical-implementation"
+      reason: "flow-validate.md and ADR-0002 define validate as parse-only; the validate-time rendered-frontmatter check needs a Stage 2 flow change and a Stage 3 ADR-0002 revision before execution."
+  points_completed: 14
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: fixed
+      text: "EPIC-L (github#34): yaml_str filter for frontmatter values, scaffolds/examples/docs migrated, build rejects invalid rendered frontmatter, and built-in JSON manifests use tojson with a JSON check before any write."
+  candidate_terms: []
+  routed_upstream:
+    - stage: architecture
+      item: "SKP-L005: move the rendered-frontmatter check into validate; flow-validate.md has no engine participant today."
+    - stage: tech-spec
+      item: "ADR-0002 says custom helpers are registered with add_function; record add_filter (yaml_str) as a helper registration pattern, and revise its parse-only validation statement if Stage 2 approves SKP-L005."
+    - stage: tech-spec
+      item: "Add a live-verification recipe that builds a project and checks rendered SKILL.md frontmatter and manifest JSON (a build-manifest recipe), so rendering changes can carry a live_probe that exercises them."
+  follow_ups:
+    - "src/distribution add/update wrap Engine::render errors in InstallError::Render / UpdateError::Render with #[error(\"{0}\")] and generic help, so the frontmatter diagnostic loses its yaml_str hint and label and shows a temporary template path; use #[diagnostic(transparent)] or forward the report."
+    - "src/distribution install_skillprism_skill renders and writes one harness at a time, so a frontmatter error on a later harness leaves earlier harness files installed (pre-existing interleaving, now reachable when frontmatter differs per harness)."
+    - "The validator's environments register no filters, so a misspelled filter (| yaml_strr) passes validate and only fails at build."
+    - "SKP-L001's description says the filter turns any value into a double-quoted scalar; the delivered behavior follows OD-01's interim (null for undefined/none, error for sequences and maps)."
+  code_decisions:
+    - summary: "yaml_str MiniJinja filter registered via add_filter in register_helpers: double-quoted YAML scalars for strings, numbers and booleans; YAML null for undefined/none; InvalidOperation for sequences and maps (OD-01 interim); returns a safe string so filename autoescape can't re-quote it. Introduced in 813614b; null/collection rule refined in ba089e8 (OD-01)."
+      kind: pattern
+      paths: [src/engine/helpers.rs]
+      commit: "813614b"
+    - summary: "Frontmatter convention: only string-typed fields are piped through yaml_str in scaffolds, examples, fixtures and docs; lists, maps, booleans and numbers stay unfiltered; a test scans doc examples to keep it that way. Doc-scan test added in 820092c."
+      kind: convention
+      paths: [src/scaffold/skill.rs, src/scaffold/project.rs, examples, site/content/docs/templating.md, tests/integration.rs]
+      commit: "c1e901a"
+    - summary: "Engine::render validates rendered SKILL.md frontmatter (leading fence after an optional BOM, closed YAML mapping, string name/description) and fails with EngineError::Frontmatter; build renders every pair and validates manifests before any write. BOM handling added in d0a16de."
+      kind: contract_shape
+      paths: [src/engine/frontmatter.rs, src/engine/mod.rs, src/cli.rs]
+      commit: "9e17fc1"
+    - summary: "serde_json added as a direct dependency (1.0.150, previously transitive through minijinja) to parse aggregated manifest JSON before writing; RouterError::ManifestJson naming the skill and harness; each manifest entry is parsed before aggregation; ManifestEntry carries its skill and harness; diff_manifests returns Result. Per-entry parsing and skill naming added in 0118b6e."
+      kind: dependency
+      paths: [Cargo.toml, Cargo.lock, src/router/manifest.rs, src/router/mod.rs]
+      commit: "55f7ecb"
+    - summary: "Built-in JSON manifest templates interpolate every string with | tojson and no surrounding quotes, including skill_ref."
+      kind: convention
+      paths: [src/builtin_harnesses/claude.yaml, src/builtin_harnesses/codex.yaml]
+      commit: "55f7ecb"
+  settled: []
