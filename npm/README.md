@@ -71,7 +71,7 @@ This generates:
 ```sh
 skillprism build
 ```
-This renders your skill templates and outputs the harness-compliant files into their respective folders (e.g. `.claude/skills/`, `.opencode/skills/`).
+This renders your skill templates and outputs the harness-compliant files into their respective folders (e.g. `.claude/skills/`, `.agents/skills/`).
 
 To preview changes without writing files:
 ```sh

@@ -444,7 +444,7 @@ mod tests {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path();
         let claude_file = root.join(".claude/skills/alpha/SKILL.md");
-        let opencode_file = root.join(".opencode/skills/alpha/SKILL.md");
+        let opencode_file = root.join(".agents/skills/alpha/SKILL.md");
         std::fs::create_dir_all(claude_file.parent().unwrap()).unwrap();
         std::fs::create_dir_all(opencode_file.parent().unwrap()).unwrap();
         std::fs::write(&claude_file, b"claude").unwrap();
@@ -486,6 +486,6 @@ mod tests {
         let updated = &store.skills()[0];
         assert_eq!(updated.harnesses, vec!["opencode"]);
         assert_eq!(updated.files.len(), 1);
-        assert!(updated.files[0].path.contains(".opencode"));
+        assert!(updated.files[0].path.contains(".agents"));
     }
 }

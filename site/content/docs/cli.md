@@ -13,10 +13,10 @@ skillprism init project <name> [--out <dir>] [-H <harnesses>]
 skillprism init skill <name>
 skillprism init harness <name>
 skillprism completions <bash|fish|zsh>
-skillprism add <source> [--target project|user] [--skill <name>] [-H <harnesses>] [--force]
-skillprism list [--target project|user] [-H <harnesses>]          (alias: ls)
-skillprism remove [<skills>...] [--target project|user] [-H <harnesses>] [--all] [--all-scopes] [--force]  (alias: rm)
-skillprism update [<skills>...] [--target project|user] [-H <harnesses>] [--diff|--dry-run] [--force]  (alias: up)
+skillprism add <source> [--target project|user] [-g|--global] [-a|--agent <id>] [-s|--skill <name>] [-H <harnesses>] [-y|--yes] [--list] [--all] [--force]
+skillprism list [--target project|user] [-g|--global] [-a|--agent <id>] [-H <harnesses>]          (alias: ls)
+skillprism remove [<skills>...] [-s|--skill <name>] [--target project|user] [-g|--global] [-a|--agent <id>] [-H <harnesses>] [--all] [--all-scopes] [-y|--yes] [--force]  (alias: rm)
+skillprism update [<skills>...] [--target project|user] [-g|--global] [-p|--project] [-H <harnesses>] [--diff|--dry-run] [-y|--yes] [--force]  (alias: up)
 ```
 
 ## Global flags
@@ -129,9 +129,14 @@ skillprism add owner/repo --target user -H claude,opencode
 |----------|-------------|
 | `source` | Source to install from — GitHub shorthand (`owner/repo`), full Git URL, or local path |
 | `--target <scope>` | Install scope: `project` or `user` (prompts interactively if omitted) |
-| `--skill <name>` | Install only the named skill from a multi-skill source |
+| `-g, --global` | Install into the user scope |
+| `-s, --skill <name>` | Install only the named skill from a multi-skill source |
+| `-a, --agent <id>` | Agent harness to install to (repeatable). Accepts skillprism ids plus `claude-code` and `droid` |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to install to (default: all configured) |
-| `--force` | Overwrite existing files without confirmation |
+| `-y, --yes` | Skip interactive prompts |
+| `--list` | Print discovered skill names and write nothing |
+| `--all` | Install every discovered skill |
+| `--force` | Overwrite existing files and skip interactive prompts |
 
 ## list (alias: ls)
 
@@ -146,6 +151,8 @@ skillprism list -H claude
 | Flag | Description |
 |------|-------------|
 | `--target <scope>` | Filter by install scope: `project` or `user` |
+| `-g, --global` | List only the user scope |
+| `-a, --agent <id>` | Agent harness to filter by (repeatable). Accepts skillprism ids plus `claude-code` and `droid` |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to filter by |
 
 ## remove (alias: rm)
@@ -163,10 +170,14 @@ skillprism remove --all --target project -H claude
 | Argument | Description |
 |----------|-------------|
 | `skills...` | One or more skill names to remove |
+| `-s, --skill <name>` | Skill name to remove (repeatable) |
 | `--target <scope>` | Filter by install scope: `project` or `user` |
+| `-g, --global` | Remove from the user scope |
+| `-a, --agent <id>` | Agent harness to remove from (repeatable). Accepts skillprism ids plus `claude-code` and `droid` |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to remove from |
 | `--all` | Remove all installed skills |
 | `--all-scopes` | Allow removing across both project and user scopes |
+| `-y, --yes` | Skip confirmation prompts |
 | `--force` | Skip confirmation prompts |
 
 ## update (alias: up)
@@ -185,8 +196,11 @@ skillprism update --target user
 |----------|-------------|
 | `skills...` | One or more skill names to update (default: all installed) |
 | `--target <scope>` | Filter by install scope: `project` or `user` |
+| `-g, --global` | Update the user scope |
+| `-p, --project` | Update the project scope |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to update |
 | `--diff` / `--dry-run` | Show a diff of what would change without writing files |
+| `-y, --yes` | Skip confirmation prompts |
 | `--force` | Skip confirmation prompts |
 
 ## Finding the project root

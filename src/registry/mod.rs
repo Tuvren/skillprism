@@ -90,15 +90,23 @@ impl HarnessRegistry {
     }
 
     /// Resolves a harness by name, preferring user overrides over builtins.
+    ///
+    /// An exact id wins. Skills CLI agent ids (`claude-code`, `droid`) resolve
+    /// only when no harness is registered under that exact name.
     pub fn resolve(&self, name: &str) -> Result<HarnessDefinition, ProjectError> {
-        self.user_overrides
-            .get(name)
-            .or_else(|| self.builtins.get(name))
+        self.lookup(name)
+            .or_else(|| alias_of(name).and_then(|id| self.lookup(id)))
             .cloned()
             .ok_or_else(|| ProjectError::UnknownHarness {
                 name: name.to_string(),
                 message: format!("Available harnesses: {}", self.available()),
             })
+    }
+
+    fn lookup(&self, name: &str) -> Option<&HarnessDefinition> {
+        self.user_overrides
+            .get(name)
+            .or_else(|| self.builtins.get(name))
     }
 
     /// Returns a comma-separated list of available harness names.
@@ -134,6 +142,24 @@ impl Default for HarnessRegistry {
 
 /// IDs of the built-in harnesses shipped with skillprism.
 pub const BUILTIN_HARNESS_IDS: &[&str] = &["claude", "codex", "opencode", "factory", "pi"];
+
+/// Maps a skills CLI agent id onto the skillprism harness id.
+///
+/// `claude-code` is Claude and `droid` is Factory. Unknown names, including
+/// skillprism ids, return `None`.
+pub fn alias_of(name: &str) -> Option<&'static str> {
+    match name {
+        "claude-code" => Some("claude"),
+        "droid" => Some("factory"),
+        _ => None,
+    }
+}
+
+/// Returns the skillprism id for a skills CLI alias, or `name` when it is not one.
+#[must_use]
+pub fn canonical_harness_id(name: &str) -> &str {
+    alias_of(name).unwrap_or(name)
+}
 
 fn builtin_sources() -> Vec<(&'static str, &'static str)> {
     BUILTIN_HARNESS_IDS
@@ -191,6 +217,15 @@ mod tests {
             assert!(error.source_code().is_some());
             assert!(registry.all_ids().is_empty());
         }
+    }
+
+    #[test]
+    fn resolve_skills_cli_aliases_to_builtin_ids() {
+        let registry = HarnessRegistry::with_builtins();
+        assert_eq!(registry.resolve("claude-code").unwrap().id, "claude");
+        assert_eq!(registry.resolve("droid").unwrap().id, "factory");
+        assert_eq!(canonical_harness_id("droid"), "factory");
+        assert_eq!(canonical_harness_id("opencode"), "opencode");
     }
 
     #[test]

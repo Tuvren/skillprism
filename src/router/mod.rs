@@ -1138,12 +1138,12 @@ mod tests {
         };
 
         // Pre-create skill file so it would be skipped with skip_all=true
-        let skill_output = dir.join(".opencode/skills/test-skill/SKILL.md");
+        let skill_output = dir.join(".agents/skills/test-skill/SKILL.md");
         fs::create_dir_all(skill_output.parent().unwrap()).unwrap();
         fs::write(&skill_output, "old").unwrap();
 
         // Pre-create sidecar file too
-        let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
+        let sidecar_output = dir.join(".agents/skills/test-skill/sidecar.yaml");
         fs::write(&sidecar_output, "old").unwrap();
 
         let mut skip_all = true;
@@ -1200,10 +1200,10 @@ mod tests {
         };
 
         // Pre-create both files so they'd normally be skipped
-        let skill_output = dir.join(".opencode/skills/test-skill/SKILL.md");
+        let skill_output = dir.join(".agents/skills/test-skill/SKILL.md");
         fs::create_dir_all(skill_output.parent().unwrap()).unwrap();
         fs::write(&skill_output, "old").unwrap();
-        let sidecar_output = dir.join(".opencode/skills/test-skill/sidecar.yaml");
+        let sidecar_output = dir.join(".agents/skills/test-skill/sidecar.yaml");
         fs::write(&sidecar_output, "old").unwrap();
 
         let result = Router::write(

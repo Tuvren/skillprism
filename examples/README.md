@@ -50,7 +50,7 @@ find dist -type f | sort
 ```
 
 Use `--target dist` here, **not** plain `skillprism build`. The default `--target
-project` writes live `.claude/`, `.opencode/`, and `.agents/` directories straight into
+project` writes live `.claude/` and `.agents/` directories straight into
 `examples/` — those are not gitignored (only `dist/` is, via the repo's root
 `.gitignore`), so a plain build would leave generated output sitting in your working
 tree as untracked files.

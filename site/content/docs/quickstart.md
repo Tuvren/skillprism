@@ -124,7 +124,7 @@ When you want to activate skills in live agent directories (e.g. `.claude/skills
 skillprism add ./ --target project
 ```
 
-This installs the compiled skills into your live harness paths (`.claude/skills/`, `.opencode/skills/`) and registers them in `.skillprism/state.json`.
+This installs the compiled skills into your live harness paths (`.claude/skills/`, `.agents/skills/`) and registers them in `.skillprism/state.json`.
 
 ## Next steps
 

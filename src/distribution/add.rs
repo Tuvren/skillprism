@@ -50,12 +50,17 @@ impl From<InstallScopeArg> for InstallScope {
 }
 
 /// Runs the `add` command.
+// reason: signature mirrors the clap `add` surface (source, scope, skill,
+// harnesses, force, yes, list, verbose). The bools are distinct flags.
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
 pub fn run_add(
     source: String,
     target: Option<InstallScopeArg>,
     skill_filter: Option<String>,
     harnesses: Option<String>,
     force: bool,
+    yes: bool,
+    list_only: bool,
     verbose: bool,
 ) -> Result<(), CommandError> {
     // Validate the source before any interactive prompt so a malformed source
@@ -72,6 +77,17 @@ pub fn run_add(
         )));
     }
 
+    if list_only {
+        let names = super::install::source_skill_names(&parsed)
+            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+        for name in names {
+            println!("{name}");
+        }
+        return Ok(());
+    }
+
+    let skip_prompts = force || yes;
+
     let project_root = find_project_root().ok();
     if verbose {
         if let Some(root) = &project_root {
@@ -80,7 +96,7 @@ pub fn run_add(
             eprintln!("[add] no project root found");
         }
     }
-    let scope = resolve_scope(target, force, project_root.is_some())?;
+    let scope = resolve_scope(target, skip_prompts, project_root.is_some())?;
 
     if scope == InstallScope::Project && project_root.is_none() {
         return Err(CommandError::Usage(miette::miette!(
@@ -88,10 +104,10 @@ pub fn run_add(
         )));
     }
 
-    let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, force)
+    let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, skip_prompts)
         .map_err(CommandError::Runtime)?;
 
-    if !force && !confirm_install(&source, scope, &selected_harnesses)? {
+    if !skip_prompts && !confirm_install(&source, scope, &selected_harnesses)? {
         return Ok(());
     }
 
@@ -123,14 +139,14 @@ pub fn run_add(
 /// Resolve the install scope, prompting interactively when not provided.
 fn resolve_scope(
     target: Option<InstallScopeArg>,
-    force: bool,
+    skip_prompts: bool,
     has_project: bool,
 ) -> Result<InstallScope, CommandError> {
     if let Some(arg) = target {
         return Ok(InstallScope::from(arg));
     }
 
-    if force {
+    if skip_prompts {
         return Ok(if has_project {
             InstallScope::Project
         } else {
@@ -163,7 +179,7 @@ fn resolve_scope(
 fn determine_harnesses(
     project_root: Option<&Path>,
     harnesses: Option<String>,
-    force: bool,
+    skip_prompts: bool,
 ) -> Result<Vec<String>, miette::Report> {
     if let Some(list) = harnesses {
         let items = super::parse_harness_list(&list);
@@ -190,7 +206,7 @@ fn determine_harnesses(
         super::install::build_registry_for_harnesses(project_root).map_err(miette::Report::new)?;
     let all_available = registry.all_ids();
 
-    if force {
+    if skip_prompts {
         return Ok(all_available);
     }
 
@@ -311,6 +327,12 @@ mod tests {
     fn explicit_harnesses_bypass_prompt() {
         let got = determine_harnesses(None, Some("claude,opencode".to_string()), false).unwrap();
         assert_eq!(got, vec!["claude", "opencode"]);
+    }
+
+    #[test]
+    fn harness_aliases_canonicalize_before_install() {
+        let got = determine_harnesses(None, Some("droid,claude-code".to_string()), false).unwrap();
+        assert_eq!(got, vec!["factory", "claude"]);
     }
 
     #[test]

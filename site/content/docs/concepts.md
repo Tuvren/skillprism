@@ -12,7 +12,7 @@ skillprism operates on three distinct state layers:
 Source (Authoring)    ──build──>    Dist (Compilation Output)    ──add / link──>    Installed (Live Agent Paths)
 skills/                             dist/                                           .claude/skills/
 ├── dice-roller/                    ├── claude/skills/dice-roller/                  ~/.claude/skills/
-│   ├── skill.yaml                  ├── opencode/skills/dice-roller/                .opencode/skills/
+│   ├── skill.yaml                  ├── opencode/skills/dice-roller/                .agents/skills/
 │   └── SKILL.md                    └── codex/skills/dice-roller/                   ~/.config/opencode/skills/
 ```
 
@@ -38,8 +38,8 @@ dist/
 
 ### 3. Installed (What live agents read)
 Installed skills are live agent files managed by skillprism's package manager (`add`, `list`, `remove`, `update`):
-- **Project scope (`--target project`)**: Live project paths (e.g. `.claude/skills/`, `.opencode/skills/`)
-- **User scope (`--target user`)**: User home paths (e.g. `~/.claude/skills/`, `~/.config/opencode/skills/`)
+- **Project scope (`--target project`)**: Live project paths (e.g. `.claude/skills/`, `.agents/skills/`)
+- **User scope (`--target user` or `-g`)**: User paths (e.g. `~/.claude/skills/`, `$XDG_CONFIG_HOME/opencode/skills/`)
 
 Skillprism maintains an atomic install manifest (`.skillprism/state.json` or `~/.config/skillprism/state.json`) so installed skills can be tracked, queried (`list`), updated, and cleanly removed.
 
@@ -67,7 +67,7 @@ The template can also be named `SKILL.md.j2` if you'd rather the extension say "
 
 A **harness** is an agent product that reads skills: Claude Code, OpenAI Codex, OpenCode, Factory, Pi. Each has its own:
 
-- **Harness paths** — where it expects to find skill files (e.g. `.claude/skills/` vs `.opencode/skills/`)
+- **Harness paths** — where it expects to find skill files (e.g. `.claude/skills/` vs `.agents/skills/`)
 - **Capabilities** — what features it supports (subagents, allowed-tools, manifests, frontmatter modes)
 - **Length caps** — max name/description lengths (e.g. Claude allows 1536-char descriptions; the spec's portable cap is 1024)
 - **Macros** — harness-specific template variables exposed as `{{ harness.<name> }}`

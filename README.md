@@ -195,11 +195,11 @@ skillprism renders `SKILL.md` files with the YAML frontmatter the [Agent Skills 
 
 | Harness | Description | Project Path | User Path |
 |---------|-------------|--------------|-----------|
-| `claude` | Claude Code | `.claude/skills/` | `~/.claude/skills/` |
+| `claude` | Claude Code (`claude-code`) | `.claude/skills/` | `~/.claude/skills/` |
 | `codex` | OpenAI Codex | `.agents/skills/` | `~/.codex/skills/` |
-| `opencode` | OpenCode | `.opencode/skills/` | `~/.config/opencode/skills/` |
-| `factory` | Factory | `.factory/skills/` | `~/.factory/skills/` |
-| `pi` | Pi | `.pi/skills/` | `~/.pi/agent/skills/` |
+| `opencode` | OpenCode | `.agents/skills/` | `$XDG_CONFIG_HOME/opencode/skills/` (default `~/.config/opencode/skills/`) |
+| `factory` | Factory (`droid`) | `.agents/skills/` | `~/.factory/skills/` |
+| `pi` | Pi | `.agents/skills/` | `~/.agents/skills/` |
 
 ## CLI Reference
 
@@ -210,10 +210,10 @@ skillprism init project <name> [--out <dir>] [-H <harnesses>]
 skillprism init skill <name>
 skillprism init harness <name>
 skillprism completions <bash|fish|zsh>
-skillprism add <source> [--target project|user] [--skill <name>] [-H <harnesses>] [--force]
-skillprism list [--target project|user] [-H <harnesses>]          (alias: ls)
-skillprism remove [<skills>...] [--target project|user] [-H <harnesses>] [--all] [--all-scopes] [--force]  (alias: rm)
-skillprism update [<skills>...] [--target project|user] [-H <harnesses>] [--diff|--dry-run] [--force]  (alias: up)
+skillprism add <source> [--target project|user] [-g|--global] [-a|--agent <id>] [-s|--skill <name>] [-H <harnesses>] [-y|--yes] [--list] [--all] [--force]
+skillprism list [--target project|user] [-g|--global] [-a|--agent <id>] [-H <harnesses>]          (alias: ls)
+skillprism remove [<skills>...] [-s|--skill <name>] [--target project|user] [-g|--global] [-a|--agent <id>] [-H <harnesses>] [--all] [--all-scopes] [-y|--yes] [--force]  (alias: rm)
+skillprism update [<skills>...] [--target project|user] [-g|--global] [-p|--project] [-H <harnesses>] [--diff|--dry-run] [-y|--yes] [--force]  (alias: up)
 ```
 
 ### Build flags

@@ -43,9 +43,9 @@ pub fn resolve_skill_path(
         }
         TargetScope::User => {
             check_no_traversal(&harness.paths.user_scope_path, skill_name, &harness.id)?;
-            let home = home_dir()?;
-            let base = home.join(&harness.paths.user_scope_path);
-            (base, home)
+            let anchor = user_scope_anchor(harness)?;
+            let base = anchor.join(&harness.paths.user_scope_path);
+            (base, anchor)
         }
         TargetScope::Dist => {
             let base = project_root.join("dist").join(&harness.id);
@@ -78,11 +78,11 @@ pub fn resolve_manifest_path(
             (base.clone(), base)
         }
         TargetScope::User => {
-            let home = match home_dir() {
-                Ok(h) => h,
+            let anchor = match user_scope_anchor(harness) {
+                Ok(anchor) => anchor,
                 Err(e) => return Some(Err(e)),
             };
-            (home.join(scope_path), home)
+            (anchor.join(scope_path), anchor)
         }
         TargetScope::Dist => {
             let base = project_root.join("dist").join(&harness.id).join(scope_path);
@@ -234,6 +234,30 @@ fn home_dir() -> Result<PathBuf, RouterError> {
         Ok(h) if !h.is_empty() => Ok(PathBuf::from(h)),
         _ => Err(RouterError::MissingHome),
     }
+}
+
+/// Directory that a harness's `user_scope_path` is joined to.
+///
+/// `OpenCode` follows the skills CLI: `opencode/skills` is relative to
+/// `$XDG_CONFIG_HOME`, or `$HOME/.config` when that variable is unset or empty.
+/// The harness schema has no base field, so this is selected by harness id.
+/// The returned directory is the allowed base, including when it is not under
+/// `$HOME`. Every other harness stays relative to `$HOME`.
+fn user_scope_anchor(harness: &HarnessDefinition) -> Result<PathBuf, RouterError> {
+    if harness.id == "opencode" {
+        xdg_config_home()
+    } else {
+        home_dir()
+    }
+}
+
+fn xdg_config_home() -> Result<PathBuf, RouterError> {
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg.is_empty() {
+            return Ok(PathBuf::from(xdg));
+        }
+    }
+    Ok(home_dir()?.join(".config"))
 }
 
 #[cfg(test)]
@@ -442,6 +466,58 @@ pub mod tests {
             Err(RouterError::PathTraversal { .. }) => {}
             other => panic!("expected PathTraversal, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn opencode_user_scope_follows_xdg_config_home_outside_home() {
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let home = tempfile::tempdir().unwrap();
+        let xdg = tempfile::tempdir().unwrap();
+        let _home_guard = EnvGuard::set("HOME", home.path());
+        let _xdg_guard = EnvGuard::set("XDG_CONFIG_HOME", xdg.path());
+
+        let harness = HarnessRegistry::with_builtins()
+            .resolve("opencode")
+            .unwrap();
+        let path = resolve_skill_path(
+            Path::new("/tmp/project"),
+            &harness,
+            "plain-skill",
+            TargetScope::User,
+        )
+        .unwrap();
+        assert_eq!(
+            path,
+            xdg.path().join("opencode/skills/plain-skill/SKILL.md")
+        );
+    }
+
+    #[test]
+    fn opencode_user_scope_defaults_to_home_config_dir() {
+        let _lock = ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let home = tempfile::tempdir().unwrap();
+        let _xdg_guard = EnvGuard::remove("XDG_CONFIG_HOME");
+        let _home_guard = EnvGuard::set("HOME", home.path());
+
+        let harness = HarnessRegistry::with_builtins()
+            .resolve("opencode")
+            .unwrap();
+        let path = resolve_skill_path(
+            Path::new("/tmp/project"),
+            &harness,
+            "plain-skill",
+            TargetScope::User,
+        )
+        .unwrap();
+        assert_eq!(
+            path,
+            home.path()
+                .join(".config/opencode/skills/plain-skill/SKILL.md")
+        );
     }
 
     #[test]

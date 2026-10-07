@@ -83,6 +83,15 @@ impl TestEnv {
 const SKILLPRISM_SKILL: &str = "skillprism-skill";
 const PLAIN_SKILL: &str = "plain-skill";
 
+fn project_install_path(root: &Path, harness: &str, skill: &str) -> PathBuf {
+    let scope = if harness == "opencode" {
+        ".agents/skills".to_string()
+    } else {
+        format!(".{harness}/skills")
+    };
+    root.join(scope).join(skill).join("SKILL.md")
+}
+
 #[test]
 fn distribution_lifecycle_add_list_remove() {
     let env = TestEnv::new("dist-simple");
@@ -98,9 +107,7 @@ fn distribution_lifecycle_add_list_remove() {
     // Verify both skills installed to each harness
     for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
         for harness in &["claude", "opencode"] {
-            let output_path = env
-                .project_dir()
-                .join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_install_path(env.project_dir(), harness, skill);
             assert!(
                 output_path.exists(),
                 "expected {skill} at {}",
@@ -116,19 +123,21 @@ fn distribution_lifecycle_add_list_remove() {
     )
     .unwrap();
     assert!(claude_content.contains("Harness: claude"));
-    let opencode_content = fs::read_to_string(
-        env.project_dir()
-            .join(format!(".opencode/skills/{SKILLPRISM_SKILL}/SKILL.md")),
-    )
+    let opencode_content = fs::read_to_string(project_install_path(
+        env.project_dir(),
+        "opencode",
+        SKILLPRISM_SKILL,
+    ))
     .unwrap();
     assert!(opencode_content.contains("Harness: opencode"));
 
     // Verify plain-skill copied as-is (same content in both harnesses)
     for harness in &["claude", "opencode"] {
-        let content = fs::read_to_string(
-            env.project_dir()
-                .join(format!(".{harness}/skills/{PLAIN_SKILL}/SKILL.md")),
-        )
+        let content = fs::read_to_string(project_install_path(
+            env.project_dir(),
+            harness,
+            PLAIN_SKILL,
+        ))
         .unwrap();
         assert!(content.contains("Version: A"));
     }
@@ -158,9 +167,7 @@ fn distribution_lifecycle_add_list_remove() {
     // Verify files removed
     for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
         for harness in &["claude", "opencode"] {
-            let output_path = env
-                .project_dir()
-                .join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_install_path(env.project_dir(), harness, skill);
             assert!(
                 !output_path.exists(),
                 "{skill} should be removed from {}",
@@ -241,9 +248,7 @@ fn distribution_add_undefined_variable_fails_without_writing() {
 
     // No partial output may be written to any harness on validation failure.
     for harness in &["claude", "opencode"] {
-        let output_path = env
-            .project_dir()
-            .join(format!(".{harness}/skills/bad-skill/SKILL.md"));
+        let output_path = project_install_path(env.project_dir(), harness, "bad-skill");
         assert!(
             !output_path.exists(),
             "no file should be written on validation failure, found {}",

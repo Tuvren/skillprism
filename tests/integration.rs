@@ -864,8 +864,8 @@ name: OpenCode Custom
 capabilities:
   supports_subagent: false
 paths:
-  project_scope_path: .opencode/skills
-  user_scope_path: .config/opencode/skills
+  project_scope_path: .agents/skills
+  user_scope_path: opencode/skills
   skill_filename: SKILL.md
 skill_ref_pattern: "@{name}"
 "#,

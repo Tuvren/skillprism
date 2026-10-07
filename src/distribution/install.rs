@@ -422,6 +422,115 @@ fn repo_slug_from_url(url: &str) -> Option<String> {
     (!slug.is_empty()).then(|| slug.to_string())
 }
 
+/// Lists skill directory names in a parsed source without writing install files.
+pub fn source_skill_names(parsed: &ParsedSource) -> Result<Vec<String>, InstallError> {
+    match parsed {
+        ParsedSource::Local { path } => skill_names_at(path),
+        ParsedSource::GitHub {
+            url,
+            r#ref,
+            subpath,
+            ..
+        }
+        | ParsedSource::GitLab {
+            url,
+            r#ref,
+            subpath,
+            ..
+        } => {
+            let dir = network::fetch_git_repo(url, r#ref.as_deref())?;
+            let base = subpath
+                .as_ref()
+                .map_or_else(|| dir.clone(), |sub| dir.join(sub));
+            let result = skill_names_at(&base);
+            let _ = network::cleanup_temp_dir(&dir);
+            result
+        }
+        ParsedSource::Git { url, r#ref } => {
+            let dir = network::fetch_git_repo(url, r#ref.as_deref())?;
+            let result = skill_names_at(&dir);
+            let _ = network::cleanup_temp_dir(&dir);
+            result
+        }
+        ParsedSource::WellKnown { url, .. } => Err(InstallError::UnsupportedSource {
+            source_input: url.clone(),
+            detail: "well-known skill indexes are not supported yet".to_string(),
+            help: "Install directly from a git repository or GitHub/GitLab shorthand instead."
+                .to_string(),
+        }),
+    }
+}
+
+fn skill_names_at(root: &Path) -> Result<Vec<String>, InstallError> {
+    Ok(discover_skill_dirs(root)?
+        .into_iter()
+        .map(|dir| skill_dir_name(&dir))
+        .collect())
+}
+
+/// Fails when two harnesses would write different bytes to one path.
+///
+/// Identical bytes are allowed: Codex, `OpenCode`, Factory, and Pi share
+/// `.agents/skills`, and a plain copy of the same `SKILL.md` is not a conflict.
+pub fn reject_divergent_skill_outputs(
+    pairs: &[ResolvedPair],
+    project_root: &Path,
+    target: TargetScope,
+) -> Result<(), InstallError> {
+    let mut planned = Vec::new();
+    for pair in pairs {
+        let output =
+            Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
+        let skill_path = crate::router::resolve_skill_path(
+            project_root,
+            &pair.harness,
+            &pair.skill.name,
+            target,
+        )
+        .map_err(InstallError::Router)?;
+        let label = format!("{} → {}", pair.skill.name, pair.harness.id);
+        let parent = skill_path
+            .parent()
+            .map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
+        planned.push((skill_path, output.skill_content.into_bytes(), label.clone()));
+        for sidecar in &output.sidecars {
+            let sidecar_path = crate::router::resolve_sidecar_path(
+                &parent,
+                sidecar.output_dir.as_deref(),
+                &sidecar.filename,
+                &pair.skill.name,
+                &pair.harness.id,
+            )
+            .map_err(InstallError::Router)?;
+            planned.push((
+                sidecar_path,
+                sidecar.content.clone().into_bytes(),
+                format!("{label} (sidecar: {})", sidecar.filename),
+            ));
+        }
+    }
+    reject_divergent_shared_paths(&planned).map_err(InstallError::Router)
+}
+
+fn reject_divergent_shared_paths(
+    files: &[(PathBuf, Vec<u8>, String)],
+) -> Result<(), crate::router::RouterError> {
+    let mut seen: BTreeMap<&Path, (&[u8], &str)> = BTreeMap::new();
+    for (path, bytes, label) in files {
+        if let Some((previous, previous_label)) = seen.get(path.as_path()) {
+            if *previous != bytes.as_slice() {
+                return Err(crate::router::RouterError::PathCollision {
+                    path: path.to_string_lossy().to_string(),
+                    colliding_skills: format!("{previous_label}, {label}"),
+                });
+            }
+        } else {
+            seen.insert(path.as_path(), (bytes.as_slice(), label.as_str()));
+        }
+    }
+    Ok(())
+}
+
 pub fn skill_dir_name(dir: &Path) -> String {
     dir.file_name()
         .map(|n| n.to_string_lossy().to_string())
@@ -566,19 +675,23 @@ fn install_skillprism_skill(
     }
     let pairs = validate_pairs(&skill.name, pairs)?;
 
+    let target = install_scope_to_target(ctx.target_scope);
+    let project_root = ctx
+        .project_root
+        .as_deref()
+        .unwrap_or_else(|| Path::new("."));
+    // Shared project directories (`.agents/skills`) must not silently let one
+    // harness replace another harness's different bytes.
+    reject_divergent_skill_outputs(&pairs, project_root, target)?;
+
     let mut files = Vec::new();
     for pair in &pairs {
         let output =
             Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
 
-        let target = install_scope_to_target(ctx.target_scope);
         // User-scope installs have no project root; `resolve_skill_path`/`Router`
         // ignore this argument for `TargetScope::User`, so `"."` is an unused
         // placeholder rather than a meaningful path.
-        let project_root = ctx
-            .project_root
-            .as_deref()
-            .unwrap_or_else(|| Path::new("."));
         let result = Router::write(
             pair,
             &output,
@@ -1073,6 +1186,30 @@ mod tests {
             Some("my-skill-repo".to_string())
         );
         assert_eq!(repo_slug_from_url(""), None);
+    }
+
+    #[test]
+    fn shared_path_with_different_bytes_is_a_collision() {
+        let path = PathBuf::from("/tmp/project/.agents/skills/demo/SKILL.md");
+        let files = vec![
+            (path.clone(), b"claude".to_vec(), "demo → codex".to_string()),
+            (path, b"opencode".to_vec(), "demo → opencode".to_string()),
+        ];
+        let err = reject_divergent_shared_paths(&files).unwrap_err();
+        assert!(matches!(
+            err,
+            crate::router::RouterError::PathCollision { .. }
+        ));
+    }
+
+    #[test]
+    fn shared_path_with_identical_bytes_is_not_a_collision() {
+        let path = PathBuf::from("/tmp/project/.agents/skills/demo/SKILL.md");
+        let files = vec![
+            (path.clone(), b"same".to_vec(), "demo → codex".to_string()),
+            (path, b"same".to_vec(), "demo → opencode".to_string()),
+        ];
+        assert!(reject_divergent_shared_paths(&files).is_ok());
     }
 
     #[test]

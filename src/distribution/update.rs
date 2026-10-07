@@ -557,6 +557,9 @@ fn update_skillprism_pairs(
     skip_all: &mut bool,
     overwrite_all: &mut bool,
 ) -> Result<(), miette::Report> {
+    super::install::reject_divergent_skill_outputs(pairs, project_root, target)
+        .map_err(|e| miette::Report::new(UpdateError::from(e)))?;
+
     for pair in pairs {
         let harness_id = &pair.harness.id;
         let output = crate::engine::Engine::render(pair)
