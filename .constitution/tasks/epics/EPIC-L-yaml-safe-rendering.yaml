@@ -201,7 +201,10 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed". This probe is a regression check only; it does not exercise the build-time frontmatter failure. The behavior proof is the automated tests.
     flows: [flow-build-project, flow-fail-on-error, flow-compile-template]
     certainty: assumed
-    status: planned
+    deviations:
+      - files: [src/engine/mod.rs]
+        justification: "The M1 unit test unfiltered_interpolation_remains_unescaped placed a raw interpolation in frontmatter, which L003 now rejects by design; the test was moved to assert the unescaped value in the body. src/engine is in L003 scope.in; recorded because it rewrote an earlier ticket's test."
+    status: done
   - id: SKP-L004
     title: Make built-in JSON manifest templates escape values and reject invalid manifest JSON
     type: Feature
