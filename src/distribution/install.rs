@@ -1428,7 +1428,7 @@ mod tests {
             matches!(
                 err,
                 InstallError::Router(crate::router::RouterError::NonInteractiveOverwrite { .. })
-            ) || format!("{err}").contains("exists"),
+            ),
             "expected a non-interactive overwrite error, got {err:?}"
         );
         assert_eq!(fs::read(&written).unwrap(), b"user-owned");

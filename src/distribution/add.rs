@@ -185,8 +185,13 @@ fn determine_harnesses(
     harnesses: Option<String>,
     skip_prompts: bool,
 ) -> Result<Vec<String>, miette::Report> {
+    // Resolve aliases against the registry before the project list. `--all`
+    // and `--yes` skip prompts later; they must not rewrite an explicit id
+    // such as a user harness named `droid`.
+    let registry =
+        super::install::build_registry_for_harnesses(project_root).map_err(miette::Report::new)?;
     if let Some(list) = harnesses {
-        let items = super::parse_harness_list(&list);
+        let items = registry.selected_ids(list.split(','));
         if !items.is_empty() {
             return Ok(items);
         }
@@ -206,10 +211,11 @@ fn determine_harnesses(
         }
     }
 
-    let registry =
-        super::install::build_registry_for_harnesses(project_root).map_err(miette::Report::new)?;
     let all_available = registry.all_ids();
 
+    // Non-interactive fallback when the project names no harnesses. `--all`
+    // reaches this only in that case; a project harness list above wins, so
+    // `--all` does not switch the selection to every built-in.
     if skip_prompts {
         return Ok(all_available);
     }
@@ -337,6 +343,31 @@ mod tests {
     fn harness_aliases_canonicalize_before_install() {
         let got = determine_harnesses(None, Some("droid,claude-code".to_string()), false).unwrap();
         assert_eq!(got, vec!["factory", "claude"]);
+    }
+
+    #[test]
+    fn user_harness_alias_id_is_selectable() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("harnesses")).unwrap();
+        std::fs::write(
+            tmp.path().join("harnesses/droid.yaml"),
+            "id: droid\nname: droid\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .droid/skills\n  user_scope_path: .droid/skills\n  skill_filename: SKILL.md\n",
+        )
+        .unwrap();
+        let got = determine_harnesses(Some(tmp.path()), Some("droid".to_string()), true).unwrap();
+        assert_eq!(got, vec!["droid".to_string()]);
+    }
+
+    #[test]
+    fn skip_prompts_keeps_project_harnesses() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("skillprism.yaml"),
+            "harnesses:\n  - claude\n  - opencode\nskills_dir: skills\n",
+        )
+        .unwrap();
+        let got = determine_harnesses(Some(tmp.path()), None, true).unwrap();
+        assert_eq!(got, vec!["claude".to_string(), "opencode".to_string()]);
     }
 
     #[test]

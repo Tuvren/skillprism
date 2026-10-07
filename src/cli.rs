@@ -117,7 +117,7 @@ enum Command {
         #[arg(long = "list")]
         list: bool,
 
-        /// Install every discovered skill
+        /// Install every discovered skill and skip prompts (does not select every harness)
         #[arg(long = "all")]
         all: bool,
     },
@@ -167,7 +167,7 @@ enum Command {
         #[arg(short = 'a', long = "agent", value_delimiter = ',')]
         agent: Vec<String>,
 
-        /// Remove all installed skills
+        /// Remove all installed skills without a confirmation prompt
         #[arg(long = "all")]
         all: bool,
 
@@ -305,7 +305,9 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
                 if all { None } else { skill },
                 crate::distribution::combine_harness_args(harnesses.as_deref(), &agent),
                 force,
-                yes,
+                // `--all` installs every discovered skill and skips prompts.
+                // It does not expand the harness set to every built-in.
+                yes || all,
                 list,
                 cli.verbose,
             ));
@@ -414,23 +416,16 @@ fn select_build_harnesses(
         }
         Ok(unique_harnesses)
     } else {
-        let mut selected = Vec::new();
-        for h in requested {
-            let h_trimmed = h.trim();
-            if h_trimmed.is_empty() {
-                continue;
-            }
-            if let Err(e) = registry.resolve(h_trimmed) {
-                return Err(miette::Report::new(e));
-            }
-            if !selected.iter().any(|s| s == h_trimmed) {
-                selected.push(h_trimmed.to_string());
-            }
-        }
+        // Same alias rule as add/list/remove/update: an exact registered id
+        // wins over `claude-code` and `droid`.
+        let selected = registry.selected_ids(requested);
         if selected.is_empty() {
             return Err(miette::miette!(
                 "No valid harness specified in --harness flag"
             ));
+        }
+        for id in &selected {
+            registry.resolve(id).map_err(miette::Report::new)?;
         }
         Ok(selected)
     }
@@ -1255,6 +1250,38 @@ mod tests {
                 "default project harness `{id}` must be built in"
             );
         }
+    }
+
+    #[test]
+    fn build_harness_selection_matches_distribution_alias_rule() {
+        let requested = [
+            "droid".to_string(),
+            "claude-code".to_string(),
+            "droid".to_string(),
+        ];
+        let builtins = HarnessRegistry::with_builtins();
+        let selected = select_build_harnesses(&[], &requested, &builtins).unwrap();
+        assert_eq!(selected, builtins.selected_ids(requested.iter()));
+        assert_eq!(selected, ["factory", "claude"]);
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("harnesses")).unwrap();
+        for id in ["droid", "claude-code"] {
+            std::fs::write(
+                tmp.path().join(format!("harnesses/{id}.yaml")),
+                format!(
+                    "id: {id}\nname: {id}\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .{id}/skills\n  user_scope_path: .{id}/skills\n  skill_filename: SKILL.md\n"
+                ),
+            )
+            .unwrap();
+        }
+        let mut registry = HarnessRegistry::with_builtins();
+        registry
+            .load_user_overrides(&tmp.path().join("harnesses"))
+            .unwrap();
+        let selected = select_build_harnesses(&[], &requested, &registry).unwrap();
+        assert_eq!(selected, registry.selected_ids(requested.iter()));
+        assert_eq!(selected, ["droid", "claude-code"]);
     }
 
     #[test]

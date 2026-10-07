@@ -135,7 +135,7 @@ skillprism add owner/repo --target user -H claude,opencode
 | `-H, --harnesses <list>` | Comma-separated harness IDs to install to (default: all configured) |
 | `-y, --yes` | Skip interactive prompts |
 | `--list` | Print discovered skill names and write nothing |
-| `--all` | Install every discovered skill |
+| `--all` | Install every discovered skill and skip prompts (`-y`). Does not select every built-in harness; `-H` / `-a` or the project harness list still chooses the targets |
 | `--force` | Overwrite existing files and skip interactive prompts |
 
 ## list (alias: ls)
@@ -175,7 +175,7 @@ skillprism remove --all --target project -H claude
 | `-g, --global` | Remove from the user scope |
 | `-a, --agent <id>` | Agent harness to remove from (repeatable). Accepts skillprism ids plus `claude-code` and `droid` |
 | `-H, --harnesses <list>` | Comma-separated harness IDs to remove from |
-| `--all` | Remove all installed skills |
+| `--all` | Remove all installed skills without a confirmation prompt |
 | `--all-scopes` | Allow removing across both project and user scopes |
 | `-y, --yes` | Skip confirmation prompts |
 | `--force` | Skip confirmation prompts |

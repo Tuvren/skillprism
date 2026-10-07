@@ -14,7 +14,7 @@
 
 //! `skillprism update` command implementation.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::{fs, io};
 
@@ -170,6 +170,7 @@ pub fn run_update(
     force: bool,
     verbose: bool,
 ) -> Result<(), miette::Report> {
+    let harnesses = super::canonical_harness_arg(harnesses.cloned())?;
     let mut store = StateStore::open().map_err(|e| miette::Report::new(UpdateError::from(e)))?;
 
     let all_skills = store.skills().to_vec();
@@ -194,7 +195,7 @@ pub fn run_update(
             .collect()
     };
 
-    let candidates = filter_candidates(candidates, target, harnesses);
+    let candidates = filter_candidates(candidates, target, harnesses.as_ref());
 
     if verbose {
         eprintln!(
@@ -208,7 +209,7 @@ pub fn run_update(
         return Ok(());
     }
 
-    let harness_filter = harnesses.and_then(|h| {
+    let harness_filter = harnesses.as_ref().and_then(|h| {
         let parsed = super::parse_harness_list(h);
         if parsed.is_empty() {
             None
@@ -505,6 +506,7 @@ fn update_skillprism_skill(
     }
     let pairs = validate_pairs(&old.name, pairs).map_err(miette::Report::new)?;
 
+    let mut shared = SharedOutputs::default();
     update_skillprism_pairs(
         &pairs,
         project_root,
@@ -517,6 +519,7 @@ fn update_skillprism_skill(
         force,
         skip_all,
         overwrite_all,
+        &mut shared,
     )?;
 
     report_update_result(diff, changed, &old.name);
@@ -544,6 +547,53 @@ fn update_skillprism_skill(
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Paths already decided while updating one skill.
+///
+/// Codex and `OpenCode` (and Factory and Pi) share `.agents/skills`. The second
+/// harness must not write, prompt, or diff that path again.
+#[derive(Debug, Default)]
+struct SharedOutputs {
+    /// Incoming content hash for a path this update has already decided.
+    files: HashMap<String, String>,
+    /// Asset destination directories already copied or diffed.
+    asset_dirs: HashSet<String>,
+}
+
+#[cfg(test)]
+thread_local! {
+    static DIFF_LISTINGS: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+/// Returns `Ok(true)` when the caller should write or diff `path`.
+///
+/// A later harness with the same bytes is a no-op. Different bytes are a
+/// collision. Declining a second prompt cannot record the old hash after the
+/// first harness has already stored the new one, because the second call
+/// returns before it touches `new_files`.
+fn claim_shared_file(
+    shared: &mut SharedOutputs,
+    path: &str,
+    hash: &str,
+) -> Result<bool, miette::Report> {
+    if let Some(previous) = shared.files.get(path) {
+        if previous != hash {
+            return Err(miette::Report::new(UpdateError::Router(
+                crate::router::RouterError::PathCollision {
+                    path: path.to_string(),
+                    colliding_skills: "two harnesses wrote different bytes to this path"
+                        .to_string(),
+                },
+            )));
+        }
+        return Ok(false);
+    }
+    shared.files.insert(path.to_string(), hash.to_string());
+    Ok(true)
+}
+
+// reason: one pass over rendered pairs needs the old-hash map, accumulators,
+// diff/force/skip flags, and the shared-path set together.
+#[allow(clippy::too_many_arguments)]
 fn update_skillprism_pairs(
     pairs: &[crate::resolver::ResolvedPair],
     project_root: &Path,
@@ -556,6 +606,7 @@ fn update_skillprism_pairs(
     force: bool,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    shared: &mut SharedOutputs,
 ) -> Result<(), miette::Report> {
     super::install::reject_divergent_skill_outputs(pairs, project_root, target)
         .map_err(|e| miette::Report::new(UpdateError::from(e)))?;
@@ -582,6 +633,7 @@ fn update_skillprism_pairs(
             force,
             skip_all,
             overwrite_all,
+            shared,
         )?;
 
         for sidecar in &output.sidecars {
@@ -607,6 +659,7 @@ fn update_skillprism_pairs(
                 force,
                 skip_all,
                 overwrite_all,
+                shared,
             )?;
         }
 
@@ -622,6 +675,7 @@ fn update_skillprism_pairs(
                     force,
                     skip_all,
                     overwrite_all,
+                    shared,
                 )?;
             }
         }
@@ -677,6 +731,7 @@ fn update_plain_skill(
         .cloned()
         .collect();
 
+    let mut shared = SharedOutputs::default();
     update_plain_pairs(
         harnesses,
         &registry,
@@ -692,6 +747,7 @@ fn update_plain_skill(
         force,
         skip_all,
         overwrite_all,
+        &mut shared,
     )?;
 
     report_update_result(diff, changed, &old.name);
@@ -734,6 +790,7 @@ fn update_plain_pairs(
     force: bool,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    shared: &mut SharedOutputs,
 ) -> Result<(), miette::Report> {
     for harness_id in harnesses {
         let harness = registry.resolve(harness_id).map_err(miette::Report::new)?;
@@ -749,48 +806,45 @@ fn update_plain_pairs(
         let hash = format!("sha256:{}", sha256_bytes(&content));
         let path_str = skill_path_buf.to_string_lossy().to_string();
 
-        let old_hash = old_files.get(path_str.as_str()).copied();
-        let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
-        let mut written = false;
+        if claim_shared_file(shared, &path_str, &hash)? {
+            let old_hash = old_files.get(path_str.as_str()).copied();
+            let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
+            let mut written = false;
 
-        if is_changed {
-            if diff {
-                let existing = fs::read_to_string(&skill_path_buf).ok();
-                let diff_output = crate::router::diff::compute_diff(
-                    existing.as_deref(),
-                    &String::from_utf8_lossy(&content),
-                    &path_str,
-                );
-                print_diff_output(&diff_output);
-            } else if resolve_overwrite(
-                &skill_path_buf,
-                force,
-                skip_all,
-                overwrite_all,
-                &mut Vec::new(),
-            )? {
-                crate::router::atomic_write_bytes(&skill_path_buf, &content).map_err(|e| {
-                    miette::Report::new(UpdateError::Write {
-                        detail: e.to_string(),
-                    })
-                })?;
-                written = true;
+            if is_changed {
+                if diff {
+                    let text = String::from_utf8_lossy(&content);
+                    print_file_diff(&skill_path_buf, &text, &path_str);
+                } else if resolve_overwrite(
+                    &skill_path_buf,
+                    force,
+                    skip_all,
+                    overwrite_all,
+                    &mut Vec::new(),
+                )? {
+                    crate::router::atomic_write_bytes(&skill_path_buf, &content).map_err(|e| {
+                        miette::Report::new(UpdateError::Write {
+                            detail: e.to_string(),
+                        })
+                    })?;
+                    written = true;
+                }
+                if written {
+                    *changed = true;
+                }
             }
-            if written {
-                *changed = true;
-            }
-        }
 
-        if written || !is_changed {
-            new_files.push(InstalledFile {
-                path: path_str,
-                hash,
-            });
-        } else if let Some(old_hash) = old_hash {
-            new_files.push(InstalledFile {
-                path: path_str,
-                hash: old_hash.to_string(),
-            });
+            if written || !is_changed {
+                new_files.push(InstalledFile {
+                    path: path_str,
+                    hash,
+                });
+            } else if let Some(old_hash) = old_hash {
+                new_files.push(InstalledFile {
+                    path: path_str,
+                    hash: old_hash.to_string(),
+                });
+            }
         }
 
         let skill_dir_out = skill_path_buf.parent().unwrap();
@@ -807,6 +861,7 @@ fn update_plain_pairs(
                     force,
                     skip_all,
                     overwrite_all,
+                    shared,
                 )?;
             }
         }
@@ -827,6 +882,7 @@ fn update_asset_dir(
     force: bool,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    shared: &mut SharedOutputs,
 ) -> Result<(), UpdateError> {
     let dir_name = src_dir.file_name().ok_or_else(|| {
         UpdateError::Install(InstallError::Project(ProjectError::ConfigRead {
@@ -835,6 +891,11 @@ fn update_asset_dir(
         }))
     })?;
     let dst_dir = dst_base.join(dir_name);
+    let dir_key = dst_dir.to_string_lossy().to_string();
+    if !shared.asset_dirs.insert(dir_key) {
+        // Another harness already copied or diffed this shared directory.
+        return Ok(());
+    }
 
     let mut expected = Vec::new();
     for src_file in walk_files(src_dir)? {
@@ -1047,9 +1108,13 @@ fn update_file_record(
     force: bool,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    shared: &mut SharedOutputs,
 ) -> Result<(), miette::Report> {
     let hash = format!("sha256:{}", sha256_bytes(content.as_bytes()));
     let path_str = path.to_string_lossy().to_string();
+    if !claim_shared_file(shared, &path_str, &hash)? {
+        return Ok(());
+    }
     let old_hash = old_files.get(path_str.as_str()).copied();
     let is_changed = old_hash.is_none_or(|h| h != hash.as_str());
     let mut written = false;
@@ -1083,6 +1148,8 @@ fn update_file_record(
 }
 
 fn print_file_diff(path: &Path, new_content: &str, path_display: &str) {
+    #[cfg(test)]
+    DIFF_LISTINGS.with(|listings| listings.borrow_mut().push(path_display.to_string()));
     let existing = fs::read_to_string(path).ok();
     let diff_output =
         crate::router::diff::compute_diff(existing.as_deref(), new_content, path_display);
@@ -1128,6 +1195,7 @@ mod tests {
         let mut changed = false;
         let mut skip_all = false;
         let mut overwrite_all = false;
+        let mut shared = SharedOutputs::default();
 
         update_file_record(
             &path,
@@ -1139,6 +1207,7 @@ mod tests {
             true,
             &mut skip_all,
             &mut overwrite_all,
+            &mut shared,
         )
         .unwrap();
 
@@ -1163,6 +1232,7 @@ mod tests {
         let mut changed = false;
         let mut skip_all = true; // simulate decline without prompting
         let mut overwrite_all = false;
+        let mut shared = SharedOutputs::default();
 
         update_file_record(
             &path,
@@ -1174,6 +1244,7 @@ mod tests {
             false, // force false so resolve_overwrite checks skip_all
             &mut skip_all,
             &mut overwrite_all,
+            &mut shared,
         )
         .unwrap();
 
@@ -1197,6 +1268,7 @@ mod tests {
         let mut changed = false;
         let mut skip_all = false;
         let mut overwrite_all = false;
+        let mut shared = SharedOutputs::default();
 
         update_asset_dir(
             &src_dir,
@@ -1208,6 +1280,7 @@ mod tests {
             true,
             &mut skip_all,
             &mut overwrite_all,
+            &mut shared,
         )
         .unwrap();
 
@@ -1246,6 +1319,7 @@ mod tests {
         let mut changed = false;
         let mut skip_all = false;
         let mut overwrite_all = false;
+        let mut shared = SharedOutputs::default();
 
         update_asset_dir(
             &src_dir,
@@ -1257,6 +1331,7 @@ mod tests {
             true,
             &mut skip_all,
             &mut overwrite_all,
+            &mut shared,
         )
         .unwrap();
 
@@ -1270,5 +1345,99 @@ mod tests {
             new_files.iter().all(|f| f.path != old_path_str),
             "removed asset record should not appear in new state"
         );
+    }
+
+    #[test]
+    fn shared_harness_update_writes_and_diffs_a_path_once() {
+        let tmp = TempDir::new().unwrap();
+        let project = tmp.path();
+        let skill_dir = tmp.path().join("src-skill");
+        fs::create_dir_all(&skill_dir).unwrap();
+        let template = skill_dir.join("SKILL.md");
+        fs::write(&template, "Version: B").unwrap();
+
+        let installed = project.join(".agents/skills/plain/SKILL.md");
+        fs::create_dir_all(installed.parent().unwrap()).unwrap();
+        fs::write(&installed, "Version: A").unwrap();
+
+        let path_str = leak_str(installed.to_string_lossy().to_string());
+        let old_hash = leak_str(format!("sha256:{}", sha256_bytes(b"Version: A")));
+        let new_hash = format!("sha256:{}", sha256_bytes(b"Version: B"));
+        let old_files: HashMap<&str, &str> = std::iter::once((path_str, old_hash)).collect();
+        let registry = HarnessRegistry::with_builtins();
+        let harnesses = vec!["codex".to_string(), "opencode".to_string()];
+
+        DIFF_LISTINGS.with(|listings| listings.borrow_mut().clear());
+        let mut diff_files = Vec::new();
+        let mut changed = false;
+        let mut skip_all = false;
+        let mut overwrite_all = false;
+        let mut shared = SharedOutputs::default();
+        update_plain_pairs(
+            &harnesses,
+            &registry,
+            project,
+            &template,
+            &skill_dir,
+            TargetScope::Project,
+            "plain",
+            &old_files,
+            &mut diff_files,
+            &mut changed,
+            true,
+            false,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut shared,
+        )
+        .unwrap();
+        let listings = DIFF_LISTINGS.with(|listings| listings.borrow().clone());
+        assert_eq!(
+            listings.len(),
+            1,
+            "shared path should be diffed once, got {listings:?}"
+        );
+        assert!(listings[0].ends_with("SKILL.md"));
+        assert_eq!(fs::read_to_string(&installed).unwrap(), "Version: A");
+        assert_eq!(diff_files.len(), 1);
+
+        // First harness overwrites. The second would decline if asked again;
+        // that must not put the old hash back while the new bytes are on disk.
+        let mut new_files = Vec::new();
+        let mut changed = false;
+        let mut skip_all = true;
+        let mut overwrite_all = false;
+        let mut shared = SharedOutputs::default();
+        update_file_record(
+            &installed,
+            "Version: B",
+            &old_files,
+            &mut new_files,
+            &mut changed,
+            false,
+            true,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut shared,
+        )
+        .unwrap();
+        update_file_record(
+            &installed,
+            "Version: B",
+            &old_files,
+            &mut new_files,
+            &mut changed,
+            false,
+            false,
+            &mut skip_all,
+            &mut overwrite_all,
+            &mut shared,
+        )
+        .unwrap();
+        assert!(changed);
+        assert_eq!(fs::read_to_string(&installed).unwrap(), "Version: B");
+        assert_eq!(new_files.len(), 1);
+        assert_eq!(new_files[0].hash, new_hash);
+        assert_ne!(new_files[0].hash, old_hash);
     }
 }

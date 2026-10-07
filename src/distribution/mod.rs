@@ -38,15 +38,18 @@ pub use remove::run_remove;
 pub use update::run_update;
 
 /// Parses a comma-separated harness list (e.g. `--harnesses claude,opencode`)
-/// into trimmed, non-empty canonical ids. Shared by add/list/remove/update so
-/// the parsing rule stays in one place. Skills CLI aliases (`claude-code`,
-/// `droid`) become the skillprism id.
+/// into trimmed, non-empty ids. Shared by add/list/remove/update so the parsing
+/// rule stays in one place.
+///
+/// This does not apply skills CLI aliases. Call
+/// [`canonical_harness_arg`] once a registry is available so a user harness
+/// whose id is `droid` or `claude-code` is not rewritten to the built-in.
 pub fn parse_harness_list(raw: &str) -> Vec<String> {
     normalize_harness_ids(raw.split(','))
 }
 
-/// Canonicalizes harness ids and skills CLI aliases, dropping blanks and
-/// duplicates while preserving first-seen order.
+/// Trims harness ids, dropping blanks and duplicates while preserving
+/// first-seen order. Does not apply built-in aliases.
 pub fn normalize_harness_ids<I, S>(ids: I) -> Vec<String>
 where
     I: IntoIterator<Item = S>,
@@ -58,12 +61,30 @@ where
         if trimmed.is_empty() {
             continue;
         }
-        let canonical = crate::registry::canonical_harness_id(trimmed);
-        if !out.iter().any(|existing| existing == canonical) {
-            out.push(canonical.to_string());
+        if !out.iter().any(|existing| existing == trimmed) {
+            out.push(trimmed.to_string());
         }
     }
     out
+}
+
+/// Resolves aliases in one harness argument against the project registry.
+///
+/// Returns `None` when the argument is absent or names nothing. An exact
+/// registered id wins over `claude-code` → `claude` and `droid` → `factory`.
+pub fn canonical_harness_arg(raw: Option<String>) -> Result<Option<String>, miette::Report> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let root = find_project_root().ok();
+    let registry =
+        install::build_registry_for_harnesses(root.as_deref()).map_err(miette::Report::new)?;
+    let ids = registry.selected_ids(raw.split(','));
+    if ids.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(ids.join(",")))
+    }
 }
 
 /// Merges `--harnesses` and repeatable `--agent` values into one canonical list.

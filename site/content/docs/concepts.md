@@ -12,8 +12,8 @@ skillprism operates on three distinct state layers:
 Source (Authoring)    ──build──>    Dist (Compilation Output)    ──add / link──>    Installed (Live Agent Paths)
 skills/                             dist/                                           .claude/skills/
 ├── dice-roller/                    ├── claude/skills/dice-roller/                  ~/.claude/skills/
-│   ├── skill.yaml                  ├── opencode/skills/dice-roller/                .agents/skills/
-│   └── SKILL.md                    └── codex/skills/dice-roller/                   ~/.config/opencode/skills/
+│   ├── skill.yaml                  ├── opencode/skills/dice-roller/                .agents/skills/  (OpenCode project)
+│   └── SKILL.md                    └── codex/skills/dice-roller/                   $XDG_CONFIG_HOME/opencode/skills/
 ```
 
 ### 1. Source (What you author)

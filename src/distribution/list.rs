@@ -29,7 +29,8 @@ pub fn run_list(
     if verbose {
         eprintln!("[list] loaded {} state record(s)", store.skills().len());
     }
-    let skills = filter_skills(store.skills(), target, harnesses);
+    let harnesses = super::canonical_harness_arg(harnesses.cloned())?;
+    let skills = filter_skills(store.skills(), target, harnesses.as_ref());
 
     if skills.is_empty() {
         // Status message, not table data: stdout stays clean for piping

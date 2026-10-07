@@ -121,6 +121,41 @@ impl HarnessRegistry {
         names.join(", ")
     }
 
+    /// Skillprism id for `name`. An exact registered id wins over a built-in alias.
+    ///
+    /// `droid` and `claude-code` map to Factory and Claude only when no harness
+    /// is registered under that exact id.
+    pub fn canonical_id<'a>(&'a self, name: &'a str) -> &'a str {
+        if self.lookup(name).is_some() {
+            name
+        } else {
+            canonical_harness_id(name)
+        }
+    }
+
+    /// Canonicalizes harness names, dropping blanks and duplicates.
+    ///
+    /// Exact user-harness ids are preserved. Built-in aliases apply only when
+    /// that exact id is not registered. First-seen order is preserved.
+    pub fn selected_ids<I, S>(&self, names: I) -> Vec<String>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        let mut out = Vec::new();
+        for name in names {
+            let trimmed = name.as_ref().trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            let id = self.canonical_id(trimmed);
+            if !out.iter().any(|existing| existing == id) {
+                out.push(id.to_string());
+            }
+        }
+        out
+    }
+
     /// Returns a sorted list of all available harness IDs (built-ins and user overrides).
     pub fn all_ids(&self) -> Vec<String> {
         let mut ids: Vec<String> = self
@@ -224,8 +259,40 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         assert_eq!(registry.resolve("claude-code").unwrap().id, "claude");
         assert_eq!(registry.resolve("droid").unwrap().id, "factory");
+        assert_eq!(registry.canonical_id("droid"), "factory");
+        assert_eq!(registry.canonical_id("claude-code"), "claude");
         assert_eq!(canonical_harness_id("droid"), "factory");
         assert_eq!(canonical_harness_id("opencode"), "opencode");
+    }
+
+    #[test]
+    fn exact_user_harness_id_wins_over_builtin_alias() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("harnesses")).unwrap();
+        for id in ["droid", "claude-code"] {
+            std::fs::write(
+                tmp.path().join(format!("harnesses/{id}.yaml")),
+                format!(
+                    "id: {id}\nname: {id}\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .{id}/skills\n  user_scope_path: .{id}/skills\n  skill_filename: SKILL.md\n"
+                ),
+            )
+            .unwrap();
+        }
+        let mut registry = HarnessRegistry::with_builtins();
+        registry
+            .load_user_overrides(tmp.path().join("harnesses").as_path())
+            .unwrap();
+        assert_eq!(registry.canonical_id("droid"), "droid");
+        assert_eq!(registry.canonical_id("claude-code"), "claude-code");
+        assert_eq!(registry.resolve("droid").unwrap().id, "droid");
+        assert_eq!(registry.resolve("claude-code").unwrap().id, "claude-code");
+        assert_eq!(
+            registry.selected_ids(["droid", "claude-code", "droid"]),
+            vec!["droid".to_string(), "claude-code".to_string()]
+        );
+        // The built-in targets remain selectable by their own ids.
+        assert_eq!(registry.canonical_id("factory"), "factory");
+        assert_eq!(registry.canonical_id("claude"), "claude");
     }
 
     #[test]

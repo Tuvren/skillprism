@@ -93,6 +93,59 @@ fn project_install_path(root: &Path, harness: &str, skill: &str) -> PathBuf {
 }
 
 #[test]
+fn add_all_installs_discovered_skills_without_a_tty() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(env.project_dir())
+        .arg("--all")
+        .assert()
+        .success();
+
+    for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
+        for harness in &["claude", "opencode"] {
+            let output_path = project_install_path(env.project_dir(), harness, skill);
+            assert!(
+                output_path.exists(),
+                "expected {skill} at {}",
+                output_path.display()
+            );
+        }
+    }
+
+    let state = fs::read_to_string(env.state_config.join("skillprism/installed.yaml")).unwrap();
+    assert!(state.contains("- claude"), "{state}");
+    assert!(state.contains("- opencode"), "{state}");
+    assert!(!state.contains("factory"), "{state}");
+    assert!(!state.contains("codex"), "{state}");
+    assert!(!state.contains("- pi"), "{state}");
+}
+
+#[test]
+fn remove_all_skips_confirmation_without_a_tty() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--force")
+        .assert()
+        .success();
+
+    env.bin().arg("remove").arg("--all").assert().success();
+
+    for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
+        for harness in &["claude", "opencode"] {
+            let output_path = project_install_path(env.project_dir(), harness, skill);
+            assert!(
+                !output_path.exists(),
+                "{skill} should be removed from {}",
+                output_path.display()
+            );
+        }
+    }
+}
+
+#[test]
 fn distribution_lifecycle_add_list_remove() {
     let env = TestEnv::new("dist-simple");
 

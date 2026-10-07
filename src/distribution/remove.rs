@@ -61,6 +61,7 @@ pub fn run_remove(
     if verbose {
         eprintln!("[remove] scopes: {scopes:?}");
     }
+    let harnesses = super::canonical_harness_arg(harnesses).map_err(CommandError::Runtime)?;
     let harness_filter = parse_harness_filter(harnesses);
 
     let mut store =
@@ -82,7 +83,8 @@ pub fn run_remove(
     }
 
     let affected = describe_affected(&removals);
-    if force {
+    // `--all` skips confirmation the same way `-y` / `--force` do.
+    if force || all {
         // Diagnostics/confirmations go to stderr; stdout is reserved for the
         // `list` table and `--diff` output.
         for line in &affected {
@@ -219,7 +221,7 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
     }
     if !io::stdin().is_terminal() {
         return Err(CommandError::Usage(miette::miette!(
-            "Cannot prompt for confirmation in a non-interactive environment. Pass --force to remove skills."
+            "Cannot prompt for confirmation in a non-interactive environment. Pass `-y` or `--force` to skip the prompt. `remove --all` also skips it."
         )));
     }
     eprint!("Are you sure? [y/N] ");
@@ -244,21 +246,37 @@ fn prompt_confirm(affected: &[String]) -> Result<(), CommandError> {
 fn remove_skill_files(skill: &InstalledSkill, harness_ids: &[String]) -> Result<(), CommandError> {
     let registry = load_registry(skill)?;
     let kept_dirs = kept_output_dirs(skill, harness_ids, &registry)?;
-    let mut removed = HashSet::new();
-    for harness_id in harness_ids {
-        let dir = output_dir(skill, harness_id, &registry)?;
-        // Codex, OpenCode, Factory, and Pi share one project skill directory.
-        // Leave it in place while any harness that is still installed resolves there.
-        if kept_dirs.contains(&dir) || !removed.insert(dir.clone()) {
+    let removed_dirs = skill_output_dirs(skill, harness_ids, &registry)?;
+    // Delete recorded files that belong to a harness being removed, including
+    // directories those harnesses used before they moved to `.agents/skills`.
+    // A path a staying harness still resolves to (or recorded under its legacy
+    // directory) is left in place.
+    for file in &skill.files {
+        let path = PathBuf::from(&file.path);
+        if !path_is_only_under(&path, &removed_dirs, &kept_dirs) {
+            continue;
+        }
+        if path.is_file() {
+            std::fs::remove_file(&path)
+                .into_diagnostic()
+                .map_err(CommandError::Runtime)?;
+        }
+    }
+    for dir in &removed_dirs {
+        if kept_dirs.contains(dir) || kept_dirs.iter().any(|kept| kept.starts_with(dir)) {
             continue;
         }
         if dir.exists() {
-            std::fs::remove_dir_all(&dir)
+            std::fs::remove_dir_all(dir)
                 .into_diagnostic()
                 .map_err(CommandError::Runtime)?;
         }
     }
     Ok(())
+}
+
+fn path_is_only_under(path: &Path, removed: &HashSet<PathBuf>, kept: &HashSet<PathBuf>) -> bool {
+    removed.iter().any(|dir| path.starts_with(dir)) && !kept.iter().any(|dir| path.starts_with(dir))
 }
 
 fn load_registry(skill: &InstalledSkill) -> Result<HarnessRegistry, CommandError> {
@@ -289,14 +307,54 @@ fn kept_output_dirs(
     removing: &[String],
     registry: &HarnessRegistry,
 ) -> Result<HashSet<PathBuf>, CommandError> {
+    let staying: Vec<String> = skill
+        .harnesses
+        .iter()
+        .filter(|harness_id| !removing.contains(harness_id))
+        .cloned()
+        .collect();
+    skill_output_dirs(skill, &staying, registry)
+}
+
+/// Current skill directory plus the directory recorded for installs made before
+/// `OpenCode`, Factory, and Pi moved to `.agents/skills`.
+fn skill_output_dirs(
+    skill: &InstalledSkill,
+    harness_ids: &[String],
+    registry: &HarnessRegistry,
+) -> Result<HashSet<PathBuf>, CommandError> {
     let mut dirs = HashSet::new();
-    for harness_id in &skill.harnesses {
-        if removing.contains(harness_id) {
-            continue;
-        }
+    for harness_id in harness_ids {
         dirs.insert(output_dir(skill, harness_id, registry)?);
+        if let Some(legacy) = legacy_output_dir(skill, harness_id) {
+            dirs.insert(legacy);
+        }
     }
     Ok(dirs)
+}
+
+/// Project or user directory a harness used before the `.agents/skills` move.
+fn legacy_output_dir(skill: &InstalledSkill, harness_id: &str) -> Option<PathBuf> {
+    let relative = match (harness_id, skill.scope) {
+        ("opencode", InstallScope::Project) => ".opencode/skills",
+        ("factory", InstallScope::Project) => ".factory/skills",
+        ("pi", InstallScope::Project) => ".pi/skills",
+        ("pi", InstallScope::User) => ".pi/agent/skills",
+        // OpenCode's user dir followed `$HOME/.config` before `$XDG_CONFIG_HOME`.
+        ("opencode", InstallScope::User) => ".config/opencode/skills",
+        _ => return None,
+    };
+    let anchor = match skill.scope {
+        InstallScope::Project => skill.project_root.as_ref().map(PathBuf::from)?,
+        InstallScope::User => {
+            let home = std::env::var("HOME").ok()?;
+            if home.is_empty() {
+                return None;
+            }
+            PathBuf::from(home)
+        }
+    };
+    Some(anchor.join(relative).join(&skill.name))
 }
 
 fn resolve_removal_root(skill: &InstalledSkill) -> Result<Cow<'_, Path>, CommandError> {
@@ -339,16 +397,11 @@ fn apply_removals_to_state(
 
         let registry = load_registry(&skill)?;
         let kept_dirs = kept_output_dirs(&skill, &harnesses_to_remove, &registry)?;
+        let removed_dirs = skill_output_dirs(&skill, &harnesses_to_remove, &registry)?;
         let mut record = skill;
-        for harness_id in &harnesses_to_remove {
-            let skill_dir = output_dir(&record, harness_id, &registry)?;
-            if kept_dirs.contains(&skill_dir) {
-                continue;
-            }
-            record
-                .files
-                .retain(|f| !Path::new(&f.path).starts_with(&skill_dir));
-        }
+        record
+            .files
+            .retain(|file| !path_is_only_under(Path::new(&file.path), &removed_dirs, &kept_dirs));
         record
             .harnesses
             .retain(|h| !harnesses_to_remove.contains(h));
@@ -559,6 +612,73 @@ mod tests {
         assert!(
             !shared.exists(),
             "the shared directory is removed once no installed harness owns it"
+        );
+    }
+
+    #[test]
+    fn remove_deletes_recorded_legacy_directory_and_keeps_shared_path() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path();
+        let legacy = root.join(".opencode/skills/plain-skill/SKILL.md");
+        let shared = root.join(".agents/skills/plain-skill/SKILL.md");
+        std::fs::create_dir_all(legacy.parent().unwrap()).unwrap();
+        std::fs::create_dir_all(shared.parent().unwrap()).unwrap();
+        std::fs::write(&legacy, b"legacy").unwrap();
+        std::fs::write(&shared, b"shared").unwrap();
+
+        let skill = InstalledSkill {
+            name: "plain-skill".to_string(),
+            source: "owner/plain-skill".to_string(),
+            source_url: "https://github.com/owner/plain-skill.git".to_string(),
+            source_type: SourceType::GitHub,
+            r#ref: Some("main".to_string()),
+            resolved_ref: None,
+            skill_path: None,
+            project_root: Some(root.to_string_lossy().to_string()),
+            scope: InstallScope::Project,
+            harnesses: vec!["opencode".to_string(), "codex".to_string()],
+            format: SkillFormat::Plain,
+            installed_at: now_rfc3339(),
+            updated_at: now_rfc3339(),
+            files: vec![
+                InstalledFile {
+                    path: legacy.to_string_lossy().to_string(),
+                    hash: "sha256:legacy".to_string(),
+                },
+                InstalledFile {
+                    path: shared.to_string_lossy().to_string(),
+                    hash: "sha256:shared".to_string(),
+                },
+            ],
+        };
+
+        remove_skill_files(&skill, &["opencode".to_string()]).unwrap();
+        assert!(
+            !legacy.exists(),
+            "the recorded pre-move OpenCode directory must be deleted"
+        );
+        assert!(
+            shared.exists(),
+            "codex still references the shared .agents/skills file"
+        );
+
+        let state_dir = tmp.path().join("state");
+        let mut store = StateStore::open_at(&state_dir).unwrap();
+        store.upsert(skill);
+        let action = (store.skills()[0].clone(), vec!["opencode".to_string()]);
+        apply_removals_to_state(&mut store, vec![action]).unwrap();
+        assert_eq!(store.skills()[0].harnesses, vec!["codex".to_string()]);
+        assert!(
+            store.skills()[0]
+                .files
+                .iter()
+                .all(|file| !file.path.contains(".opencode"))
+        );
+        assert!(
+            store.skills()[0]
+                .files
+                .iter()
+                .any(|file| file.path.contains(".agents"))
         );
     }
 }

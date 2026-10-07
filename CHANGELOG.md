@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+
+- **Distribution flags** — `add --all` installs every discovered skill and skips prompts without selecting every built-in harness. `remove --all` skips the confirmation prompt. `-y` / `--yes` skips prompts, and `-a` / `--agent` selects harnesses. `claude-code` and `droid` select Claude and Factory unless a user harness is registered with that exact id.
+
+### Changed
+
+- **Live install directories** — OpenCode, Factory, and Pi project skills install into `.agents/skills/`. Pi's user skills install into `~/.agents/skills/`. OpenCode's user skills install into `$XDG_CONFIG_HOME/opencode/skills/` (`~/.config/opencode/skills/` when `XDG_CONFIG_HOME` is unset).
+
 ## v0.3.0 — 2026-10-07
 
 ### Added
