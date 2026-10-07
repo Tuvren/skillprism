@@ -93,3 +93,29 @@ tickets:
     flows: []
     certainty: settled
     status: done
+closeout:
+  tickets_completed: [SKP-J001, SKP-J002]
+  tickets_deferred: []
+  points_completed: 3
+  spec_patches: []
+  changelog_entries:
+    - directory: tasks
+      type: fixed
+      text: "EPIC-J (github#33): init project applies the documented claude, opencode harness default when no interactive prompt is shown."
+  candidate_terms: []
+  routed_upstream:
+    - stage: prd
+      item: "CAP-013 says init scaffolds 'a harnesses/ directory', but since v0.2.0 the init project scaffold no longer creates one (CHANGELOG v0.2.0, Custom Harnesses On-Demand). It can't be settled until the statement matches the scaffold."
+    - stage: architecture
+      item: "No architecture flow covers init/scaffolding (CAP-013, CAP-014); EPIC-J tickets carry flows: []."
+    - stage: tech-spec
+      item: "Add an init-project live-verification recipe (launch cargo build; drive `skillprism init project demo </dev/null` in a temp dir; evidence: skillprism.yaml lists claude and opencode) so CLI init changes can carry live_probe."
+  follow_ups:
+    - "An explicitly empty `-H \"\"` or `-H \",\"` outside a terminal now gets the default (parse_harness_list drops empty entries) instead of a usage error. Decide whether an explicit empty list should be rejected (check harnesses.is_none() before parsing)."
+    - "src/cli.rs: the `/// Comma-separated list of harness IDs` doc comment on the -H arg is now shadowed by the explicit help = format!(...) and could drift."
+  code_decisions:
+    - summary: "DEFAULT_PROJECT_HARNESSES constant in cli.rs is the single source for the non-interactive init fallback, the -H help text, and the stderr notice."
+      kind: convention
+      paths: [src/cli.rs]
+      commit: b9eb939
+  settled: []
