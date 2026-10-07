@@ -59,6 +59,422 @@ fn bin(home: &Path) -> Command {
 }
 
 #[test]
+fn graphical_diagnostics_piped_no_color() {
+    let tmp = copy_fixture("invalid-unknown-project-field");
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .env("NO_COLOR", "1")
+        .env_remove("NO_GRAPHICS")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
+        .arg("validate")
+        .assert()
+        .code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    assert!(!stderr.contains("Diagnostic {"), "{stderr}");
+    assert!(!stderr.contains("install miette"), "{stderr}");
+    assert!(stderr.contains("Invalid config in"), "{stderr}");
+    assert!(stderr.contains("unknown field `name`"), "{stderr}");
+    assert!(
+        stderr.contains("Check field names and value types"),
+        "{stderr}"
+    );
+    assert!(
+        stderr.contains("https://tuvren.github.io/skillprism/docs/quickstart/"),
+        "{stderr}"
+    );
+    assert!(
+        !stderr.contains("https://tuvren.github.io/skillprism/docs/skill-yaml/"),
+        "{stderr}"
+    );
+    assert!(!stderr.contains('\u{1b}'), "{stderr}");
+    assert!(stderr.is_ascii(), "{stderr}");
+}
+
+#[test]
+fn graphical_diagnostics_source_snippet_when_piped() {
+    let tmp = copy_fixture("invalid-unknown-project-field");
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .env_remove("NO_COLOR")
+        .env_remove("NO_GRAPHICS")
+        .env("FORCE_COLOR", "1")
+        .env("TERM", "xterm-256color")
+        .env("LANG", "en_US.UTF-8")
+        .arg("validate")
+        .assert()
+        .code(1);
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    let lines: Vec<_> = stderr.lines().collect();
+    let source_line = lines
+        .iter()
+        .position(|line| line.contains("name: my-skills"))
+        .unwrap_or_else(|| panic!("missing source snippet: {stderr}"));
+    assert!(
+        lines[source_line + 1..]
+            .iter()
+            .any(|line| line.contains("here")),
+        "missing label beneath source: {stderr}"
+    );
+    assert!(!stderr.contains('\u{1b}'), "{stderr}");
+    assert!(stderr.is_ascii(), "{stderr}");
+}
+
+#[test]
+fn quickstart_project_config_validates_with_sample_skill() {
+    let tmp = TempDir::new().unwrap();
+    let project = tmp.path().join("my-skills");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .args(["init", "project", "my-skills", "-H", "claude,opencode"])
+        .assert()
+        .success();
+    let quickstart = include_str!("../site/content/docs/quickstart.md");
+    let config = quickstart
+        .split_once("```yaml\n")
+        .expect("quickstart must contain the project config YAML block")
+        .1
+        .split_once("\n```")
+        .expect("quickstart project config YAML block must have a closing fence")
+        .0;
+    fs::write(project.join("skillprism.yaml"), config).unwrap();
+    let skill = project.join("skills/dice-roller");
+    fs::create_dir_all(&skill).unwrap();
+    let skill_config = quickstart
+        .split("```yaml\n")
+        .nth(2)
+        .expect("quickstart must contain a second YAML block for the sample skill config")
+        .split_once("\n```")
+        .expect("quickstart sample skill config YAML block must have a closing fence")
+        .0;
+    fs::write(skill.join("skill.yaml"), skill_config).unwrap();
+    // The template contains a nested Bash fence, so use its closing paragraph.
+    let template = quickstart
+        .split_once("```jinja\n")
+        .expect("quickstart must contain the sample skill Jinja template block")
+        .1
+        .split_once("\n```\n\nThe YAML frontmatter")
+        .expect("quickstart Jinja template must end before the YAML frontmatter paragraph")
+        .0;
+    fs::write(skill.join("SKILL.md"), template).unwrap();
+    bin(tmp.path())
+        .current_dir(&project)
+        .arg("validate")
+        .assert()
+        .success()
+        .stdout(
+            predicate::str::contains("ok: sample")
+                .and(predicate::str::contains("ok: dice-roller"))
+                .and(predicate::str::contains("Validation passed")),
+        );
+}
+
+#[test]
+fn config_diagnostics_unknown_project_field() {
+    let tmp = copy_fixture("invalid-unknown-project-field");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("unknown field `name`")
+                .and(predicate::str::contains("skillprism.yaml"))
+                .and(predicate::str::contains("line 1 column 1"))
+                .and(predicate::str::contains("Invalid YAML").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_missing_skillprism_field() {
+    let tmp = copy_fixture("invalid-missing-skillprism-field");
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("missing required field `skillprism`")
+                .and(predicate::str::contains("skills/demo/skill.yaml"))
+                .and(predicate::str::contains("Invalid YAML").not())
+                .and(predicate::str::contains("line 1").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_wrong_type() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skills/alpha/skill.yaml"),
+        "skillprism: '1'\nname: alpha\nvariables: text\n",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("variables")
+                .and(predicate::str::contains("expected a map"))
+                .and(predicate::str::contains("line 3 column 12"))
+                .and(predicate::str::contains("Invalid YAML").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_malformed_yaml() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skillprism.yaml"),
+        "# project\n# broken sequence\nharnesses: [claude",
+    )
+    .unwrap();
+    let assertion = bin(tmp.path())
+        .current_dir(tmp.path())
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("YAML does not parse")
+                .and(predicate::str::contains("skillprism.yaml"))
+                // yaml_serde reports EOF on line 4 and the sequence start on line 3.
+                .and(predicate::str::contains("at line 4 column 1"))
+                .and(predicate::str::contains(
+                    "flow sequence at line 3 column 12",
+                )),
+        );
+    let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+    assert_eq!(stderr.matches("at line 4 column 1").count(), 1, "{stderr}");
+}
+
+#[test]
+fn config_diagnostics_other_config_paths() {
+    let cases = [
+        (
+            "skillprism.yaml",
+            "# config\nharnesses: claude\n",
+            "harnesses: invalid type",
+            "expected a sequence",
+        ),
+        (
+            "skills/alpha/skill.yaml",
+            "skillprism: '1'\n# config\nnam: alpha\n",
+            "unknown field `nam`",
+            "expected one of",
+        ),
+        (
+            "skills/alpha/skill.yaml",
+            "skillprism: '1'\n# config\nvariables: [text",
+            "YAML does not parse",
+            "line 3 column",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "typo: custom\n",
+            "unknown field `typo`",
+            "expected one of",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "name: Custom\n",
+            "missing field `id`",
+            "Invalid config",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "id: custom\nname: Custom\ncapabilities: text\n",
+            "capabilities: invalid type",
+            "line 3 column 15",
+        ),
+        (
+            "harnesses/custom.yaml",
+            "id: custom\nname: Custom\ncapabilities: [text",
+            "YAML does not parse",
+            "line 3 column",
+        ),
+    ];
+    for (file, content, reason, detail) in cases {
+        let tmp = copy_fixture("valid");
+        let path = tmp.path().join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+        let assertion = bin(tmp.path())
+            .current_dir(tmp.path())
+            .arg("validate")
+            .assert()
+            .failure()
+            .stderr(
+                predicate::str::contains(file)
+                    .and(predicate::str::contains(reason))
+                    .and(predicate::str::contains(detail))
+                    .and(predicate::str::contains("Invalid YAML").not()),
+            );
+        if reason.starts_with("missing field") {
+            let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+            assert!(!stderr.contains("column"), "{stderr}");
+            assert!(!stderr.contains("here"), "{stderr}");
+        }
+    }
+}
+
+#[test]
+fn config_diagnostics_help_matches_config_kind() {
+    let cases = [
+        ("skillprism.yaml", "typo: value\n", "quickstart"),
+        (
+            "skills/alpha/skill.yaml",
+            "skillprism: '1'\ntypo: value\n",
+            "skill-yaml",
+        ),
+        ("harnesses/custom.yaml", "typo: value\n", "harnesses"),
+    ];
+    for (file, content, docs) in cases {
+        let tmp = copy_fixture("valid");
+        let path = tmp.path().join(file);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, content).unwrap();
+        let assertion = bin(tmp.path())
+            .current_dir(tmp.path())
+            .env("NO_COLOR", "1")
+            .arg("validate")
+            .assert()
+            .failure();
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        for kind in ["quickstart", "skill-yaml", "harnesses"] {
+            let url = format!("https://tuvren.github.io/skillprism/docs/{kind}/");
+            assert_eq!(stderr.contains(&url), kind == docs, "{stderr}");
+        }
+    }
+}
+
+#[test]
+fn config_diagnostics_scalar_errors_name_field_paths() {
+    for (fields, expected) in [
+        (
+            "name: 42\n",
+            "name: invalid type: integer `42`, expected a string",
+        ),
+        (
+            "description: true\n",
+            "description: invalid type: boolean `true`, expected a string",
+        ),
+        (
+            "metadata: {owner: 42}\n",
+            "metadata.owner: invalid type: integer `42`",
+        ),
+        (
+            "arguments: [ok, 42]\n",
+            "arguments[1]: invalid type: integer `42`",
+        ),
+        (
+            "overrides: {claude: {macros: {hello: 42}}}\n",
+            "overrides.claude.macros.hello: invalid type: integer `42`",
+        ),
+        (
+            "overrides: {1: {}}\n",
+            "overrides: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "metadata: {1: x}\n",
+            "metadata: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "variables: {valid: 1, 1: x}\n",
+            "variables: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "overrides: {claude: {variables: {valid: 1, 1: x}}}\n",
+            "overrides.claude.variables: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "overrides: {claude: {macros: {1: x}}}\n",
+            "overrides.claude.macros: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "overrides: {1: {macros: {hello: 1}}}\n",
+            "overrides: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "metadata: {!label owner: 42}\n",
+            "metadata.owner: invalid type: integer `42`",
+        ),
+        (
+            "overrides: {!label claude: {macros: {hello: 42}}}\n",
+            "overrides.claude.macros.hello: invalid type: integer `42`",
+        ),
+        // A later direct-parse error must not replace the earlier Value rejection.
+        (
+            "name: 42\nvariables: text\n",
+            "name: invalid type: integer `42`, expected a string",
+        ),
+    ] {
+        let tmp = copy_fixture("valid");
+        fs::write(
+            tmp.path().join("skills/alpha/skill.yaml"),
+            format!("skillprism: '1'\n{fields}"),
+        )
+        .unwrap();
+        let assertion = bin(tmp.path())
+            .current_dir(tmp.path())
+            .env("NO_COLOR", "1")
+            .arg("validate")
+            .assert()
+            .failure();
+        let stderr = std::str::from_utf8(&assertion.get_output().stderr).unwrap();
+        // The graphical reporter wraps long paths and reasons across lines.
+        let message = stderr.split_whitespace().collect::<Vec<_>>().join(" ");
+        assert!(message.contains(expected), "{stderr}");
+        assert!(!stderr.contains("column"), "{stderr}");
+        assert!(!stderr.contains("here"), "{stderr}");
+    }
+}
+
+#[test]
+fn config_diagnostics_earlier_complex_key_has_no_version_label() {
+    let tmp = copy_fixture("valid");
+    fs::write(
+        tmp.path().join("skills/alpha/skill.yaml"),
+        "? [complex, key]\n: hello\nskillprism: '2'\n",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .env("NO_COLOR", "1")
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("unsupported `skillprism:` value `2`")
+                .and(predicate::str::contains("skill.yaml"))
+                .and(predicate::str::contains("line").not())
+                .and(predicate::str::contains("here").not()),
+        );
+}
+
+#[test]
+fn config_diagnostics_nested_missing_fields_have_no_label() {
+    let tmp = copy_fixture("valid");
+    fs::create_dir_all(tmp.path().join("harnesses")).unwrap();
+    fs::write(
+        tmp.path().join("harnesses/custom.yaml"),
+        "id: custom\nname: Custom\ncapabilities: {}\n",
+    )
+    .unwrap();
+    bin(tmp.path())
+        .current_dir(tmp.path())
+        .env("NO_COLOR", "1")
+        .arg("validate")
+        .assert()
+        .failure()
+        .stderr(
+            predicate::str::contains("missing field `supports_subagent`")
+                .and(predicate::str::contains("column").not())
+                .and(predicate::str::contains("here").not()),
+        );
+}
+
+#[test]
 fn init_project_non_tty_without_harnesses_applies_default() {
     let tmp = TempDir::new().unwrap();
     let assertion = bin(tmp.path())

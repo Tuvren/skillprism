@@ -13,6 +13,9 @@
 // limitations under the License.
 
 mod project;
+mod yaml;
+
+pub use yaml::deserialize as deserialize_config;
 
 // Glob re-export already surfaces the two free helpers below; the explicit line
 // is retained (as pinned by DIST-I002) to document the distribution commands'

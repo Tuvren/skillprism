@@ -1,0 +1,14 @@
+[resolve] skipped:   x Skill `mcp-builder` requires capability `allowed-tools` but harness `opencode` does not support it
+  help: This skill is skipped for `opencode` — it still builds for any other configured harness that satisfies `allowed-tools`. Remove the required-capability from the skill, or drop `opencode` from skillprism.yaml, if you don't want it skipped here.
+
+[resolve] skipped:   x Skill `mcp-builder` requires capability `allowed-tools` but harness `codex` does not support it
+  help: This skill is skipped for `codex` — it still builds for any other configured harness that satisfies `allowed-tools`. Remove the required-capability from the skill, or drop `codex` from skillprism.yaml, if you don't want it skipped here.
+
+  ok: webapp-testing → claude
+  ok: webapp-testing → opencode
+  ok: webapp-testing → codex
+  ok: quickstart → claude
+  ok: quickstart → opencode
+  ok: quickstart → codex
+  ok: mcp-builder → claude
+Validation passed (7 skill(s))

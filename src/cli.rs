@@ -338,7 +338,7 @@ fn run_build(
 ) -> Result<(), miette::Report> {
     install_signal_handlers();
 
-    let project_root = crate::distribution::find_project_root().into_diagnostic()?;
+    let project_root = crate::distribution::find_project_root().map_err(miette::Report::new)?;
     if verbose {
         eprintln!("[build] project root: {}", project_root.display());
     }
@@ -434,14 +434,14 @@ fn execute_build_pipeline(
 
     for pair in valid_pairs {
         let t_render = Instant::now();
-        let output = Engine::render(pair).into_diagnostic()?;
+        let output = Engine::render(pair).map_err(miette::Report::new)?;
         let render_time = fmt_duration(t_render.elapsed());
 
-        if let Some(entry) = Engine::render_manifest_entry(pair).into_diagnostic()? {
+        if let Some(entry) = Engine::render_manifest_entry(pair).map_err(miette::Report::new)? {
             if let Some(path) =
                 crate::router::resolve_manifest_path(project_root, &pair.harness, target)
             {
-                let path = path.into_diagnostic()?;
+                let path = path.map_err(miette::Report::new)?;
                 manifest_entries.push(ManifestEntry {
                     path,
                     content: entry,
@@ -455,7 +455,8 @@ fn execute_build_pipeline(
         }
 
         if diff {
-            let entries = Router::diff(pair, &output, project_root, target).into_diagnostic()?;
+            let entries =
+                Router::diff(pair, &output, project_root, target).map_err(miette::Report::new)?;
             for entry in &entries {
                 print_diff_entry(entry, &mut result);
             }
@@ -470,7 +471,7 @@ fn execute_build_pipeline(
                 &mut skip_all,
                 &mut overwrite_all,
             )
-            .into_diagnostic()?;
+            .map_err(miette::Report::new)?;
             let write_time = fmt_duration(t_write.elapsed());
             let skill_skipped = write_result.skipped.contains(
                 &write_result
@@ -536,9 +537,9 @@ fn load_project(
     let harnesses_dir = project_root.join("harnesses");
     registry
         .load_user_overrides(&harnesses_dir)
-        .into_diagnostic()?;
+        .map_err(miette::Report::new)?;
 
-    let model = ProjectLoader::load(project_root).into_diagnostic()?;
+    let model = ProjectLoader::load(project_root).map_err(miette::Report::new)?;
     Ok((model, registry))
 }
 
@@ -589,7 +590,7 @@ fn handle_manifests(
             overwrite_all,
             &mut manifest_skipped,
         )
-        .into_diagnostic()?;
+        .map_err(miette::Report::new)?;
         result.changed += written.len();
         result.skipped += manifest_skipped.len();
     }
@@ -665,7 +666,8 @@ fn run_validate(path: &str) -> Result<(), miette::Report> {
     } else {
         start
     };
-    let root = crate::distribution::find_project_root_from(&start_dir).into_diagnostic()?;
+    let root =
+        crate::distribution::find_project_root_from(&start_dir).map_err(miette::Report::new)?;
 
     let (model, registry) = load_project(&root)?;
     let pairs = resolve_pairs(&model, &registry)?;
@@ -782,7 +784,7 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
         }
         InitKind::Skill { name } => {
             let root = crate::distribution::find_project_root()
-                .into_diagnostic()
+                .map_err(miette::Report::new)
                 .map_err(CommandError::Usage)?;
             crate::scaffold::skill::scaffold_skill(&root, &name)
                 .into_diagnostic()
@@ -792,7 +794,7 @@ fn run_init(kind: InitKind) -> Result<(), CommandError> {
         }
         InitKind::Harness { name } => {
             let root = crate::distribution::find_project_root()
-                .into_diagnostic()
+                .map_err(miette::Report::new)
                 .map_err(CommandError::Usage)?;
             crate::scaffold::harness::scaffold_harness(&root, &name)
                 .into_diagnostic()

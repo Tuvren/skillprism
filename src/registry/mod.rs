@@ -17,7 +17,7 @@ mod types;
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use crate::types::ProjectError;
+use crate::types::{ConfigKind, ProjectError};
 pub use types::*;
 
 /// Registry of known harness definitions, supporting builtins and user overrides.
@@ -78,16 +78,8 @@ impl HarnessRegistry {
                         path: path.to_string_lossy().to_string(),
                         source: e,
                     })?;
-                let def = yaml_serde::from_str::<HarnessDefinition>(&content).map_err(|e| {
-                    ProjectError::YamlParse {
-                        path: path.to_string_lossy().to_string(),
-                        line: e.location().map_or(0, |l| l.line()),
-                        message: format!(
-                            "Failed to parse harness override: {} — {e}",
-                            path.display()
-                        ),
-                    }
-                })?;
+                let def: HarnessDefinition =
+                    crate::loader::deserialize_config(&content, &path, ConfigKind::Harness)?;
                 let id = def.id.clone();
                 self.builtins.remove(&id);
                 self.user_overrides.insert(id, def);
@@ -164,6 +156,42 @@ fn builtin_yaml(id: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_diagnostics_harness_overrides() {
+        use miette::Diagnostic;
+
+        let cases = [
+            ("typo: custom\n", "unknown field `typo`", false),
+            ("name: Custom\n", "missing field `id`", false),
+            (
+                "id: custom\nname: Custom\ncapabilities: text\n",
+                "capabilities: invalid type",
+                false,
+            ),
+            (
+                "id: custom\nname: Custom\ncapabilities: [text",
+                "YAML does not parse",
+                true,
+            ),
+        ];
+        for (content, reason, syntax) in cases {
+            let tmp = tempfile::tempdir().unwrap();
+            std::fs::write(tmp.path().join("custom.yaml"), content).unwrap();
+            let mut registry = HarnessRegistry::new();
+            let error = registry.load_user_overrides(tmp.path()).unwrap_err();
+            assert_eq!(matches!(error, ProjectError::YamlSyntax { .. }), syntax);
+            let message = error.to_string();
+            assert!(message.contains("custom.yaml"), "{message}");
+            assert!(message.contains(reason), "{message}");
+            let has_location = !reason.starts_with("missing field");
+            assert_eq!(message.contains("column"), has_location, "{message}");
+            assert!(!message.contains("Invalid YAML"), "{message}");
+            assert_eq!(error.labels().unwrap().next().is_some(), has_location);
+            assert!(error.source_code().is_some());
+            assert!(registry.all_ids().is_empty());
+        }
+    }
 
     #[test]
     fn resolve_builtin_by_name() {

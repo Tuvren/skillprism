@@ -18,7 +18,7 @@ clap_complete = "4.6"
 clap_mangen = "0.3"
 ctrlc = "3.5"
 dialoguer = "0.12"
-miette = { version = "7.6", features = ["derive"] }
+miette = { version = "7.6", features = ["derive", "fancy-no-backtrace"] }
 minijinja = { version = "2.20", features = ["json", "debug"] }
 serde = { version = "1", features = ["derive"] }
 sha2 = "0.10"
