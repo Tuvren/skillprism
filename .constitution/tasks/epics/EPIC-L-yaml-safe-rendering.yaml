@@ -326,6 +326,10 @@ closeout:
     - "src/distribution install_skillprism_skill renders and writes one harness at a time, so a frontmatter error on a later harness leaves earlier harness files installed (pre-existing interleaving, now reachable when frontmatter differs per harness)."
     - "The validator's environments register no filters, so a misspelled filter (| yaml_strr) passes validate and only fails at build."
     - "SKP-L001's description says the filter turns any value into a double-quoted scalar; the delivered behavior follows OD-01's interim (null for undefined/none, error for sequences and maps)."
+    - "The frontmatter string check follows YAML 1.2 (yaml_serde): yes/on/no stay strings, so YAML 1.1 consumers such as PyYAML may still read a name or description as a boolean."
+    - "Manifest render and JSON errors stop at the first bad entry, unlike skill render errors, which are collected across every pair."
+    - "The bottom-up YAML merge resolver stops at 64 alias levels; past that a cut branch contributes no keys, which can change which merge source wins (alias chains over about 64 links only)."
+    - "A quoted \"<<\" key whose value is a mapping is treated as a merge by the resolver (as yaml_serde's apply_merge did); a strict YAML reader treats it as a literal key."
   code_decisions:
     - summary: "yaml_str MiniJinja filter registered via add_filter in register_helpers: double-quoted YAML scalars for strings, numbers and booleans; YAML null for undefined/none; InvalidOperation for sequences and maps (OD-01 interim); returns a safe string so filename autoescape can't re-quote it. Introduced in 813614b; null/collection rule refined in ba089e8 (OD-01)."
       kind: pattern
@@ -335,7 +339,7 @@ closeout:
       kind: convention
       paths: [src/scaffold/skill.rs, src/scaffold/project.rs, examples, site/content/docs/templating.md, tests/integration.rs]
       commit: "c1e901a"
-    - summary: "Engine::render validates rendered SKILL.md frontmatter (leading fence after an optional BOM, closed YAML mapping, string name/description) and fails with EngineError::Frontmatter; build renders every pair and validates manifests before any write. BOM handling added in d0a16de."
+    - summary: "Engine::render validates rendered SKILL.md frontmatter (leading fence after an optional BOM, closed YAML mapping, string name/description) and fails with EngineError::Frontmatter; build renders every pair and validates manifests before any write. BOM handling added in d0a16de; whitespace-tolerant fences, MiniJinja error detail, skill_filename-aware diagnostics and a bottom-up YAML merge resolver for the name/description check added in 8e94360, 8b50cfa and d63540c."
       kind: contract_shape
       paths: [src/engine/frontmatter.rs, src/engine/mod.rs, src/cli.rs]
       commit: "9e17fc1"
