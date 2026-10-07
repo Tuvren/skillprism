@@ -1,0 +1,49 @@
+date: 2026-10-07
+commit: dda500f
+epics: [J]
+routed:
+  - stage: prd
+    item: "CAP-013 says init scaffolds 'a harnesses/ directory', but since v0.2.0 the init project scaffold no longer creates one (CHANGELOG v0.2.0, Custom Harnesses On-Demand). It can't be settled until the statement matches the scaffold."
+    from: J
+  - stage: architecture
+    item: "No architecture flow covers init/scaffolding (CAP-013, CAP-014); EPIC-J tickets carry flows: []."
+    from: J
+  - stage: tech-spec
+    item: "Add an init-project live-verification recipe (launch cargo build; drive `skillprism init project demo </dev/null` in a temp dir; evidence: skillprism.yaml lists claude and opencode) so CLI init changes can carry live_probe."
+    from: J
+  - stage: tech-spec
+    item: "code decision (convention): DEFAULT_PROJECT_HARNESSES constant in cli.rs is the single source for the non-interactive init fallback, the -H help text, and the stderr notice. [src/cli.rs] at b9eb939"
+    from: J
+  - stage: tech-spec
+    item: "code decision (contract_shape): init project refuses with a usage error (exit 2) when the target directory already contains skillprism.yaml, in every mode; previously re-running init silently overwrote the project. Added because the non-interactive default made a bare scripted retry overwrite silently. [src/cli.rs, tests/integration.rs] at 7d16228"
+    from: J
+  - stage: tech-spec
+    item: "code decision (convention): The non-interactive harness default applies only when -H is absent; an explicitly provided but empty -H list (\"\", \",\", whitespace) keeps the usage error. [src/cli.rs] at 7d16228"
+    from: J
+  - stage: tasks
+    item: "fast-lane commit 913fa1b \"fix(engine): accept skill_ref() in validate and honor the harness pattern\" touches paths owned by EPIC-J and EPIC-K and EPIC-L and EPIC-M; the fast lane stays inside one active epic's paths, and was not applied"
+    from: fast-lane
+  - stage: tasks
+    item: "fast-lane commit b7de20c \"fix(validator): accept MiniJinja globals and reserve helper names\" touches paths owned by EPIC-J and EPIC-K and EPIC-L and EPIC-M; the fast lane stays inside one active epic's paths, and was not applied"
+    from: fast-lane
+  - stage: tasks
+    item: "fast-lane commit 1f6258e \"docs: record the validator behavior changes in CHANGELOG\" touches paths owned by EPIC-J and EPIC-K and EPIC-L and EPIC-M; the fast lane stays inside one active epic's paths, and was not applied"
+    from: fast-lane
+proposed_decisions: []
+candidate_terms: []
+fast_lane:
+  - commit: 913fa1b
+    subject: "fix(engine): accept skill_ref() in validate and honor the harness pattern"
+    status: routed
+    settled: []
+    reason: "touches paths owned by EPIC-J and EPIC-K and EPIC-L and EPIC-M; the fast lane stays inside one active epic's paths"
+  - commit: b7de20c
+    subject: "fix(validator): accept MiniJinja globals and reserve helper names"
+    status: routed
+    settled: []
+    reason: "touches paths owned by EPIC-J and EPIC-K and EPIC-L and EPIC-M; the fast lane stays inside one active epic's paths"
+  - commit: 1f6258e
+    subject: "docs: record the validator behavior changes in CHANGELOG"
+    status: routed
+    settled: []
+    reason: "touches paths owned by EPIC-J and EPIC-K and EPIC-L and EPIC-M; the fast lane stays inside one active epic's paths"

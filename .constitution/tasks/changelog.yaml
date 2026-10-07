@@ -1,4 +1,19 @@
 entries:
+  - version: v2.1.1
+    date: 2026-10-07
+    changed:
+      - "EPIC-J Honor the documented init project harness default outside a TTY archived: 2 tickets, 3 points, 239 diff lines, 0 review rounds"
+    added:
+      - "Follow-up from EPIC-J: In a terminal the harness MultiSelect starts with nothing pre-selected, so the claude, opencode default applies only when no prompt is shown. Consider pre-checking DEFAULT_PROJECT_HARNESSES (as add does with items_checked); the step-0 ruling kept interactive prompting unchanged for this epic."
+      - "Follow-up from EPIC-J: init project still overwrites README.md, .gitignore and the sample skill in a non-empty target directory that has no skillprism.yaml (pre-existing scaffold behavior). Decide whether a non-empty directory should also be refused."
+    by: reconcile
+    fixed:
+      - "EPIC-J (github#33): init project applies the documented claude, opencode harness default when no interactive prompt is shown."
+    fast_lane_through: dda500f53e3d88dbcee24d9e46f7e87e3ee1cf9e
+    upstream:
+      prd: v1.0.0
+      architecture: v1.0.0
+      tech-spec: v1.0.2
   - version: v2.1.0
     date: 2026-10-06
     added:
