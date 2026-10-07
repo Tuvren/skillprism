@@ -256,7 +256,7 @@ tickets:
         Live probe (validate-examples): `cargo run --quiet -- validate examples` prints "Validation passed". This probe is a regression check only; it does not exercise manifest JSON. The behavior proof is the automated tests.
     flows: [flow-generate-manifest, flow-builtin-harness]
     certainty: assumed
-    status: planned
+    status: done
   - id: SKP-L005
     title: Check rendered frontmatter during validate
     type: Feature
