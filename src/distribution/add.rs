@@ -50,12 +50,17 @@ impl From<InstallScopeArg> for InstallScope {
 }
 
 /// Runs the `add` command.
+// reason: signature mirrors the clap `add` surface (source, scope, skill,
+// harnesses, force, yes, list, verbose). The bools are distinct flags.
+#[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
 pub fn run_add(
     source: String,
     target: Option<InstallScopeArg>,
     skill_filter: Option<String>,
     harnesses: Option<String>,
     force: bool,
+    yes: bool,
+    list_only: bool,
     verbose: bool,
 ) -> Result<(), CommandError> {
     // Validate the source before any interactive prompt so a malformed source
@@ -72,6 +77,17 @@ pub fn run_add(
         )));
     }
 
+    if list_only {
+        let names = super::install::source_skill_names(&parsed)
+            .map_err(|e| CommandError::Runtime(miette::Report::new(e)))?;
+        for name in names {
+            println!("{name}");
+        }
+        return Ok(());
+    }
+
+    let skip_prompts = force || yes;
+
     let project_root = find_project_root().ok();
     if verbose {
         if let Some(root) = &project_root {
@@ -80,7 +96,7 @@ pub fn run_add(
             eprintln!("[add] no project root found");
         }
     }
-    let scope = resolve_scope(target, force, project_root.is_some())?;
+    let scope = resolve_scope(target, skip_prompts, project_root.is_some())?;
 
     if scope == InstallScope::Project && project_root.is_none() {
         return Err(CommandError::Usage(miette::miette!(
@@ -88,13 +104,16 @@ pub fn run_add(
         )));
     }
 
-    let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, force)
+    let selected_harnesses = determine_harnesses(project_root.as_deref(), harnesses, skip_prompts)
         .map_err(CommandError::Runtime)?;
 
-    if !force && !confirm_install(&source, scope, &selected_harnesses)? {
+    if !skip_prompts && !confirm_install(&source, scope, &selected_harnesses)? {
         return Ok(());
     }
 
+    // `--yes` skips selection prompts only. It is not `--force`: files that
+    // already existed are still refused, while identical shared writes inside
+    // this command are deduplicated by the installer.
     let ctx = InstallContext {
         source_input: source,
         parsed,
@@ -102,6 +121,7 @@ pub fn run_add(
         harnesses: selected_harnesses,
         project_root,
         force,
+        yes,
         skill_filter,
     };
 
@@ -123,14 +143,14 @@ pub fn run_add(
 /// Resolve the install scope, prompting interactively when not provided.
 fn resolve_scope(
     target: Option<InstallScopeArg>,
-    force: bool,
+    skip_prompts: bool,
     has_project: bool,
 ) -> Result<InstallScope, CommandError> {
     if let Some(arg) = target {
         return Ok(InstallScope::from(arg));
     }
 
-    if force {
+    if skip_prompts {
         return Ok(if has_project {
             InstallScope::Project
         } else {
@@ -163,10 +183,15 @@ fn resolve_scope(
 fn determine_harnesses(
     project_root: Option<&Path>,
     harnesses: Option<String>,
-    force: bool,
+    skip_prompts: bool,
 ) -> Result<Vec<String>, miette::Report> {
+    // Resolve aliases against the registry before the project list. `--all`
+    // and `--yes` skip prompts later; they must not rewrite an explicit id
+    // such as a user harness named `droid`.
+    let registry =
+        super::install::build_registry_for_harnesses(project_root).map_err(miette::Report::new)?;
     if let Some(list) = harnesses {
-        let items = super::parse_harness_list(&list);
+        let items = registry.selected_ids(list.split(','));
         if !items.is_empty() {
             return Ok(items);
         }
@@ -186,11 +211,12 @@ fn determine_harnesses(
         }
     }
 
-    let registry =
-        super::install::build_registry_for_harnesses(project_root).map_err(miette::Report::new)?;
     let all_available = registry.all_ids();
 
-    if force {
+    // Non-interactive fallback when the project names no harnesses. `--all`
+    // reaches this only in that case; a project harness list above wins, so
+    // `--all` does not switch the selection to every built-in.
+    if skip_prompts {
         return Ok(all_available);
     }
 
@@ -311,6 +337,37 @@ mod tests {
     fn explicit_harnesses_bypass_prompt() {
         let got = determine_harnesses(None, Some("claude,opencode".to_string()), false).unwrap();
         assert_eq!(got, vec!["claude", "opencode"]);
+    }
+
+    #[test]
+    fn harness_aliases_canonicalize_before_install() {
+        let got = determine_harnesses(None, Some("droid,claude-code".to_string()), false).unwrap();
+        assert_eq!(got, vec!["factory", "claude"]);
+    }
+
+    #[test]
+    fn user_harness_alias_id_is_selectable() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("harnesses")).unwrap();
+        std::fs::write(
+            tmp.path().join("harnesses/droid.yaml"),
+            "id: droid\nname: droid\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .droid/skills\n  user_scope_path: .droid/skills\n  skill_filename: SKILL.md\n",
+        )
+        .unwrap();
+        let got = determine_harnesses(Some(tmp.path()), Some("droid".to_string()), true).unwrap();
+        assert_eq!(got, vec!["droid".to_string()]);
+    }
+
+    #[test]
+    fn skip_prompts_keeps_project_harnesses() {
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::write(
+            tmp.path().join("skillprism.yaml"),
+            "harnesses:\n  - claude\n  - opencode\nskills_dir: skills\n",
+        )
+        .unwrap();
+        let got = determine_harnesses(Some(tmp.path()), None, true).unwrap();
+        assert_eq!(got, vec!["claude".to_string(), "opencode".to_string()]);
     }
 
     #[test]

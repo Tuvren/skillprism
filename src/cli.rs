@@ -89,17 +89,37 @@ enum Command {
         #[arg(long = "target")]
         target: Option<InstallScopeArg>,
 
+        /// Install into the user scope
+        #[arg(short = 'g', long = "global", conflicts_with = "target")]
+        global: bool,
+
         /// Install only the named skill from a multi-skill source
-        #[arg(long = "skill")]
+        #[arg(short = 's', long = "skill")]
         skill: Option<String>,
 
         /// Comma-separated list of harnesses to install to
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
 
+        /// Agent harness to install to (repeatable; `claude-code` and `droid` are accepted)
+        #[arg(short = 'a', long = "agent", value_delimiter = ',')]
+        agent: Vec<String>,
+
         /// Overwrite existing files and skip interactive prompts
         #[arg(long = "force")]
         force: bool,
+
+        /// Skip interactive prompts
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
+
+        /// List skill names in the source and write nothing
+        #[arg(long = "list")]
+        list: bool,
+
+        /// Install every discovered skill and skip prompts (project harness list or -H/-a when set; otherwise every built-in)
+        #[arg(long = "all")]
+        all: bool,
     },
     /// List installed skills in live harness directories
     #[command(visible_alias = "ls")]
@@ -108,9 +128,17 @@ enum Command {
         #[arg(long = "target")]
         target: Option<InstallScopeArg>,
 
+        /// List only the user scope
+        #[arg(short = 'g', long = "global", conflicts_with = "target")]
+        global: bool,
+
         /// Comma-separated list of harnesses to filter by
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
+
+        /// Agent harness to filter by (repeatable; `claude-code` and `droid` are accepted)
+        #[arg(short = 'a', long = "agent", value_delimiter = ',')]
+        agent: Vec<String>,
     },
     /// Remove installed skills from live harness directories
     #[command(visible_alias = "rm")]
@@ -119,15 +147,27 @@ enum Command {
         #[arg(required = false)]
         skills: Vec<String>,
 
+        /// Skill name to remove (repeatable)
+        #[arg(short = 's', long = "skill", value_delimiter = ',')]
+        skill: Vec<String>,
+
         /// Filter by install scope: project or user
         #[arg(long = "target")]
         target: Option<InstallScopeArg>,
+
+        /// Remove from the user scope
+        #[arg(short = 'g', long = "global", conflicts_with = "target")]
+        global: bool,
 
         /// Comma-separated list of harnesses to remove from
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
 
-        /// Remove all installed skills
+        /// Agent harness to remove from (repeatable; `claude-code` and `droid` are accepted)
+        #[arg(short = 'a', long = "agent", value_delimiter = ',')]
+        agent: Vec<String>,
+
+        /// Remove all installed skills without a confirmation prompt
         #[arg(long = "all")]
         all: bool,
 
@@ -138,6 +178,10 @@ enum Command {
         /// Skip confirmation prompts
         #[arg(long = "force")]
         force: bool,
+
+        /// Skip confirmation prompts
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
     /// Update installed skills in live harness directories to their latest source versions
     #[command(visible_alias = "up")]
@@ -150,6 +194,14 @@ enum Command {
         #[arg(long = "target")]
         target: Option<InstallScopeArg>,
 
+        /// Update the user scope
+        #[arg(short = 'g', long = "global", conflicts_with_all = ["target", "project"])]
+        global: bool,
+
+        /// Update the project scope
+        #[arg(short = 'p', long = "project", conflicts_with = "target")]
+        project: bool,
+
         /// Comma-separated list of harnesses to update
         #[arg(short = 'H', long = "harnesses")]
         harnesses: Option<String>,
@@ -161,6 +213,10 @@ enum Command {
         /// Skip confirmation prompts
         #[arg(long = "force")]
         force: bool,
+
+        /// Skip confirmation prompts
+        #[arg(short = 'y', long = "yes")]
+        yes: bool,
     },
 }
 
@@ -234,63 +290,116 @@ fn dispatch(cli: Cli) -> Result<(), miette::Report> {
         Command::Add {
             source,
             target,
+            global,
             skill,
             harnesses,
+            agent,
             force,
+            yes,
+            list,
+            all,
         } => {
-            match crate::distribution::run_add(source, target, skill, harnesses, force, cli.verbose)
-            {
-                Ok(()) => Ok(()),
-                Err(e) => {
-                    eprintln!("{e:?}");
-                    std::process::exit(e.exit_code());
-                }
-            }
+            exit_command(crate::distribution::run_add(
+                source,
+                scope_from_flags(target, global, false),
+                if all { None } else { skill },
+                crate::distribution::combine_harness_args(harnesses.as_deref(), &agent),
+                force,
+                // `--all` installs every discovered skill and skips prompts.
+                // A project harness list or `-H`/`-a` still chooses targets.
+                // With neither, skipping prompts selects every built-in.
+                yes || all,
+                list,
+                cli.verbose,
+            ));
+            Ok(())
         }
         // `list`/`update` return `miette::Report` (always exit 1 via `run`)
         // rather than `CommandError`: unlike `add`/`remove`, they have no
         // usage-level (exit 2) error of their own — a bad `--target` is rejected
         // by clap's `InstallScopeArg` parse (exit 2) before the command runs.
-        Command::List { target, harnesses } => {
+        Command::List {
+            target,
+            global,
+            harnesses,
+            agent,
+        } => {
+            let target = scope_from_flags(target, global, false);
+            let harnesses = crate::distribution::combine_harness_args(harnesses.as_deref(), &agent);
             crate::distribution::run_list(target, harnesses.as_ref(), cli.verbose)
         }
         Command::Remove {
             skills,
+            skill,
             target,
+            global,
             harnesses,
+            agent,
             all,
             all_scopes,
             force,
-        } => match crate::distribution::run_remove(
-            &skills,
-            target,
-            harnesses,
-            all,
-            all_scopes,
-            force,
-            cli.verbose,
-        ) {
-            Ok(()) => Ok(()),
-            Err(e) => {
-                eprintln!("{e:?}");
-                std::process::exit(e.exit_code());
-            }
-        },
+            yes,
+        } => {
+            exit_command(crate::distribution::run_remove(
+                &merge_skill_names(skills, skill),
+                scope_from_flags(target, global, false),
+                crate::distribution::combine_harness_args(harnesses.as_deref(), &agent),
+                all,
+                all_scopes,
+                force || yes,
+                cli.verbose,
+            ));
+            Ok(())
+        }
         Command::Update {
             skills,
             target,
+            global,
+            project,
             harnesses,
             diff,
             force,
+            yes,
         } => crate::distribution::run_update(
             &skills,
-            target,
+            scope_from_flags(target, global, project),
             harnesses.as_ref(),
             diff,
-            force,
+            force || yes,
             cli.verbose,
         ),
     }
+}
+
+fn exit_command(result: Result<(), CommandError>) {
+    if let Err(error) = result {
+        eprintln!("{error:?}");
+        std::process::exit(error.exit_code());
+    }
+}
+
+const fn scope_from_flags(
+    target: Option<InstallScopeArg>,
+    global: bool,
+    project: bool,
+) -> Option<InstallScopeArg> {
+    if global {
+        Some(InstallScopeArg::User)
+    } else if project {
+        Some(InstallScopeArg::Project)
+    } else {
+        target
+    }
+}
+
+fn merge_skill_names(positional: Vec<String>, flagged: Vec<String>) -> Vec<String> {
+    let mut names = positional;
+    for name in flagged {
+        if !name.is_empty() && !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    names
 }
 
 fn select_build_harnesses(
@@ -308,23 +417,16 @@ fn select_build_harnesses(
         }
         Ok(unique_harnesses)
     } else {
-        let mut selected = Vec::new();
-        for h in requested {
-            let h_trimmed = h.trim();
-            if h_trimmed.is_empty() {
-                continue;
-            }
-            if let Err(e) = registry.resolve(h_trimmed) {
-                return Err(miette::Report::new(e));
-            }
-            if !selected.iter().any(|s| s == h_trimmed) {
-                selected.push(h_trimmed.to_string());
-            }
-        }
+        // Same alias rule as add/list/remove/update: an exact registered id
+        // wins over `claude-code` and `droid`.
+        let selected = registry.selected_ids(requested);
         if selected.is_empty() {
             return Err(miette::miette!(
                 "No valid harness specified in --harness flag"
             ));
+        }
+        for id in &selected {
+            registry.resolve(id).map_err(miette::Report::new)?;
         }
         Ok(selected)
     }
@@ -1149,6 +1251,38 @@ mod tests {
                 "default project harness `{id}` must be built in"
             );
         }
+    }
+
+    #[test]
+    fn build_harness_selection_matches_distribution_alias_rule() {
+        let requested = [
+            "droid".to_string(),
+            "claude-code".to_string(),
+            "droid".to_string(),
+        ];
+        let builtins = HarnessRegistry::with_builtins();
+        let selected = select_build_harnesses(&[], &requested, &builtins).unwrap();
+        assert_eq!(selected, builtins.selected_ids(requested.iter()));
+        assert_eq!(selected, ["factory", "claude"]);
+
+        let tmp = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(tmp.path().join("harnesses")).unwrap();
+        for id in ["droid", "claude-code"] {
+            std::fs::write(
+                tmp.path().join(format!("harnesses/{id}.yaml")),
+                format!(
+                    "id: {id}\nname: {id}\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .{id}/skills\n  user_scope_path: .{id}/skills\n  skill_filename: SKILL.md\n"
+                ),
+            )
+            .unwrap();
+        }
+        let mut registry = HarnessRegistry::with_builtins();
+        registry
+            .load_user_overrides(&tmp.path().join("harnesses"))
+            .unwrap();
+        let selected = select_build_harnesses(&[], &requested, &registry).unwrap();
+        assert_eq!(selected, registry.selected_ids(requested.iter()));
+        assert_eq!(selected, ["droid", "claude-code"]);
     }
 
     #[test]

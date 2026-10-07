@@ -1,0 +1,140 @@
+{
+  "pin": {
+    "package": "skills",
+    "version": "1.7.1",
+    "commit": "958f4b7389ba698b0a6a26a1e505ae2af82364d2",
+    "repository": "https://github.com/vercel-labs/skills",
+    "paths_from": "src/agents.ts",
+    "commands_from": "src/cli.ts"
+  },
+  "out_of_scope": [
+    "find and the skills.sh search API",
+    "use, including launching another agent",
+    "experimental_install and experimental_sync",
+    "skills-lock.json as a shared lockfile",
+    "symlink-to-one-canonical-tree as the default install method",
+    "the agent catalog beyond the five built-in harnesses",
+    "init template text",
+    "archive and direct-download byte limits",
+    "skills.sh telemetry",
+    "GH_HOST, Azure Repos, Notion, and raw file downloads"
+  ],
+  "harnesses": [
+    {
+      "skillprism_id": "claude",
+      "skills_agent": "claude-code",
+      "aliases": ["claude-code"],
+      "project_scope_path": ".claude/skills",
+      "user_scope_path": ".claude/skills",
+      "user_scope_base": "home"
+    },
+    {
+      "skillprism_id": "codex",
+      "skills_agent": "codex",
+      "aliases": [],
+      "project_scope_path": ".agents/skills",
+      "user_scope_path": ".codex/skills",
+      "user_scope_base": "home"
+    },
+    {
+      "skillprism_id": "opencode",
+      "skills_agent": "opencode",
+      "aliases": [],
+      "project_scope_path": ".agents/skills",
+      "user_scope_path": "opencode/skills",
+      "user_scope_base": "xdg_config_home"
+    },
+    {
+      "skillprism_id": "factory",
+      "skills_agent": "droid",
+      "aliases": ["droid"],
+      "project_scope_path": ".agents/skills",
+      "user_scope_path": ".factory/skills",
+      "user_scope_base": "home"
+    },
+    {
+      "skillprism_id": "pi",
+      "skills_agent": "pi",
+      "aliases": [],
+      "project_scope_path": ".agents/skills",
+      "user_scope_path": ".agents/skills",
+      "user_scope_base": "home"
+    }
+  ],
+  "add_flags": ["-g", "--global", "-a", "--agent", "-s", "--skill", "-y", "--yes", "--list", "--all"],
+  "list_flags": ["-g", "--global", "-a", "--agent"],
+  "remove_flags": ["-g", "--global", "-a", "--agent", "-s", "--skill", "-y", "--yes", "--all"],
+  "update_flags": ["-g", "--global", "-p", "--project", "-y", "--yes"],
+  "sources": [
+    {
+      "input": "vercel-labs/agent-skills",
+      "kind": "github",
+      "url": "https://github.com/vercel-labs/agent-skills.git"
+    },
+    {
+      "input": "vercel-labs/agent-skills#feature/install",
+      "kind": "github",
+      "url": "https://github.com/vercel-labs/agent-skills.git",
+      "ref": "feature/install"
+    },
+    {
+      "input": "owner/repo/skills/my-skill#v1.0.0",
+      "kind": "github",
+      "url": "https://github.com/owner/repo.git",
+      "ref": "v1.0.0",
+      "subpath": "skills/my-skill"
+    },
+    {
+      "input": "owner/repo@pdf",
+      "kind": "github",
+      "url": "https://github.com/owner/repo.git",
+      "skill_filter": "pdf"
+    },
+    {
+      "input": "https://github.com/owner/repo",
+      "kind": "github",
+      "url": "https://github.com/owner/repo.git"
+    },
+    {
+      "input": "https://github.com/vercel-labs/agent-skills/tree/main/skills/web-design-guidelines",
+      "kind": "github",
+      "url": "https://github.com/vercel-labs/agent-skills.git",
+      "ref": "main",
+      "subpath": "skills/web-design-guidelines"
+    },
+    {
+      "input": "git@github.com:owner/repo.git#feature/install",
+      "kind": "git",
+      "url": "git@github.com:owner/repo.git",
+      "ref": "feature/install"
+    },
+    {
+      "input": "https://gitlab.com/owner/repo",
+      "kind": "gitlab",
+      "url": "https://gitlab.com/owner/repo.git"
+    },
+    {
+      "input": "gitlab:mygroup/myskill",
+      "kind": "gitlab",
+      "url": "https://gitlab.com/mygroup/myskill.git"
+    },
+    {
+      "input": "https://gitlab.com/group/subgroup/repo/-/tree/main/skills/pdf",
+      "kind": "gitlab",
+      "url": "https://gitlab.com/group/subgroup/repo.git",
+      "ref": "main",
+      "subpath": "skills/pdf"
+    },
+    {
+      "input": "https://gitlab.example.com/org/repo/-/tree/v1.0",
+      "kind": "gitlab",
+      "url": "https://gitlab.example.com/org/repo.git",
+      "ref": "v1.0"
+    },
+    {
+      "input": "./my-local-skills",
+      "kind": "local",
+      "url": "./my-local-skills"
+    }
+  ]
+}

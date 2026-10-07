@@ -46,8 +46,8 @@ Each skill directory is inspected:
 
 ### Target scopes
 
-- **`project`**: Writes live skill files to project directories (`.claude/skills/`, `.opencode/skills/`, etc.).
-- **`user`**: Writes live skill files to user home directories (`~/.claude/skills/`, `~/.config/opencode/skills/`, etc.).
+- **`project`**: Writes live skill files to project directories (`.claude/skills/`, `.agents/skills/`, etc.).
+- **`user`**: Writes live skill files to user directories (`~/.claude/skills/`, `$XDG_CONFIG_HOME/opencode/skills/`, etc.). `-g` / `--global` selects this scope.
 
 If `--target` is omitted when running `skillprism add`, skillprism prompts interactively to select the target scope. The `--target dist` scope is not supported for `add` (rejected at parse time).
 

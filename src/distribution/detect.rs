@@ -52,16 +52,46 @@ const AGENTS: &[AgentProbe] = &[
     },
 ];
 
+/// Directory probed for `OpenCode`, matching the user-scope installer.
+///
+/// `$XDG_CONFIG_HOME/opencode` when that variable is set and non-empty, otherwise
+/// `$HOME/.config/opencode`.
+fn opencode_config_dir() -> Option<PathBuf> {
+    if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        if !xdg.is_empty() {
+            return Some(PathBuf::from(xdg).join("opencode"));
+        }
+    }
+    let home = std::env::var("HOME").ok()?;
+    if home.is_empty() {
+        return None;
+    }
+    Some(PathBuf::from(home).join(".config/opencode"))
+}
+
 /// Detects which agents are installed by probing common agent paths.
 ///
 /// Returns a list of harness IDs for agents that are detected on the system.
-/// Returns an empty vec if `$HOME` is not set or no agents are detected.
+/// `OpenCode` uses the same `$XDG_CONFIG_HOME` base as user-scope installs.
+/// Other agents are probed under `$HOME`. Returns an empty vec when no agent
+/// directory exists.
 pub fn detect_installed_agents() -> Vec<String> {
-    let home = match std::env::var("HOME") {
-        Ok(h) => PathBuf::from(h),
-        Err(_) => return Vec::new(),
-    };
-    detect_from_home(&home)
+    let home = std::env::var("HOME")
+        .ok()
+        .filter(|home| !home.is_empty())
+        .map(PathBuf::from);
+    let mut found = home
+        .as_ref()
+        .map(|home| detect_from_home(home))
+        .unwrap_or_default();
+    // `detect_from_home` only sees `$HOME/.config/opencode`. Replace that hit
+    // with the installer base so a custom `XDG_CONFIG_HOME` is what counts.
+    found.retain(|id| id != "opencode");
+    if opencode_config_dir().is_some_and(|path| path.exists()) {
+        let index = usize::from(found.first().is_some_and(|id| id == "claude"));
+        found.insert(index, "opencode".to_string());
+    }
+    found
 }
 
 /// Internal: probe from a given home directory (testable without env mocks).
@@ -111,7 +141,40 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
         let empty_home = tempfile::tempdir().unwrap();
-        let _guard = crate::router::paths::tests::EnvGuard::set("HOME", empty_home.path());
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", empty_home.path());
+        let _xdg = crate::router::paths::tests::EnvGuard::remove("XDG_CONFIG_HOME");
         assert!(detect_installed_agents().is_empty());
+    }
+
+    #[test]
+    fn detects_opencode_from_xdg_config_home() {
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let home = tempfile::tempdir().unwrap();
+        let xdg = tempfile::tempdir().unwrap();
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", home.path());
+        let _xdg = crate::router::paths::tests::EnvGuard::set("XDG_CONFIG_HOME", xdg.path());
+
+        std::fs::create_dir_all(home.path().join(".config/opencode")).unwrap();
+        assert!(
+            !detect_installed_agents().contains(&"opencode".to_string()),
+            "OpenCode detection must follow XDG_CONFIG_HOME, not $HOME/.config"
+        );
+
+        std::fs::create_dir_all(xdg.path().join("opencode")).unwrap();
+        assert_eq!(detect_installed_agents(), vec!["opencode".to_string()]);
+    }
+
+    #[test]
+    fn detects_opencode_under_home_config_when_xdg_is_unset() {
+        let _lock = crate::router::paths::tests::ENV_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let home = tempfile::tempdir().unwrap();
+        let _xdg = crate::router::paths::tests::EnvGuard::remove("XDG_CONFIG_HOME");
+        let _home = crate::router::paths::tests::EnvGuard::set("HOME", home.path());
+        std::fs::create_dir_all(home.path().join(".config/opencode")).unwrap();
+        assert_eq!(detect_installed_agents(), vec!["opencode".to_string()]);
     }
 }

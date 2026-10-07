@@ -11,8 +11,8 @@ capabilities:
   supports_disable_model_invocation: true
   supports_user_invocable_flag: false
 paths:
-  project_scope_path: .pi/skills
-  user_scope_path: .pi/agent/skills
+  project_scope_path: .agents/skills
+  user_scope_path: .agents/skills
   skill_filename: SKILL.md
 skill_ref_pattern: /{name}
 macros:

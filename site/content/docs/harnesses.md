@@ -12,9 +12,11 @@ A harness is an agent product that reads skills. skillprism ships with 5 built-i
 |---------|----|-------------|-----------|----------|
 | Claude Code | `claude` | `.claude/skills/` | `~/.claude/skills/` | `.claude/plugin.json` |
 | OpenAI Codex | `codex` | `.agents/skills/` | `~/.codex/skills/` | `.agents/marketplace.json` |
-| OpenCode | `opencode` | `.opencode/skills/` | `~/.config/opencode/skills/` | (none) |
-| Factory | `factory` | `.factory/skills/` | `~/.factory/skills/` | (none) |
-| Pi | `pi` | `.pi/skills/` | `~/.pi/agent/skills/` | (none) |
+| OpenCode | `opencode` | `.agents/skills/` | `$XDG_CONFIG_HOME/opencode/skills/` | (none) |
+| Factory | `factory` | `.agents/skills/` | `~/.factory/skills/` | (none) |
+| Pi | `pi` | `.agents/skills/` | `~/.agents/skills/` | (none) |
+
+OpenCode's user directory is `$XDG_CONFIG_HOME/opencode/skills`, or `~/.config/opencode/skills/` when `XDG_CONFIG_HOME` is unset. Codex, OpenCode, Factory, and Pi share the project directory `.agents/skills/`. `claude-code` selects Claude and `droid` selects Factory; the stored ids stay `claude` and `factory`.
 
 ## Custom harnesses (Advanced)
 

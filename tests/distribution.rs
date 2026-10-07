@@ -83,6 +83,169 @@ impl TestEnv {
 const SKILLPRISM_SKILL: &str = "skillprism-skill";
 const PLAIN_SKILL: &str = "plain-skill";
 
+fn project_install_path(root: &Path, harness: &str, skill: &str) -> PathBuf {
+    let scope = if harness == "opencode" {
+        ".agents/skills".to_string()
+    } else {
+        format!(".{harness}/skills")
+    };
+    root.join(scope).join(skill).join("SKILL.md")
+}
+
+#[test]
+fn add_all_installs_discovered_skills_without_a_tty() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(env.project_dir())
+        .arg("--all")
+        .assert()
+        .success();
+
+    for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
+        for harness in &["claude", "opencode"] {
+            let output_path = project_install_path(env.project_dir(), harness, skill);
+            assert!(
+                output_path.exists(),
+                "expected {skill} at {}",
+                output_path.display()
+            );
+        }
+    }
+
+    let lists = installed_harness_lists(&env.state_config.join("skillprism/installed.yaml"));
+    assert_eq!(lists.len(), 2, "{lists:?}");
+    for harnesses in &lists {
+        let ids: Vec<&str> = harnesses.iter().map(String::as_str).collect();
+        assert_eq!(ids, ["claude", "opencode"], "{lists:?}");
+    }
+}
+
+fn installed_harness_lists(path: &Path) -> Vec<Vec<String>> {
+    #[derive(serde::Deserialize)]
+    struct StateDoc {
+        skills: Vec<StateSkill>,
+    }
+    #[derive(serde::Deserialize)]
+    struct StateSkill {
+        harnesses: Vec<String>,
+    }
+    let text = fs::read_to_string(path).unwrap();
+    let state: StateDoc = yaml_serde::from_str(&text).unwrap();
+    state
+        .skills
+        .into_iter()
+        .map(|skill| skill.harnesses)
+        .collect()
+}
+
+#[test]
+fn list_literal_harness_ignores_invalid_unrelated_harness_file() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(env.project_dir())
+        .args(["--force", "-H", "opencode", "--skill", PLAIN_SKILL])
+        .assert()
+        .success();
+    fs::create_dir_all(env.project_dir().join("harnesses")).unwrap();
+    fs::write(env.project_dir().join("harnesses/broken.yaml"), "[\n").unwrap();
+
+    let listed = env
+        .bin()
+        .args(["list", "-H", "opencode"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&listed.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL),
+        "list -H opencode should ignore an unrelated invalid harness file, got: {stdout}"
+    );
+}
+
+#[test]
+fn list_droid_selects_factory_unless_a_user_harness_owns_that_id() {
+    let aliased = TestEnv::new("dist-simple");
+    aliased
+        .bin()
+        .arg("add")
+        .arg(aliased.project_dir())
+        .args(["--force", "-H", "droid", "--skill", PLAIN_SKILL])
+        .assert()
+        .success();
+    let listed = aliased
+        .bin()
+        .args(["list", "-H", "droid"])
+        .assert()
+        .success();
+    let stdout = String::from_utf8_lossy(&listed.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL),
+        "droid should select the factory install, got: {stdout}"
+    );
+    let harnesses =
+        installed_harness_lists(&aliased.state_config.join("skillprism/installed.yaml"));
+    assert!(
+        harnesses.iter().any(|ids| ids == &["factory".to_string()]),
+        "alias install should record factory, got: {harnesses:?}"
+    );
+
+    let owned = TestEnv::new("dist-simple");
+    fs::create_dir_all(owned.project_dir().join("harnesses")).unwrap();
+    fs::write(
+        owned.project_dir().join("harnesses/droid.yaml"),
+        "id: droid\nname: droid\ncapabilities:\n  supports_subagent: false\npaths:\n  project_scope_path: .droid/skills\n  user_scope_path: .droid/skills\n  skill_filename: SKILL.md\n",
+    )
+    .unwrap();
+    owned
+        .bin()
+        .arg("add")
+        .arg(owned.project_dir())
+        .args(["--force", "-H", "droid", "--skill", PLAIN_SKILL])
+        .assert()
+        .success();
+    let owned_list = owned.bin().args(["list", "-H", "droid"]).assert().success();
+    let owned_stdout = String::from_utf8_lossy(&owned_list.get_output().stdout);
+    assert!(
+        owned_stdout.contains(PLAIN_SKILL),
+        "an exact user harness id must win over the droid alias, got: {owned_stdout}"
+    );
+    let factory = owned
+        .bin()
+        .args(["list", "-H", "factory"])
+        .assert()
+        .success();
+    let factory_stdout = String::from_utf8_lossy(&factory.get_output().stdout);
+    assert!(
+        !factory_stdout.contains(PLAIN_SKILL),
+        "factory must not match a user harness registered as droid, got: {factory_stdout}"
+    );
+}
+
+#[test]
+fn remove_all_skips_confirmation_without_a_tty() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("--force")
+        .assert()
+        .success();
+
+    env.bin().arg("remove").arg("--all").assert().success();
+
+    for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
+        for harness in &["claude", "opencode"] {
+            let output_path = project_install_path(env.project_dir(), harness, skill);
+            assert!(
+                !output_path.exists(),
+                "{skill} should be removed from {}",
+                output_path.display()
+            );
+        }
+    }
+}
+
 #[test]
 fn distribution_lifecycle_add_list_remove() {
     let env = TestEnv::new("dist-simple");
@@ -98,9 +261,7 @@ fn distribution_lifecycle_add_list_remove() {
     // Verify both skills installed to each harness
     for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
         for harness in &["claude", "opencode"] {
-            let output_path = env
-                .project_dir()
-                .join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_install_path(env.project_dir(), harness, skill);
             assert!(
                 output_path.exists(),
                 "expected {skill} at {}",
@@ -116,19 +277,21 @@ fn distribution_lifecycle_add_list_remove() {
     )
     .unwrap();
     assert!(claude_content.contains("Harness: claude"));
-    let opencode_content = fs::read_to_string(
-        env.project_dir()
-            .join(format!(".opencode/skills/{SKILLPRISM_SKILL}/SKILL.md")),
-    )
+    let opencode_content = fs::read_to_string(project_install_path(
+        env.project_dir(),
+        "opencode",
+        SKILLPRISM_SKILL,
+    ))
     .unwrap();
     assert!(opencode_content.contains("Harness: opencode"));
 
     // Verify plain-skill copied as-is (same content in both harnesses)
     for harness in &["claude", "opencode"] {
-        let content = fs::read_to_string(
-            env.project_dir()
-                .join(format!(".{harness}/skills/{PLAIN_SKILL}/SKILL.md")),
-        )
+        let content = fs::read_to_string(project_install_path(
+            env.project_dir(),
+            harness,
+            PLAIN_SKILL,
+        ))
         .unwrap();
         assert!(content.contains("Version: A"));
     }
@@ -158,9 +321,7 @@ fn distribution_lifecycle_add_list_remove() {
     // Verify files removed
     for skill in &[SKILLPRISM_SKILL, PLAIN_SKILL] {
         for harness in &["claude", "opencode"] {
-            let output_path = env
-                .project_dir()
-                .join(format!(".{harness}/skills/{skill}/SKILL.md"));
+            let output_path = project_install_path(env.project_dir(), harness, skill);
             assert!(
                 !output_path.exists(),
                 "{skill} should be removed from {}",
@@ -241,9 +402,7 @@ fn distribution_add_undefined_variable_fails_without_writing() {
 
     // No partial output may be written to any harness on validation failure.
     for harness in &["claude", "opencode"] {
-        let output_path = env
-            .project_dir()
-            .join(format!(".{harness}/skills/bad-skill/SKILL.md"));
+        let output_path = project_install_path(env.project_dir(), harness, "bad-skill");
         assert!(
             !output_path.exists(),
             "no file should be written on validation failure, found {}",
@@ -616,5 +775,143 @@ paths:
     assert!(
         !user_plain.exists(),
         "user-scoped plain-skill should be removed from custom-harness skills_dir"
+    );
+}
+
+#[test]
+fn yes_installs_shared_plain_skill_for_codex_and_opencode() {
+    let env = TestEnv::new("dist-simple");
+    let source = fixtures_dir().join("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(&source)
+        .arg("-s")
+        .arg(PLAIN_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("-y")
+        .assert()
+        .success();
+
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(PLAIN_SKILL)
+        .join("SKILL.md");
+    let body = fs::read_to_string(&shared).unwrap();
+    assert!(body.contains("Version: A"), "unexpected body: {body}");
+
+    let list = env.bin().arg("list").assert().success();
+    let stdout = String::from_utf8_lossy(&list.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL) && stdout.contains("codex, opencode"),
+        "fresh --yes install should record both harnesses, got: {stdout}"
+    );
+}
+
+#[test]
+fn yes_refuses_to_overwrite_preexisting_shared_skill_file() {
+    let env = TestEnv::new("dist-simple");
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(PLAIN_SKILL)
+        .join("SKILL.md");
+    fs::create_dir_all(shared.parent().unwrap()).unwrap();
+    fs::write(&shared, b"user-owned").unwrap();
+
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("-s")
+        .arg(PLAIN_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("-y")
+        .assert()
+        .failure();
+
+    assert_eq!(fs::read(&shared).unwrap(), b"user-owned");
+    let list = env.bin().arg("list").assert().success();
+    let stderr = String::from_utf8_lossy(&list.get_output().stderr);
+    assert!(
+        stderr.contains("No installed skills"),
+        "refused install must not save state, got: {stderr}"
+    );
+}
+
+#[test]
+fn yes_errors_when_shared_harnesses_render_different_bytes() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("-s")
+        .arg(SKILLPRISM_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("-y")
+        .assert()
+        .failure();
+
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(SKILLPRISM_SKILL)
+        .join("SKILL.md");
+    assert!(
+        !shared.exists(),
+        "divergent harness output must not be written"
+    );
+}
+
+#[test]
+fn remove_one_shared_harness_keeps_the_other_harness_files() {
+    let env = TestEnv::new("dist-simple");
+    env.bin()
+        .arg("add")
+        .arg(fixtures_dir().join("dist-simple"))
+        .arg("-s")
+        .arg(PLAIN_SKILL)
+        .arg("-a")
+        .arg("codex")
+        .arg("-a")
+        .arg("opencode")
+        .arg("--force")
+        .assert()
+        .success();
+
+    let shared = env
+        .project_dir()
+        .join(".agents/skills")
+        .join(PLAIN_SKILL)
+        .join("SKILL.md");
+    assert!(shared.exists());
+
+    env.bin()
+        .arg("remove")
+        .arg(PLAIN_SKILL)
+        .arg("-H")
+        .arg("opencode")
+        .arg("--force")
+        .assert()
+        .success();
+
+    assert!(
+        shared.exists(),
+        "codex still owns {} after removing opencode",
+        shared.display()
+    );
+    let list = env.bin().arg("list").assert().success();
+    let stdout = String::from_utf8_lossy(&list.get_output().stdout);
+    assert!(
+        stdout.contains(PLAIN_SKILL) && stdout.contains("codex") && !stdout.contains("opencode"),
+        "state should still list codex only, got: {stdout}"
     );
 }

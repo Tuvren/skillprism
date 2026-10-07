@@ -894,4 +894,73 @@ mod tests {
             SourceParseError::UnsafeSubpath { .. }
         ));
     }
+
+    #[test]
+    fn skills_cli_v1_7_1_source_forms() {
+        #[derive(serde::Deserialize)]
+        struct Contract {
+            sources: Vec<Case>,
+        }
+
+        #[derive(serde::Deserialize)]
+        struct Case {
+            input: String,
+            kind: String,
+            url: String,
+            #[serde(default, rename = "ref")]
+            git_ref: Option<String>,
+            #[serde(default)]
+            subpath: Option<String>,
+            #[serde(default)]
+            skill_filter: Option<String>,
+        }
+
+        let contract: Contract =
+            serde_json::from_str(include_str!("../../tests/contracts/skills-cli-v1.7.1.json"))
+                .expect("skills CLI source contract");
+
+        for case in contract.sources {
+            let parsed = parse_source(&case.input)
+                .unwrap_or_else(|error| panic!("parse `{}` failed: {error}", case.input));
+            match (case.kind.as_str(), parsed) {
+                (
+                    "github",
+                    ParsedSource::GitHub {
+                        url,
+                        r#ref,
+                        subpath,
+                        skill_filter,
+                    },
+                ) => {
+                    assert_eq!(url, case.url, "{}", case.input);
+                    assert_eq!(r#ref, case.git_ref, "{}", case.input);
+                    assert_eq!(subpath, case.subpath, "{}", case.input);
+                    assert_eq!(skill_filter, case.skill_filter, "{}", case.input);
+                }
+                (
+                    "gitlab",
+                    ParsedSource::GitLab {
+                        url,
+                        r#ref,
+                        subpath,
+                        ..
+                    },
+                ) => {
+                    assert_eq!(url, case.url, "{}", case.input);
+                    assert_eq!(r#ref, case.git_ref, "{}", case.input);
+                    assert_eq!(subpath, case.subpath, "{}", case.input);
+                }
+                ("git", ParsedSource::Git { url, r#ref }) => {
+                    assert_eq!(url, case.url, "{}", case.input);
+                    assert_eq!(r#ref, case.git_ref, "{}", case.input);
+                }
+                ("local", ParsedSource::Local { path }) => {
+                    assert_eq!(path, PathBuf::from(&case.url), "{}", case.input);
+                }
+                (kind, other) => {
+                    panic!("`{}`: expected {kind}, parsed {other:?}", case.input);
+                }
+            }
+        }
+    }
 }

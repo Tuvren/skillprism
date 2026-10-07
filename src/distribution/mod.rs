@@ -40,12 +40,82 @@ pub use update::run_update;
 /// Parses a comma-separated harness list (e.g. `--harnesses claude,opencode`)
 /// into trimmed, non-empty ids. Shared by add/list/remove/update so the parsing
 /// rule stays in one place.
+///
+/// This does not apply skills CLI aliases. Call
+/// [`canonical_harness_arg`] once a registry is available so a user harness
+/// whose id is `droid` or `claude-code` is not rewritten to the built-in.
 pub fn parse_harness_list(raw: &str) -> Vec<String> {
-    raw.split(',')
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(ToString::to_string)
-        .collect()
+    normalize_harness_ids(raw.split(','))
+}
+
+/// Trims harness ids, dropping blanks and duplicates while preserving
+/// first-seen order. Does not apply built-in aliases.
+pub fn normalize_harness_ids<I, S>(ids: I) -> Vec<String>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<str>,
+{
+    let mut out = Vec::new();
+    for id in ids {
+        let trimmed = id.as_ref().trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|existing| existing == trimmed) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+/// Resolves aliases in one harness argument against the project registry.
+///
+/// Returns `None` when the argument is absent or names nothing. An exact
+/// registered id wins over `claude-code` → `claude` and `droid` → `factory`.
+/// Literal ids are returned as written. Project harness files are loaded only
+/// when a token is one of those aliases, so an unrelated invalid harness file
+/// does not fail `list`, `remove`, or `update`.
+pub fn canonical_harness_arg(raw: Option<String>) -> Result<Option<String>, miette::Report> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    let tokens = parse_harness_list(&raw);
+    if tokens.is_empty() {
+        return Ok(None);
+    }
+    let ids = if tokens
+        .iter()
+        .any(|id| crate::registry::alias_of(id).is_some())
+    {
+        let root = find_project_root().ok();
+        let registry =
+            install::build_registry_for_harnesses(root.as_deref()).map_err(miette::Report::new)?;
+        registry.selected_ids(tokens)
+    } else {
+        tokens
+    };
+    if ids.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(ids.join(",")))
+    }
+}
+
+/// Merges `--harnesses` and repeatable `--agent` values into one canonical list.
+///
+/// Returns `None` when neither flag named a harness, so callers still prompt.
+pub fn combine_harness_args(harnesses: Option<&str>, agents: &[String]) -> Option<String> {
+    let mut raw = Vec::new();
+    if let Some(list) = harnesses {
+        raw.extend(list.split(',').map(ToString::to_string));
+    }
+    raw.extend(agents.iter().cloned());
+    let ids = normalize_harness_ids(raw);
+    if ids.is_empty() {
+        None
+    } else {
+        Some(ids.join(","))
+    }
 }
 
 /// Returns whether a skill passes the shared scope + harness filter used by
