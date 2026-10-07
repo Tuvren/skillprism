@@ -15,7 +15,7 @@
 use std::collections::BTreeMap;
 use std::path::Path;
 
-use super::yaml::{failing_entry, failing_field, string_entry_path};
+use super::yaml::{entry_key_path, failing_entry, failing_field, string_entry_path};
 use crate::types::{
     ConfigKind, HarnessOverride, ProjectConfig, ProjectError, ProjectModel, SkillModel,
 };
@@ -300,18 +300,36 @@ fn merge_variables(
 fn parse_skill_config(content: &str, path: &Path) -> Result<SkillYamlRaw, ProjectError> {
     let raw = super::yaml::deserialize(content, path, ConfigKind::Skill)?;
     validate_skillprism_manifest_version(&raw, path, content)?;
-    super::yaml::from_value(&raw, content, path, skill_field_path)
+    super::yaml::from_value(&raw, content, path, ConfigKind::Skill, skill_field_path)
 }
 
 fn skill_field_path(value: &yaml_serde::Value, reason: &str) -> Option<String> {
     let (field, value) = failing_field::<SkillYamlRaw>(value, reason)?;
     let nested = match field {
-        "overrides" => {
-            let (harness, value) = failing_entry::<HarnessOverrideRaw>(value, reason)?;
-            let (field, value) = failing_field::<HarnessOverrideRaw>(value, reason)?;
-            let entry = string_entry_path(value, reason).unwrap_or_default();
-            format!(".{harness}.{field}{entry}")
-        }
+        "overrides" => failing_entry::<HarnessOverrideRaw>(value, reason)
+            .map(|(harness, value)| {
+                let harness_path = entry_key_path(harness);
+                if yaml_serde::from_value::<String>(harness.clone()).is_err() {
+                    return harness_path;
+                }
+                let nested = failing_field::<HarnessOverrideRaw>(value, reason)
+                    .map(|(field, value)| {
+                        let entry = if field == "variables" {
+                            failing_entry::<yaml_serde::Value>(value, reason)
+                                .map(|(key, _)| entry_key_path(key))
+                        } else {
+                            string_entry_path(value, reason)
+                        }
+                        .unwrap_or_default();
+                        format!(".{field}{entry}")
+                    })
+                    .unwrap_or_default();
+                format!("{harness_path}{nested}")
+            })
+            .unwrap_or_default(),
+        "variables" | "hooks" => failing_entry::<yaml_serde::Value>(value, reason)
+            .map(|(key, _)| entry_key_path(key))
+            .unwrap_or_default(),
         "metadata" | "arguments" | "disallowed-tools" | "paths" | "required-capabilities" => {
             string_entry_path(value, reason).unwrap_or_default()
         }
@@ -428,6 +446,22 @@ struct HarnessOverrideRaw {
 mod tests {
     use super::*;
     use std::fs;
+
+    #[test]
+    fn config_diagnostics_override_paths_fall_back_when_nested_lookup_fails() {
+        for (fields, expected) in [
+            ("overrides: 42\n", "overrides"),
+            ("overrides: {claude: 42}\n", "overrides.claude"),
+        ] {
+            let raw =
+                yaml_serde::from_str::<yaml_serde::Value>(&format!("skillprism: '1'\n{fields}"))
+                    .unwrap();
+            let reason = yaml_serde::from_value::<SkillYamlRaw>(raw.clone())
+                .unwrap_err()
+                .to_string();
+            assert_eq!(skill_field_path(&raw, &reason).as_deref(), Some(expected));
+        }
+    }
 
     fn setup_test_dir() -> tempfile::TempDir {
         tempfile::tempdir().unwrap()

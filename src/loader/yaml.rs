@@ -41,6 +41,7 @@ pub(super) fn from_value<T: DeserializeOwned>(
     value: &yaml_serde::Value,
     content: &str,
     path: &Path,
+    kind: ConfigKind,
     field_path: impl FnOnce(&yaml_serde::Value, &str) -> Option<String>,
 ) -> Result<T, ProjectError> {
     yaml_serde::from_value(value.clone()).map_err(|error| {
@@ -58,7 +59,7 @@ pub(super) fn from_value<T: DeserializeOwned>(
             },
             |located| (located.to_string(), located.location()),
         );
-        ProjectError::config_schema(ConfigKind::Skill, path, content, message, position)
+        ProjectError::config_schema(kind, path, content, message, position)
     })
 }
 
@@ -85,18 +86,31 @@ pub(super) fn failing_field<'a, T: serde::de::DeserializeOwned>(
 pub(super) fn failing_entry<'a, T: serde::de::DeserializeOwned>(
     value: &'a yaml_serde::Value,
     reason: &str,
-) -> Option<(&'a str, &'a yaml_serde::Value)> {
+) -> Option<(&'a yaml_serde::Value, &'a yaml_serde::Value)> {
     value.as_mapping()?.iter().find_map(|(key, value)| {
-        yaml_serde::from_value::<T>(value.clone())
+        // Check the key before its value, just as the authoritative map does.
+        let probe =
+            yaml_serde::Value::Mapping(std::iter::once((key.clone(), value.clone())).collect());
+        yaml_serde::from_value::<std::collections::BTreeMap<String, T>>(probe)
             .err()
             .filter(|error| error.to_string() == reason)
-            .and_then(|_| Some((key.as_str()?, value)))
+            .map(|_| (key, value))
     })
+}
+
+pub(super) fn entry_key_path(key: &yaml_serde::Value) -> String {
+    yaml_serde::from_value::<String>(key.clone()).map_or_else(
+        |_| {
+            let key = yaml_serde::to_string(key).unwrap_or_else(|_| format!("{key:?}"));
+            format!(": key `{}`", key.trim())
+        },
+        |key| format!(".{key}"),
+    )
 }
 
 pub(super) fn string_entry_path(value: &yaml_serde::Value, reason: &str) -> Option<String> {
     value.as_sequence().map_or_else(
-        || failing_entry::<String>(value, reason).map(|(key, _)| format!(".{key}")),
+        || failing_entry::<String>(value, reason).map(|(key, _)| entry_key_path(key)),
         |sequence| {
             sequence.iter().enumerate().find_map(|(index, value)| {
                 yaml_serde::from_value::<String>(value.clone())
@@ -173,6 +187,24 @@ impl<'de> serde::Deserialize<'de> for RejectValue {
 mod tests {
     use super::*;
     use crate::types::ProjectConfig;
+
+    #[test]
+    fn config_diagnostics_value_conversion_preserves_config_kind() {
+        for kind in [ConfigKind::Project, ConfigKind::Skill, ConfigKind::Harness] {
+            let error = from_value::<String>(
+                &yaml_serde::Value::from(1),
+                "1\n",
+                Path::new("config.yaml"),
+                kind,
+                |_, _| None,
+            )
+            .unwrap_err();
+            let ProjectError::ConfigSchema { kind: actual, .. } = error else {
+                panic!("expected a config schema error");
+            };
+            assert_eq!(actual.to_string(), kind.to_string());
+        }
+    }
 
     #[test]
     fn config_diagnostics_both_variants_have_help_and_short_labels() {

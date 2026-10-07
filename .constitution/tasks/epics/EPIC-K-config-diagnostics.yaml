@@ -184,8 +184,8 @@ closeout:
       kind: convention
       paths: [src/cli.rs]
       commit: "46e0449"
-    - summary: "ProjectError::YamlParse replaced by YamlSyntax and ConfigSchema, each with the reason in the headline, real parser location when available, a 'here' source label, and help text; shared classification in src/loader/yaml.rs."
+    - summary: "ProjectError::YamlParse replaced by YamlSyntax and ConfigSchema, each with the reason in the headline, real parser location when available (used only when it refers to the offending field), a 'here' source label sized to the token including quoted scalars, and help text; ConfigSchema carries a ConfigKind (project, skill, harness) that selects the matching docs URL in help; missing-field errors are always file-level; scalar type errors name the field path, recovered by diagnostic-only probes on the existing structs while from_value stays authoritative. Shared classification lives in src/loader/yaml.rs."
       kind: contract_shape
       paths: [src/types/error.rs, src/loader/yaml.rs, src/loader/project.rs, src/registry/mod.rs]
-      commit: "e93ae5b"
+      commit: "ff74e59"
   settled: []

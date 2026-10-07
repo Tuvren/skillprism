@@ -371,6 +371,38 @@ fn config_diagnostics_scalar_errors_name_field_paths() {
             "overrides: {claude: {macros: {hello: 42}}}\n",
             "overrides.claude.macros.hello: invalid type: integer `42`",
         ),
+        (
+            "overrides: {1: {}}\n",
+            "overrides: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "metadata: {1: x}\n",
+            "metadata: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "variables: {valid: 1, 1: x}\n",
+            "variables: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "overrides: {claude: {variables: {valid: 1, 1: x}}}\n",
+            "overrides.claude.variables: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "overrides: {claude: {macros: {1: x}}}\n",
+            "overrides.claude.macros: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "overrides: {1: {macros: {hello: 1}}}\n",
+            "overrides: key `1`: invalid type: integer `1`, expected a string",
+        ),
+        (
+            "metadata: {!label owner: 42}\n",
+            "metadata.owner: invalid type: integer `42`",
+        ),
+        (
+            "overrides: {!label claude: {macros: {hello: 42}}}\n",
+            "overrides.claude.macros.hello: invalid type: integer `42`",
+        ),
         // A later direct-parse error must not replace the earlier Value rejection.
         (
             "name: 42\nvariables: text\n",
