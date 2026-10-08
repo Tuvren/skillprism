@@ -29,9 +29,9 @@ use crate::types::ProjectError;
 
 use super::add::InstallScopeArg;
 use super::install::{
-    InstallError, build_registry_for_harnesses, copy_dir, detect_format, discover_skill_dirs,
-    install_scope_to_target, load_skill_into_temp_project, sha256_bytes, sha256_file,
-    skill_dir_name, validate_pairs, walk_files,
+    InstallError, build_registry_for_harnesses, copy_dir_filtered, detect_format,
+    discover_skill_dirs, install_scope_to_target, load_skill_into_temp_project, sha256_bytes,
+    sha256_file, skill_dir_name, validate_pairs, walk_files,
 };
 use super::network::{self, NetworkError};
 use super::source::{ParsedSource, SourceParseError, parse_source};
@@ -663,6 +663,34 @@ fn update_skillprism_pairs(
             )?;
         }
 
+        let mut rendered_paths: Vec<PathBuf> = Vec::new();
+        for file in &output.rendered_files {
+            let output_path = crate::router::resolve_rendered_path(
+                skill_path_buf.parent().unwrap(),
+                &file.relative_path,
+                old_name,
+                harness_id,
+            )
+            .map_err(|e| {
+                miette::Report::new(UpdateError::PathResolution {
+                    detail: format!("rendered file for {harness_id}: {e}"),
+                })
+            })?;
+            update_file_record(
+                &output_path,
+                &file.content,
+                old_files,
+                new_files,
+                changed,
+                diff,
+                force,
+                skip_all,
+                overwrite_all,
+                shared,
+            )?;
+            rendered_paths.push(output_path);
+        }
+
         for asset_dir in &pair.skill.asset_dirs {
             if asset_dir.exists() {
                 update_asset_dir(
@@ -676,6 +704,8 @@ fn update_skillprism_pairs(
                     skip_all,
                     overwrite_all,
                     shared,
+                    &rendered_paths,
+                    true,
                 )?;
             }
         }
@@ -862,6 +892,8 @@ fn update_plain_pairs(
                     skip_all,
                     overwrite_all,
                     shared,
+                    &[],
+                    false,
                 )?;
             }
         }
@@ -883,6 +915,8 @@ fn update_asset_dir(
     skip_all: &mut bool,
     overwrite_all: &mut bool,
     shared: &mut SharedOutputs,
+    keep_paths: &[PathBuf],
+    skip_j2: bool,
 ) -> Result<(), UpdateError> {
     let dir_name = src_dir.file_name().ok_or_else(|| {
         UpdateError::Install(InstallError::Project(ProjectError::ConfigRead {
@@ -899,6 +933,9 @@ fn update_asset_dir(
 
     let mut expected = Vec::new();
     for src_file in walk_files(src_dir)? {
+        if skip_j2 && is_j2_file(&src_file) {
+            continue;
+        }
         let rel = src_file
             .strip_prefix(src_dir)
             .map_err(|e| UpdateError::Io(io::Error::other(e.to_string())))?;
@@ -907,10 +944,17 @@ fn update_asset_dir(
         expected.push((src_file, dst_file, hash));
     }
 
-    let expected_paths: std::collections::HashSet<String> = expected
+    let mut expected_paths: HashSet<String> = expected
         .iter()
         .map(|(_, p, _)| p.to_string_lossy().to_string())
         .collect();
+    // Rendered `.j2` outputs also live under this directory. Keep them from
+    // being pruned by the removed-asset sweep; update_file_record writes them.
+    for path in keep_paths {
+        if path.starts_with(&dst_dir) {
+            expected_paths.insert(path.to_string_lossy().to_string());
+        }
+    }
 
     let mut removed: Vec<String> = Vec::new();
     for path_str in old_files.keys() {
@@ -955,7 +999,14 @@ fn update_asset_dir(
         force,
         skip_all,
         overwrite_all,
+        skip_j2,
     )
+}
+
+/// Returns true when `path`'s file name ends with the `.j2` template suffix.
+fn is_j2_file(path: &Path) -> bool {
+    path.extension()
+        .is_some_and(|ext| ext == std::ffi::OsStr::new("j2"))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -971,6 +1022,7 @@ fn apply_asset_dir_changes(
     force: bool,
     skip_all: &mut bool,
     overwrite_all: &mut bool,
+    skip_j2: bool,
 ) -> Result<(), UpdateError> {
     let mut copied = false;
     if diff {
@@ -993,7 +1045,7 @@ fn apply_asset_dir_changes(
         let mut skipped = Vec::new();
         copied = resolve_overwrite(dst_dir, force, skip_all, overwrite_all, &mut skipped)?;
         if copied {
-            copy_dir(src_dir, dst_dir, src_dir)?;
+            copy_dir_filtered(src_dir, dst_dir, src_dir, skip_j2)?;
             for path_str in removed {
                 let _ = fs::remove_file(path_str);
             }
@@ -1281,6 +1333,8 @@ mod tests {
             &mut skip_all,
             &mut overwrite_all,
             &mut shared,
+            &[],
+            false,
         )
         .unwrap();
 
@@ -1332,6 +1386,8 @@ mod tests {
             &mut skip_all,
             &mut overwrite_all,
             &mut shared,
+            &[],
+            false,
         )
         .unwrap();
 

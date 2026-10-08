@@ -13,7 +13,7 @@
 // limitations under the License.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::yaml::{entry_key_path, failing_entry, failing_field, string_entry_path};
 use crate::types::{
@@ -236,6 +236,73 @@ impl ProjectLoader {
         Ok(())
     }
 
+    /// Recursively discovers every `.j2` template under a skill directory, in
+    /// deterministic order. The skill's own `template_path` (whether
+    /// `SKILL.md.j2` or bare `SKILL.md`) is excluded, as are dot-directories and
+    /// symlinked directories. Each entry's `relative_output` is the source path
+    /// relative to `dir` with the `.j2` suffix removed.
+    pub(crate) fn discover_templates(
+        dir: &Path,
+        template_path: &Path,
+    ) -> Result<Vec<DiscoveredTemplate>, ProjectError> {
+        let mut templates = Vec::new();
+        Self::collect_templates(dir, dir, template_path, &mut templates)?;
+        templates.sort_by(|a, b| a.relative_output.cmp(&b.relative_output));
+        Ok(templates)
+    }
+
+    fn collect_templates(
+        root: &Path,
+        current: &Path,
+        template_path: &Path,
+        out: &mut Vec<DiscoveredTemplate>,
+    ) -> Result<(), ProjectError> {
+        for entry in read_dir_entries(current)? {
+            let path = entry.path();
+            let name = entry.file_name();
+            let Some(name_str) = name.to_str() else {
+                continue;
+            };
+            let metadata =
+                std::fs::symlink_metadata(&path).map_err(|e| ProjectError::ConfigRead {
+                    path: path.to_string_lossy().to_string(),
+                    source: e,
+                })?;
+
+            if metadata.is_dir() {
+                if name_str.starts_with('.') {
+                    continue;
+                }
+                Self::collect_templates(root, &path, template_path, out)?;
+                continue;
+            }
+
+            if path == *template_path {
+                continue;
+            }
+            let Some(stripped_name) = name_str.strip_suffix(".j2") else {
+                continue;
+            };
+            if stripped_name.is_empty() {
+                continue;
+            }
+
+            let mut relative_output = path
+                .strip_prefix(root)
+                .map_err(|e| ProjectError::ConfigRead {
+                    path: path.to_string_lossy().to_string(),
+                    source: std::io::Error::other(e.to_string()),
+                })?
+                .to_path_buf();
+            relative_output.set_file_name(stripped_name);
+            out.push(DiscoveredTemplate {
+                source: path,
+                relative_output,
+            });
+        }
+        Ok(())
+    }
+
     /// Every direct subdirectory of a skill's own directory is an asset directory to
     /// copy verbatim, regardless of name (`references/`, `scripts/`, or anything else
     /// an author uses) — `walk_directory` never recurses into a skill's own directory
@@ -271,6 +338,27 @@ pub fn find_template_path(dir: &Path) -> Result<Option<std::path::PathBuf>, Proj
 
 pub fn discover_asset_dirs(dir: &Path) -> Result<Vec<std::path::PathBuf>, ProjectError> {
     ProjectLoader::discover_asset_dirs(dir)
+}
+
+/// A non-skill `.j2` template discovered under a skill directory.
+///
+/// `source` is the `.j2` file on disk; `relative_output` is that file's path
+/// relative to the skill directory with the `.j2` suffix stripped — the path
+/// where its rendered content is written inside each harness's skill output.
+#[derive(Debug, Clone)]
+pub struct DiscoveredTemplate {
+    /// Absolute path to the `.j2` source file.
+    pub source: PathBuf,
+    /// Output path relative to the skill output directory (`.j2` stripped).
+    pub relative_output: PathBuf,
+}
+
+/// Free-function alias for [`ProjectLoader::discover_templates`].
+pub fn discover_templates(
+    dir: &Path,
+    template_path: &Path,
+) -> Result<Vec<DiscoveredTemplate>, ProjectError> {
+    ProjectLoader::discover_templates(dir, template_path)
 }
 
 fn read_dir_entries(dir: &Path) -> Result<Vec<std::fs::DirEntry>, ProjectError> {

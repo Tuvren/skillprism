@@ -68,6 +68,16 @@ pub enum RouterError {
         detail: String,
     },
 
+    /// Failed to discover `.j2` templates under a skill directory.
+    #[error("[{skill}] {harness}: Failed to discover templates under `{path}`")]
+    #[diagnostic(help("{detail}"))]
+    TemplateDiscovery {
+        skill: String,
+        harness: String,
+        path: String,
+        detail: String,
+    },
+
     /// A resolved output path escapes its allowed scope (path traversal).
     #[error(
         "[{skill}] {harness}: Path traversal detected — `{resolved}` escapes scope `{allowed_base}`"
@@ -197,6 +207,9 @@ impl Router {
                     .or_default()
                     .push(sidecar_label);
             }
+
+            Self::register_rendered_paths(pair, &skill_dir, &mut path_map)?;
+            Self::register_asset_paths(pair, &skill_dir, &mut path_map)?;
         }
 
         let errors: Vec<RouterError> = path_map
@@ -215,7 +228,71 @@ impl Router {
         }
     }
 
-    /// Writes rendered skill output (skill file + sidecars) to disk at the resolved path.
+    /// Adds every rendered non-skill `.j2` output path for `pair` to the collision map.
+    fn register_rendered_paths(
+        pair: &ResolvedPair,
+        skill_dir: &Path,
+        path_map: &mut BTreeMap<PathBuf, Vec<String>>,
+    ) -> Result<(), Vec<RouterError>> {
+        let Some(source_dir) = pair.skill.template_path.parent() else {
+            return Ok(());
+        };
+        let templates = crate::loader::discover_templates(source_dir, &pair.skill.template_path)
+            .map_err(|e| {
+                vec![RouterError::TemplateDiscovery {
+                    skill: pair.skill.name.clone(),
+                    harness: pair.harness.id.clone(),
+                    path: source_dir.to_string_lossy().to_string(),
+                    detail: e.to_string(),
+                }]
+            })?;
+        for template in templates {
+            let output_path = skill_dir.join(&template.relative_output);
+            let label = format!(
+                "{} \u{2192} {} (rendered: {})",
+                pair.skill.name,
+                &pair.harness.id,
+                template.relative_output.display(),
+            );
+            path_map.entry(output_path).or_default().push(label);
+        }
+        Ok(())
+    }
+
+    /// Adds every copied (non-`.j2`) asset output path for `pair` to the collision map.
+    fn register_asset_paths(
+        pair: &ResolvedPair,
+        skill_dir: &Path,
+        path_map: &mut BTreeMap<PathBuf, Vec<String>>,
+    ) -> Result<(), Vec<RouterError>> {
+        if pair.skill.asset_dirs.is_empty() {
+            return Ok(());
+        }
+        let paths = write::asset_output_paths(&pair.skill.asset_dirs, skill_dir).map_err(|e| {
+            vec![RouterError::AssetCopyError {
+                skill: pair.skill.name.clone(),
+                harness: pair.harness.id.clone(),
+                path: skill_dir.to_string_lossy().to_string(),
+                detail: e.to_string(),
+            }]
+        })?;
+        for output_path in paths {
+            let label = format!(
+                "{} \u{2192} {} (asset: {})",
+                pair.skill.name,
+                &pair.harness.id,
+                output_path
+                    .strip_prefix(skill_dir)
+                    .unwrap_or(&output_path)
+                    .display(),
+            );
+            path_map.entry(output_path).or_default().push(label);
+        }
+        Ok(())
+    }
+
+    /// Writes rendered skill output (skill file + sidecars + rendered `.j2` files)
+    /// to disk at the resolved path.
     ///
     /// Manifest files are NOT written here — they are batch-processed via
     /// [`write_aggregated_manifests`](Self::write_aggregated_manifests) after all skills are rendered.
@@ -312,6 +389,22 @@ impl Router {
             )?
         };
 
+        let rendered_paths = if skill_was_skipped {
+            Vec::new()
+        } else {
+            Self::write_rendered_files(
+                pair,
+                output,
+                &skill_dir,
+                force,
+                yes,
+                skip_all,
+                overwrite_all,
+                &mut skipped,
+                session,
+            )?
+        };
+
         for dir in &pair.skill.asset_dirs {
             if !dir.exists() {
                 eprintln!(
@@ -340,6 +433,7 @@ impl Router {
             written: WrittenFiles {
                 skill_path,
                 sidecar_paths,
+                rendered_paths,
                 asset_paths,
             },
             skipped,
@@ -436,6 +530,25 @@ impl Router {
             });
         }
 
+        for file in &output.rendered_files {
+            let output_path = paths::resolve_rendered_path(
+                &skill_dir,
+                &file.relative_path,
+                skill_name,
+                harness_id,
+            )?;
+            let existing = diff::read_existing(&output_path);
+            let diff_output = diff::compute_diff(
+                existing.as_deref(),
+                &file.content,
+                &output_path.to_string_lossy(),
+            );
+            entries.push(DiffEntry {
+                path: output_path,
+                diff: diff_output,
+            });
+        }
+
         Ok(entries)
     }
 
@@ -517,6 +630,65 @@ impl Router {
 
         Ok(sidecar_paths)
     }
+
+    // reason: rendered `.j2` writes share the skill write's force/yes/session policy.
+    #[allow(clippy::too_many_arguments, clippy::fn_params_excessive_bools)]
+    fn write_rendered_files(
+        pair: &ResolvedPair,
+        output: &HarnessOutput,
+        skill_dir: &Path,
+        force: bool,
+        yes: bool,
+        skip_all: &mut bool,
+        overwrite_all: &mut bool,
+        skipped: &mut Vec<String>,
+        session: &mut WriteSession,
+    ) -> Result<Vec<PathBuf>, RouterError> {
+        let skill_name = &pair.skill.name;
+        let harness_id = &pair.harness.id;
+        let mut rendered_paths = Vec::new();
+
+        for file in &output.rendered_files {
+            let output_path = paths::resolve_rendered_path(
+                skill_dir,
+                &file.relative_path,
+                skill_name,
+                harness_id,
+            )?;
+
+            let action = session.resolve(
+                &output_path,
+                file.content.as_bytes(),
+                force,
+                yes,
+                skip_all,
+                overwrite_all,
+                skipped,
+                &format!(
+                    "{skill_name} \u{2192} {harness_id} (rendered: {})",
+                    file.relative_path.display()
+                ),
+            )?;
+            match action {
+                SharedWrite::Write => {
+                    atomic_write(&output_path, &file.content).map_err(|e| {
+                        RouterError::WriteError {
+                            skill: skill_name.clone(),
+                            harness: harness_id.clone(),
+                            path: output_path.to_string_lossy().to_string(),
+                            detail: e.to_string(),
+                        }
+                    })?;
+                    session.record(output_path.clone(), file.content.as_bytes().to_vec());
+                    rendered_paths.push(output_path);
+                }
+                SharedWrite::Deduped => rendered_paths.push(output_path),
+                SharedWrite::Skipped => {}
+            }
+        }
+
+        Ok(rendered_paths)
+    }
 }
 
 /// Paths of files written during a build operation.
@@ -526,6 +698,8 @@ pub struct WrittenFiles {
     pub skill_path: std::path::PathBuf,
     /// Paths to any sidecar files written.
     pub sidecar_paths: Vec<std::path::PathBuf>,
+    /// Paths to any rendered non-skill `.j2` output files written.
+    pub rendered_paths: Vec<std::path::PathBuf>,
     /// Paths to any asset files copied alongside the skill.
     pub asset_paths: Vec<std::path::PathBuf>,
 }
@@ -568,6 +742,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "my-agent-rendered".to_string(),
             sidecars: vec![],
         };
@@ -604,6 +779,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "content".to_string(),
             sidecars: vec![],
         };
@@ -638,6 +814,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "main".to_string(),
             sidecars: vec![SidecarOutput {
                 filename: "config.yaml".to_string(),
@@ -770,6 +947,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "content".to_string(),
             sidecars: vec![],
         };
@@ -804,6 +982,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "rendered content".to_string(),
             sidecars: vec![],
         };
@@ -830,6 +1009,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "new content".to_string(),
             sidecars: vec![],
         };
@@ -857,6 +1037,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "same content".to_string(),
             sidecars: vec![],
         };
@@ -880,6 +1061,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "main".to_string(),
             sidecars: vec![SidecarOutput {
                 filename: "config.yaml".to_string(),
@@ -908,6 +1090,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "rendered".to_string(),
             sidecars: vec![],
         };
@@ -940,6 +1123,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "rendered".to_string(),
             sidecars: vec![],
         };
@@ -1013,6 +1197,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "new".to_string(),
             sidecars: vec![],
         };
@@ -1050,6 +1235,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "new".to_string(),
             sidecars: vec![],
         };
@@ -1087,6 +1273,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "overwritten".to_string(),
             sidecars: vec![],
         };
@@ -1191,6 +1378,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "rendered".to_string(),
             sidecars: vec![SidecarOutput {
                 filename: "sidecar.yaml".to_string(),
@@ -1253,6 +1441,7 @@ mod tests {
 
         let pair = HarnessResolver::resolve_skill_harness(&skill, "opencode", &registry).unwrap();
         let output = HarnessOutput {
+            rendered_files: Vec::new(),
             skill_content: "new-content".to_string(),
             sidecars: vec![SidecarOutput {
                 filename: "sidecar.yaml".to_string(),

@@ -162,6 +162,48 @@ pub fn resolve_sidecar_path(
     Ok(combined)
 }
 
+/// Resolves the full path to a rendered non-skill `.j2` template within the
+/// skill output directory.
+///
+/// `relative_path` is the `.j2` source path relative to the skill directory
+/// with the suffix already stripped. Returns an error if it is absolute, has
+/// `..` components, or escapes the skill output directory.
+pub fn resolve_rendered_path(
+    skill_output_dir: &Path,
+    relative_path: &Path,
+    skill_name: &str,
+    harness_id: &str,
+) -> Result<PathBuf, RouterError> {
+    if relative_path.is_absolute() {
+        return Err(RouterError::AbsolutePathDisallowed {
+            skill: skill_name.to_string(),
+            harness: harness_id.to_string(),
+            component: relative_path.to_string_lossy().to_string(),
+        });
+    }
+    for component in relative_path.components() {
+        if component == Component::ParentDir {
+            return Err(RouterError::PathTraversal {
+                skill: skill_name.to_string(),
+                harness: harness_id.to_string(),
+                resolved: relative_path.to_string_lossy().to_string(),
+                allowed_base: skill_output_dir.to_string_lossy().to_string(),
+            });
+        }
+    }
+
+    let combined = skill_output_dir.join(relative_path);
+    if !combined.starts_with(skill_output_dir) {
+        return Err(RouterError::PathTraversal {
+            skill: skill_name.to_string(),
+            harness: harness_id.to_string(),
+            resolved: combined.to_string_lossy().to_string(),
+            allowed_base: skill_output_dir.to_string_lossy().to_string(),
+        });
+    }
+    Ok(combined)
+}
+
 /// Checks that a scope path string does not contain `..` traversal components.
 fn check_no_traversal(
     scope_path: &str,

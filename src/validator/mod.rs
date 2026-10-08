@@ -17,7 +17,9 @@ mod spec;
 mod syntax;
 mod variables;
 
+use std::collections::BTreeMap;
 use std::fs;
+use std::path::Path;
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -239,15 +241,6 @@ impl Validator {
         }
 
         let resolved_variables = pair.skill.variables_for_harness(harness_id);
-        let var_errors = variables::check_variables(&content, template_path, &resolved_variables);
-        for uvar in var_errors {
-            errors.push(ValidationError::UndefinedVariable {
-                skill: skill_name.clone(),
-                harness: harness_id.clone(),
-                variable_name: uvar.variable_name,
-                template_path: uvar.template_path,
-            });
-        }
 
         for variable_name in variables::check_reserved_names(&resolved_variables) {
             errors.push(ValidationError::ReservedVariableName {
@@ -266,8 +259,103 @@ impl Validator {
                 );
             }
         }
-        let macro_errors = macros::check_macros(&content, template_path, &resolved_macros);
-        for umacro in macro_errors {
+
+        Self::check_references(
+            pair,
+            &content,
+            template_path,
+            &resolved_variables,
+            &resolved_macros,
+            errors,
+        );
+
+        Self::check_extra_templates(
+            pair,
+            template_path,
+            &resolved_variables,
+            &resolved_macros,
+            errors,
+        );
+    }
+
+    /// Runs syntax/variable/macro checks on every non-skill `.j2` template under
+    /// the skill directory. Unlike the main template they are not rendered here
+    /// and have no frontmatter to check.
+    fn check_extra_templates(
+        pair: &ResolvedPair,
+        template_path: &Path,
+        resolved_variables: &BTreeMap<String, yaml_serde::Value>,
+        resolved_macros: &BTreeMap<String, crate::registry::MacroDef>,
+        errors: &mut Vec<ValidationError>,
+    ) {
+        let skill_name = &pair.skill.name;
+        let harness_id = &pair.harness.id;
+        let Some(skill_dir) = template_path.parent() else {
+            return;
+        };
+        let templates = match crate::loader::discover_templates(skill_dir, template_path) {
+            Ok(templates) => templates,
+            Err(e) => {
+                errors.push(ValidationError::TemplateRead {
+                    skill: skill_name.clone(),
+                    harness: harness_id.clone(),
+                    detail: format!("{}: {e}", skill_dir.display()),
+                });
+                return;
+            }
+        };
+        for template in templates {
+            let extra_content = match fs::read_to_string(&template.source) {
+                Ok(c) => c,
+                Err(e) => {
+                    errors.push(ValidationError::TemplateRead {
+                        skill: skill_name.clone(),
+                        harness: harness_id.clone(),
+                        detail: format!("{}: {e}", template.source.display()),
+                    });
+                    continue;
+                }
+            };
+            if let Err(detail) = syntax::check_syntax(&extra_content, &template.source) {
+                errors.push(ValidationError::SyntaxError {
+                    skill: skill_name.clone(),
+                    harness: harness_id.clone(),
+                    detail,
+                });
+                continue;
+            }
+            Self::check_references(
+                pair,
+                &extra_content,
+                &template.source,
+                resolved_variables,
+                resolved_macros,
+                errors,
+            );
+        }
+    }
+
+    /// Runs the undefined-variable and undefined-macro checks for one template's
+    /// content, appending any errors under the pair's `(skill, harness)` key.
+    fn check_references(
+        pair: &ResolvedPair,
+        content: &str,
+        template_path: &Path,
+        resolved_variables: &BTreeMap<String, yaml_serde::Value>,
+        resolved_macros: &BTreeMap<String, crate::registry::MacroDef>,
+        errors: &mut Vec<ValidationError>,
+    ) {
+        let skill_name = &pair.skill.name;
+        let harness_id = &pair.harness.id;
+        for uvar in variables::check_variables(content, template_path, resolved_variables) {
+            errors.push(ValidationError::UndefinedVariable {
+                skill: skill_name.clone(),
+                harness: harness_id.clone(),
+                variable_name: uvar.variable_name,
+                template_path: uvar.template_path,
+            });
+        }
+        for umacro in macros::check_macros(content, template_path, resolved_macros) {
             errors.push(ValidationError::UndefinedMacro {
                 skill: skill_name.clone(),
                 harness: harness_id.clone(),

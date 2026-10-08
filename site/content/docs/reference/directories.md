@@ -11,7 +11,11 @@ Live installs write under the harness paths below. `build` does not. Commands th
 
 `build` writes each skill to `dist/<harness-id>/<skill-name>/`. The file name is the harness `skill_filename` (`SKILL.md` for every built-in). `project_scope_path` is not part of that path.
 
-Every direct subdirectory of the skill is copied next to that file. The directory can have any name. Dot-directories are not copied. The Agent Skills specification recommends a `SKILL.md` under 500 lines and under 5000 tokens, with longer material in separate files. skillprism does not enforce that size.
+Every direct subdirectory of the skill is copied next to that file. The directory can have any name. Dot-directories are not copied.
+
+A file whose name ends in `.j2` is rendered instead of copied, and the written name drops that suffix. This includes the skill root and nested directories. A root-level file that does not end in `.j2` is not copied. Every other non-`.j2` file is copied byte-for-byte. Rendering is in [Templates](templates/).
+
+The Agent Skills specification recommends a `SKILL.md` under 500 lines and under 5000 tokens, with longer material in separate files. skillprism does not enforce that size.
 
 A manifest is `dist/<harness-id>/<manifest_scope_path>/<manifest_filename>`. For the built-ins that define one, that is `dist/claude/.claude/plugin.json` and `dist/codex/.agents/marketplace.json`.
 

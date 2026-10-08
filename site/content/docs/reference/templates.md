@@ -7,7 +7,11 @@ aliases:
   - /docs/templating/
 ---
 
-`SKILL.md` is the skill template. A skill directory has `SKILL.md` or `SKILL.md.j2`, not both. skillprism fills the template once for each harness. A missing value is empty, not the word `none`.
+`SKILL.md` is the skill template. A skill directory has `SKILL.md` or `SKILL.md.j2`, not both. skillprism renders that file once for each harness. A missing value is empty, not the word `none`.
+
+`SKILL.md` is the only file rendered without a `.j2` suffix. Any other file whose name ends in `.j2` is also a template. skillprism renders it once for each harness, with the same context, macros, filters, and errors, and writes it without the suffix. `references/plan.md.j2` becomes `references/plan.md`. The file can sit at the skill root or in a nested directory.
+
+skillprism does not check frontmatter on those extra templates. A file other than `SKILL.md` that does not end in `.j2` is copied unchanged. Copy rules are in [Directories and state](directories/).
 
 Template syntax is [Jinja](https://jinja.palletsprojects.com/en/stable/templates/). `skill_ref` is reserved, so a `variables` key of that name is rejected.
 

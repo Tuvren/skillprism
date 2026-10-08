@@ -586,6 +586,7 @@ fn execute_build_pipeline(
                 result.changed += 1;
             }
             result.changed += write_result.written.sidecar_paths.len();
+            result.changed += write_result.written.rendered_paths.len();
             result.skipped += write_result.skipped.len();
             if verbose {
                 eprintln!("  [{write_time}] write {pair_name}");

@@ -515,8 +515,78 @@ pub fn reject_divergent_skill_outputs(
                 format!("{label} (sidecar: {})", sidecar.filename),
             ));
         }
+        for file in &output.rendered_files {
+            let output_path = crate::router::resolve_rendered_path(
+                &parent,
+                &file.relative_path,
+                &pair.skill.name,
+                &pair.harness.id,
+            )
+            .map_err(InstallError::Router)?;
+            planned.push((
+                output_path,
+                file.content.clone().into_bytes(),
+                format!("{label} (rendered: {})", file.relative_path.display()),
+            ));
+        }
+        for (source, output_path) in copied_asset_paths(pair, &parent)? {
+            planned.push((
+                output_path.clone(),
+                fs::read(&source)?,
+                format!("{label} (asset: {})", output_path.display()),
+            ));
+        }
     }
     reject_divergent_shared_paths(&planned).map_err(InstallError::Router)
+}
+
+/// Lists the `(source, destination)` pairs of the non-`.j2` asset files `pair`
+/// copies into `skill_dir`, mirroring the router's asset-copy walk.
+fn copied_asset_paths(
+    pair: &ResolvedPair,
+    skill_dir: &Path,
+) -> Result<Vec<(PathBuf, PathBuf)>, InstallError> {
+    if pair.skill.asset_dirs.is_empty() {
+        return Ok(Vec::new());
+    }
+    let mut paths = Vec::new();
+    for source in &pair.skill.asset_dirs {
+        let dir_name = source.file_name().ok_or_else(|| {
+            InstallError::Project(ProjectError::ConfigRead {
+                path: source.to_string_lossy().to_string(),
+                source: std::io::Error::other("asset directory has no name"),
+            })
+        })?;
+        collect_copied_paths(source, &skill_dir.join(dir_name), &mut paths)?;
+    }
+    Ok(paths)
+}
+
+fn collect_copied_paths(
+    src: &Path,
+    dst: &Path,
+    paths: &mut Vec<(PathBuf, PathBuf)>,
+) -> Result<(), InstallError> {
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        if is_j2_name(&entry.file_name()) {
+            continue;
+        }
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let metadata = fs::symlink_metadata(&src_path)?;
+        // Symlinks are recreated by the copy path, not read here; skipping them
+        // avoids reading through a link that could point outside the skill root.
+        if metadata.is_symlink() {
+            continue;
+        }
+        if metadata.is_dir() {
+            collect_copied_paths(&src_path, &dst_path, paths)?;
+        } else {
+            paths.push((src_path, dst_path));
+        }
+    }
+    Ok(())
 }
 
 fn reject_divergent_shared_paths(
@@ -722,6 +792,13 @@ fn install_skillprism_skill(
             files.push(InstalledFile {
                 path: sidecar.to_string_lossy().to_string(),
                 hash: format!("sha256:{}", sha256_file(sidecar)?),
+            });
+        }
+
+        for rendered in &result.written.rendered_paths {
+            files.push(InstalledFile {
+                path: rendered.to_string_lossy().to_string(),
+                hash: format!("sha256:{}", sha256_file(rendered)?),
             });
         }
 
@@ -1072,14 +1149,33 @@ fn resolve_to_install_error(skill_name: &str) -> impl FnOnce(ResolveError) -> In
 /// resolves outside that root is rejected. Directory cycles via symlinks are
 /// also rejected.
 pub fn copy_dir(src: &Path, dst: &Path, src_root: &Path) -> Result<(), InstallError> {
+    copy_dir_filtered(src, dst, src_root, false)
+}
+
+/// Copies a directory tree like [`copy_dir`], optionally skipping raw `.j2`
+/// templates. The skillprism-format update path uses `skip_j2 = true` because
+/// those templates are rendered separately (with the suffix stripped).
+pub fn copy_dir_filtered(
+    src: &Path,
+    dst: &Path,
+    src_root: &Path,
+    skip_j2: bool,
+) -> Result<(), InstallError> {
     let mut visited = std::collections::HashSet::new();
-    copy_dir_inner(src, dst, src_root, &mut visited)
+    copy_dir_inner(src, dst, src_root, skip_j2, &mut visited)
+}
+
+fn is_j2_name(name: &std::ffi::OsStr) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext == std::ffi::OsStr::new("j2"))
 }
 
 fn copy_dir_inner(
     src: &Path,
     dst: &Path,
     src_root: &Path,
+    skip_j2: bool,
     visited: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), InstallError> {
     let canonical_src = std::fs::canonicalize(src).unwrap_or_else(|_| src.to_path_buf());
@@ -1096,13 +1192,16 @@ fn copy_dir_inner(
     fs::create_dir_all(dst)?;
     for entry in fs::read_dir(src)? {
         let entry = entry?;
+        if skip_j2 && is_j2_name(&entry.file_name()) {
+            continue;
+        }
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
         let metadata = fs::symlink_metadata(&src_path)?;
         if metadata.is_symlink() {
-            copy_symlink_target(&src_path, &dst_path, src_root, visited)?;
+            copy_symlink_target(&src_path, &dst_path, src_root, skip_j2, visited)?;
         } else if metadata.is_dir() {
-            copy_dir_inner(&src_path, &dst_path, src_root, visited)?;
+            copy_dir_inner(&src_path, &dst_path, src_root, skip_j2, visited)?;
         } else {
             fs::copy(&src_path, &dst_path)?;
         }
@@ -1118,6 +1217,7 @@ fn copy_symlink_target(
     link: &Path,
     dst: &Path,
     src_root: &Path,
+    skip_j2: bool,
     visited: &mut std::collections::HashSet<PathBuf>,
 ) -> Result<(), InstallError> {
     let target = fs::read_link(link)?;
@@ -1165,7 +1265,7 @@ fn copy_symlink_target(
 
     let metadata = fs::symlink_metadata(&canonical_target)?;
     if metadata.is_dir() {
-        copy_dir_inner(&canonical_target, dst, src_root, visited)?;
+        copy_dir_inner(&canonical_target, dst, src_root, skip_j2, visited)?;
     } else {
         fs::copy(&canonical_target, dst)?;
     }

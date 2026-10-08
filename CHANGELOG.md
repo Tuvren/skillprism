@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## v0.5.0 — 2026-10-08
+
+### Added
+
+- **Extra `.j2` templates** — A file other than the skill template whose name ends in `.j2` renders once per harness. The output drops the suffix, so `references/plan.md.j2` becomes `references/plan.md`. The file can sit at the skill root or in a nested directory. It uses the same context, macros, filters, and errors as `SKILL.md`, and it has no frontmatter check. `validate` checks its syntax, variables, and macros. `build --diff`, `add`, and `update` record the rendered bytes. Fixes [#46](https://github.com/tuvren/skillprism/issues/46).
+
+### Changed
+
+- **`.j2` files are templates (breaking)** — Those files are no longer copied unchanged. To keep a byte copy, rename the file so the name does not end in `.j2`. `SKILL.md` is the only file rendered without that suffix. A plain-format skill, one with no `skill.yaml`, stays a byte copy.
 
 ## v0.4.0 — 2026-10-07
 

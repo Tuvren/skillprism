@@ -613,6 +613,80 @@ fn distribution_update_applies_source_changes() {
 }
 
 #[test]
+fn distribution_add_and_update_render_j2_assets() {
+    let project = tempfile::TempDir::with_prefix("skillprism_j2_project_").unwrap();
+    fs::write(
+        project.path().join("skillprism.yaml"),
+        "harnesses:\n  - claude\nskills_dir: skills\n",
+    )
+    .unwrap();
+    let source = tempfile::TempDir::with_prefix("skillprism_j2_source_").unwrap();
+    let skill = source.path().join("skills/render-skill");
+    fs::create_dir_all(skill.join("references")).unwrap();
+    fs::write(
+        skill.join("skill.yaml"),
+        "skillprism: '1'\nname: render-skill\ndescription: A render test\n",
+    )
+    .unwrap();
+    fs::write(
+        skill.join("SKILL.md.j2"),
+        "---\nname: {{ skill_name | yaml_str }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n",
+    )
+    .unwrap();
+    fs::write(skill.join("references/ref.md.j2"), "Ref {{ harness.id }}\n").unwrap();
+    fs::write(
+        skill.join("references/static.md"),
+        "Literal {{ harness.id }}\n",
+    )
+    .unwrap();
+
+    init_git_repo(source.path());
+    commit_all(source.path(), "Version A");
+    let source_url = format!("file://{}", source.path().display());
+    let state = tempfile::TempDir::with_prefix("skillprism_j2_state_").unwrap();
+
+    let run = |args: &[&str]| {
+        let mut cmd = Command::cargo_bin("skillprism").unwrap();
+        cmd.current_dir(project.path())
+            .env("HOME", state.path().join("home"))
+            .env("XDG_CONFIG_HOME", state.path())
+            .args(args);
+        cmd
+    };
+
+    run(&["add", source_url.as_str(), "--force"])
+        .assert()
+        .success();
+
+    let installed = project
+        .path()
+        .join(".claude/skills/render-skill/references");
+    assert_eq!(
+        fs::read_to_string(installed.join("ref.md")).unwrap(),
+        "Ref claude\n"
+    );
+    assert!(!installed.join("ref.md.j2").exists());
+    assert_eq!(
+        fs::read_to_string(installed.join("static.md")).unwrap(),
+        "Literal {{ harness.id }}\n"
+    );
+
+    fs::write(
+        skill.join("references/ref.md.j2"),
+        "Updated {{ harness.id }}\n",
+    )
+    .unwrap();
+    commit_all(source.path(), "Version B");
+    run(&["update", "--force"]).assert().success();
+
+    assert_eq!(
+        fs::read_to_string(installed.join("ref.md")).unwrap(),
+        "Updated claude\n"
+    );
+    assert!(!installed.join("ref.md.j2").exists());
+}
+
+#[test]
 fn distribution_update_no_skills_in_state() {
     let env = TestEnv::new("dist-simple");
 

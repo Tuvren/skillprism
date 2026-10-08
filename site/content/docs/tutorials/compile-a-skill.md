@@ -9,7 +9,7 @@ aliases:
 
 In this tutorial, we will create one project, author one skill, validate it, and compile it so a rendered SKILL.md appears under dist/.
 
-This tutorial uses skillprism 0.4.0 on your PATH. If that command is missing, follow [How to install skillprism](../how-to/install-skillprism/).
+This tutorial uses skillprism 0.5.0 on your PATH. If that command is missing, follow [How to install skillprism](../how-to/install-skillprism/).
 
 First, create a project named `my-skills` for Claude. We pass `-H claude` so the command writes that harness and does not prompt.
 
@@ -138,7 +138,7 @@ Summarize the file the user names. Use when asked to summarize a file, a diff, o
 Read the file the user names, then write a short summary of what it contains.
 ```
 
-Notice that `name` and `description` are quoted, and that the body is the text from the template. The placeholder files under `assets/`, `references/`, and `scripts/` were copied beside that `SKILL.md`.
+Notice that `name` and `description` are quoted, and that the body is the text from the template. The placeholder files under `assets/`, `references/`, and `scripts/` were copied beside that `SKILL.md`. To render a file other than `SKILL.md`, see [Templates](../reference/templates/).
 
 Notice that build also wrote `dist/claude/.claude/plugin.json`:
 

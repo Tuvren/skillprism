@@ -7,7 +7,7 @@ aliases:
   - /docs/concepts/
 ---
 
-A skill passes through three states, and they are not three names for the same files. Source is the project an author keeps: one skill, one template, and the configuration that says which harnesses that source is for. Dist is what `build` compiles from that source: a separate tree for each harness, written inside the project. Installed is what a live agent reads, in a directory that agent already owns.
+A skill passes through three states, and they are not three names for the same files. Source is the project an author keeps: the skill files, and the configuration that says which harnesses that source is for. Dist is what `build` compiles from that source: a separate tree for each harness, written inside the project. Installed is what a live agent reads, in a directory that agent already owns.
 
 Compiling and installing are different decisions. Compiling answers what each harness should receive. Installing answers whether to put that document where an agent will load it. Before v0.2.0, `build` could do both, and a compile could overwrite a working agent's skills. The split makes `build` compile-only.
 

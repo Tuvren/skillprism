@@ -18,6 +18,7 @@ mod helpers;
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::path::PathBuf;
 
 use miette::Diagnostic;
 use thiserror::Error;
@@ -36,6 +37,19 @@ pub struct HarnessOutput {
     pub skill_content: String,
     /// Sidecar files produced alongside the main skill file.
     pub sidecars: Vec<SidecarOutput>,
+    /// Non-skill `.j2` templates rendered alongside the main skill file.
+    pub rendered_files: Vec<RenderedFile>,
+}
+
+/// A non-skill `.j2` template rendered through the same harness context as
+/// `SKILL.md`. It is written inside the harness's skill output directory with
+/// its `.j2` suffix stripped and is never subject to frontmatter checks.
+#[derive(Debug, Clone)]
+pub struct RenderedFile {
+    /// Output path relative to the skill output directory (`.j2` stripped).
+    pub relative_path: PathBuf,
+    /// Rendered content.
+    pub content: String,
 }
 
 /// A sidecar file produced during skill rendering.
@@ -113,6 +127,8 @@ impl Engine {
 
         frontmatter::check(pair, &skill_content).map_err(EngineError::Frontmatter)?;
 
+        let rendered_files = render_asset_templates(pair, &ctx)?;
+
         let sidecars = render_sidecars(pair, &ctx).map_err(|e| EngineError::RenderError {
             skill: pair.skill.name.clone(),
             harness: pair.harness.id.clone(),
@@ -124,6 +140,7 @@ impl Engine {
         Ok(HarnessOutput {
             skill_content,
             sidecars,
+            rendered_files,
         })
     }
 
@@ -168,6 +185,51 @@ fn fmt_minijinja_error(err: &minijinja::Error) -> String {
     } else {
         description
     }
+}
+
+fn render_asset_templates(
+    pair: &ResolvedPair,
+    ctx: &BTreeMap<String, minijinja::Value>,
+) -> Result<Vec<RenderedFile>, EngineError> {
+    let Some(skill_dir) = pair.skill.template_path.parent() else {
+        return Ok(Vec::new());
+    };
+    let templates = crate::loader::discover_templates(skill_dir, &pair.skill.template_path)
+        .map_err(|e| EngineError::TemplateRead {
+            skill: pair.skill.name.clone(),
+            harness: pair.harness.id.clone(),
+            path: skill_dir.to_string_lossy().to_string(),
+            detail: e.to_string(),
+        })?;
+
+    let mut rendered = Vec::with_capacity(templates.len());
+    for template in templates {
+        let content =
+            fs::read_to_string(&template.source).map_err(|e| EngineError::TemplateRead {
+                skill: pair.skill.name.clone(),
+                harness: pair.harness.id.clone(),
+                path: template.source.to_string_lossy().to_string(),
+                detail: e.to_string(),
+            })?;
+
+        let mut env = minijinja::Environment::new();
+        register_helpers(&mut env, pair.harness.skill_ref_pattern.as_deref());
+        let name = template.source.to_string_lossy();
+        env.add_template_owned(name.to_string(), content)
+            .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
+        let tmpl = env
+            .get_template(&name)
+            .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
+        let content = tmpl
+            .render(ctx)
+            .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
+        rendered.push(RenderedFile {
+            relative_path: template.relative_output,
+            content,
+        });
+    }
+
+    Ok(rendered)
 }
 
 fn render_sidecars(

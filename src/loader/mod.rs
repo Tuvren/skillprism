@@ -21,4 +21,4 @@ pub use yaml::deserialize as deserialize_config;
 // is retained (as pinned by DIST-I002) to document the distribution commands'
 // dependency on them.
 pub use project::*;
-pub use project::{discover_asset_dirs, find_template_path};
+pub use project::{discover_asset_dirs, discover_templates, find_template_path};

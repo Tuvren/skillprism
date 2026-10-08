@@ -54,4 +54,14 @@ skillprism build -H claude,opencode
 
 `dist/claude/status-note/SKILL.md` contains `Status: ready.` and the Claude Code sentence. `dist/opencode/status-note/SKILL.md` contains `Status: ready for OpenCode.` and the OpenCode sentence. A harness omitted from the conditional gets the `else` text and the top-level `status` value.
 
+To vary a file other than `SKILL.md`, give that file a `.j2` suffix. `SKILL.md` is the only file rendered without one.
+
+Create `skills/status-note/references/where.md.j2`:
+
+```jinja
+Look in the {{ harness.id }} skill directory.
+```
+
+That build writes `dist/claude/status-note/references/where.md` and the OpenCode file beside it. The `.j2` suffix is not in the output. The suffix rule is in [Templates](../reference/templates/).
+
 To change a harness macro for this skill only, add `overrides.<harness>.macros` in the same `skill.yaml`. That override does not change the macro for other skills.

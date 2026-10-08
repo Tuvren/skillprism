@@ -47,8 +47,9 @@ pub fn atomic_write_bytes(path: &Path, content: &[u8]) -> io::Result<()> {
 /// Copies asset directories (every direct subdirectory of a skill's own directory,
 /// regardless of name) to the skill output directory.
 ///
-/// Returns the paths of every copied file so callers can record hashes for update
-/// comparisons.
+/// Raw `.j2` templates are skipped: they are rendered separately (with the suffix
+/// stripped) through the harness context. Returns the paths of every copied file
+/// so callers can record hashes for update comparisons.
 pub fn copy_assets(
     source_dirs: &[impl AsRef<Path>],
     target_dir: &Path,
@@ -81,6 +82,9 @@ fn copy_dir_recursive(src: &Path, dst: &Path, copied: &mut Vec<PathBuf>) -> io::
 
     for entry in fs::read_dir(src)? {
         let entry = entry?;
+        if is_j2_template(&entry.file_name()) {
+            continue;
+        }
         let src_path = entry.path();
         let dst_path = dst.join(entry.file_name());
         let metadata = fs::symlink_metadata(&src_path)?;
@@ -99,6 +103,52 @@ fn copy_dir_recursive(src: &Path, dst: &Path, copied: &mut Vec<PathBuf>) -> io::
         }
     }
 
+    Ok(())
+}
+
+/// Returns true when `name` ends with the `.j2` template suffix.
+fn is_j2_template(name: &std::ffi::OsStr) -> bool {
+    std::path::Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext == std::ffi::OsStr::new("j2"))
+}
+
+/// Lists the destination paths [`copy_assets`] would create for `source_dirs`
+/// under `target_dir`, skipping raw `.j2` templates. Used for collision checks
+/// before any write happens.
+pub fn asset_output_paths(
+    source_dirs: &[impl AsRef<Path>],
+    target_dir: &Path,
+) -> io::Result<Vec<PathBuf>> {
+    let mut paths = Vec::new();
+    for src in source_dirs {
+        let src = src.as_ref();
+        if !src.exists() {
+            continue;
+        }
+        let Some(dir_name) = src.file_name() else {
+            continue;
+        };
+        collect_asset_paths(src, &target_dir.join(dir_name), &mut paths)?;
+    }
+    Ok(paths)
+}
+
+fn collect_asset_paths(src: &Path, dst: &Path, paths: &mut Vec<PathBuf>) -> io::Result<()> {
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        if is_j2_template(&entry.file_name()) {
+            continue;
+        }
+        let src_path = entry.path();
+        let dst_path = dst.join(entry.file_name());
+        let metadata = fs::symlink_metadata(&src_path)?;
+        if metadata.is_dir() {
+            collect_asset_paths(&src_path, &dst_path, paths)?;
+        } else {
+            paths.push(dst_path);
+        }
+    }
     Ok(())
 }
 

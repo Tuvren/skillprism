@@ -53,7 +53,7 @@ To compile a skill for the first time, follow [Create a skill and compile it](ht
 
 ### Environment Variables
 
-- `SKILLPRISM_VERSION`: Pin a specific version of the native binary (e.g. `0.4.0`). Defaults to the latest release.
+- `SKILLPRISM_VERSION`: Pin a specific version of the native binary, for example `0.5.0`. When unset, the launcher downloads the newest GitHub release.
 - `SKILLPRISM_SKIP_CHECKSUM`: Set to `1` to bypass tarball checksum validation (intended only for local testing).
 
 ## Maintainers
