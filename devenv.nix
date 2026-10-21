@@ -21,7 +21,13 @@ in
 {
   packages = with pkgs; [ just hugo-extended ];
 
-  languages.rust.enable = true;
+  languages.rust = {
+    enable = true;
+    toolchainFile = ./rust-toolchain.toml;
+    # The minimal profile does not include rust-analyzer. Keep the standalone
+    # server rather than using the aggregate toolchain as the LSP package.
+    lsp.package = pkgs.rust-analyzer;
+  };
 
   git-hooks.hooks = {
     rustfmt.enable = true;
