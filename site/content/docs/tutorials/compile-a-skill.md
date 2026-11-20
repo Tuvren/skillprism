@@ -9,7 +9,7 @@ aliases:
 
 In this tutorial, we will create one project, author one skill, validate it, and compile it so a rendered SKILL.md appears under dist/.
 
-This tutorial uses skillprism 0.5.0 on your PATH. If that command is missing, follow [How to install skillprism](../how-to/install-skillprism/).
+This tutorial uses skillprism 0.6.0 on your PATH. If that command is missing, follow [How to install skillprism](../how-to/install-skillprism/).
 
 First, create a project named `my-skills` for Claude. We pass `-H claude` so the command writes that harness and does not prompt.
 

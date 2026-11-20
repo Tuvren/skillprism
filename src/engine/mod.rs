@@ -98,7 +98,14 @@ pub struct Engine;
 
 impl Engine {
     /// Renders a skill template using the resolved harness, producing output files.
-    pub fn render(pair: &ResolvedPair) -> Result<HarnessOutput, EngineError> {
+    ///
+    /// Returns `Ok(None)` when the rendered skill content is empty: an empty
+    /// render means the template does not apply to this harness, so no output
+    /// files — skill file, sidecars, rendered `.j2` files, or assets — are
+    /// emitted for the pair. Sidecars and rendered `.j2` files that render
+    /// empty are likewise dropped from the output rather than written as
+    /// empty files.
+    pub fn render(pair: &ResolvedPair) -> Result<Option<HarnessOutput>, EngineError> {
         let content = fs::read_to_string(&pair.skill.template_path).map_err(|e| {
             EngineError::TemplateRead {
                 skill: pair.skill.name.clone(),
@@ -125,6 +132,10 @@ impl Engine {
             .render(&ctx)
             .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
 
+        if skill_content.trim().is_empty() {
+            return Ok(None);
+        }
+
         frontmatter::check(pair, &skill_content).map_err(EngineError::Frontmatter)?;
 
         let rendered_files = render_asset_templates(pair, &ctx)?;
@@ -137,26 +148,27 @@ impl Engine {
             detail: format!("Sidecar rendering failed: {e}"),
         })?;
 
-        Ok(HarnessOutput {
+        Ok(Some(HarnessOutput {
             skill_content,
             sidecars,
             rendered_files,
-        })
+        }))
     }
 
     /// Renders a single manifest entry for a resolved skill-harness pair.
     ///
-    /// Returns `Ok(None)` if the harness does not define a manifest template.
-    /// Returns `Err(EngineError::RenderError)` if the manifest template is
-    /// invalid or fails to render.
+    /// Returns `Ok(None)` if the harness does not define a manifest template or
+    /// the template renders empty for this pair. Returns
+    /// `Err(EngineError::RenderError)` if the manifest template is invalid or
+    /// fails to render.
     pub fn render_manifest_entry(pair: &ResolvedPair) -> Result<Option<String>, EngineError> {
         let Some(manifest) = pair.harness.manifest.as_ref() else {
             return Ok(None);
         };
         let ctx = build_context(pair);
-        render_manifest(manifest, &ctx, pair.harness.skill_ref_pattern.as_deref())
-            .map(Some)
-            .map_err(|e| render_error_from_minijinja(pair, "(manifest)", &e))
+        let content = render_manifest(manifest, &ctx, pair.harness.skill_ref_pattern.as_deref())
+            .map_err(|e| render_error_from_minijinja(pair, "(manifest)", &e))?;
+        Ok((!content.trim().is_empty()).then_some(content))
     }
 }
 
@@ -223,6 +235,9 @@ fn render_asset_templates(
         let content = tmpl
             .render(ctx)
             .map_err(|e| render_error_from_minijinja(pair, &name, &e))?;
+        if content.trim().is_empty() {
+            continue;
+        }
         rendered.push(RenderedFile {
             relative_path: template.relative_output,
             content,
@@ -251,6 +266,10 @@ fn render_sidecars(
         let content = tmpl
             .render(ctx)
             .map_err(|e| format!("{}: {e}", def.filename))?;
+
+        if content.trim().is_empty() {
+            continue;
+        }
 
         sidecars.push(SidecarOutput {
             filename: def.filename.clone(),
@@ -306,7 +325,7 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let (_dir, skill) = create_skill_with_template(skill_name, template, BTreeMap::new());
         let pair = HarnessResolver::resolve_skill_harness(&skill, harness_name, &registry).unwrap();
-        Engine::render(&pair)
+        Engine::render(&pair).map(|output| output.expect("test template renders non-empty"))
     }
 
     #[test]
@@ -348,7 +367,7 @@ mod tests {
             );
             skill.description = value.to_string();
             let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-            let output = Engine::render(&pair).unwrap();
+            let output = Engine::render(&pair).unwrap().unwrap();
             let frontmatter = output
                 .skill_content
                 .strip_prefix("---\n")
@@ -379,7 +398,7 @@ mod tests {
                 BTreeMap::from([("value".to_string(), value)]),
             );
             let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-            let output = Engine::render(&pair).unwrap();
+            let output = Engine::render(&pair).unwrap().unwrap();
             assert_eq!(output.skill_content, format!("value: \"{expected}\"\n"));
             let parsed: yaml_serde::Value = yaml_serde::from_str(&output.skill_content).unwrap();
             assert_eq!(parsed["value"].as_str(), Some(expected));
@@ -396,7 +415,7 @@ mod tests {
         );
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         assert!(build_context(&pair)["license"].is_undefined());
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         assert_eq!(
             output.skill_content,
             "---\nlicense: null\nbare_license: \n---\nBody\n"
@@ -429,7 +448,7 @@ mod tests {
             template: "value: {{ value | yaml_str }}\n".to_string(),
             output_dir: None,
         }];
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         for content in [&output.skill_content, &output.sidecars[0].content] {
             assert_eq!(content, "value: null\n");
             let parsed: yaml_serde::Value = yaml_serde::from_str(content).unwrap();
@@ -453,7 +472,7 @@ mod tests {
         pair.harness.manifest = Some(ManifestDef {
             template: "{\"description\": {{ skill_description | yaml_str }}}\n".to_string(),
         });
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         assert_eq!(output.sidecars.len(), 1);
         let manifest = Engine::render_manifest_entry(&pair).unwrap().unwrap();
         for content in [&output.sidecars[0].content, &manifest] {
@@ -475,7 +494,7 @@ mod tests {
         );
         skill.description = "Router: \"hello\" & <world>".to_string();
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         let (frontmatter, body) = output.skill_content.split_once("\n---\n").unwrap();
         assert_eq!(frontmatter.lines().nth(1), Some("name: alpha"));
         assert_eq!(body, format!("{}\n", skill.description));
@@ -491,7 +510,7 @@ mod tests {
         let registry = HarnessRegistry::with_builtins();
         let (_dir, skill) = create_skill_with_template("styled", "{{ theme }}", vars);
         let pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         assert_eq!(output.skill_content, "dark");
     }
 
@@ -533,7 +552,7 @@ mod tests {
         );
         let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         pair.harness.skill_ref_pattern = Some("@{name}".to_string());
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         assert_eq!(output.skill_content, "Ref: @other");
     }
 
@@ -547,7 +566,7 @@ mod tests {
         );
         let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
         pair.harness.skill_ref_pattern = None;
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         assert_eq!(output.skill_content, "Ref: /other");
     }
 
@@ -577,7 +596,7 @@ mod tests {
             template: "{{ skill_ref(skill_name) }}".to_string(),
             output_dir: None,
         }];
-        let output = Engine::render(&pair).unwrap();
+        let output = Engine::render(&pair).unwrap().unwrap();
         assert_eq!(output.sidecars.len(), 1);
         assert_eq!(output.sidecars[0].content, "@test-agent");
     }
@@ -637,5 +656,83 @@ mod tests {
                 panic!("expected RenderError, got {e:?}")
             }
         }
+    }
+
+    #[test]
+    fn empty_skill_render_produces_no_output() {
+        let registry = HarnessRegistry::with_builtins();
+        let template = "{%- if harness.id == \"codex\" -%}Codex only{%- endif -%}";
+        let (_dir, skill) = create_skill_with_template("gated", template, BTreeMap::new());
+
+        let claude = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        assert!(Engine::render(&claude).unwrap().is_none());
+
+        let codex = HarnessResolver::resolve_skill_harness(&skill, "codex", &registry).unwrap();
+        assert_eq!(
+            Engine::render(&codex).unwrap().unwrap().skill_content,
+            "Codex only"
+        );
+    }
+
+    #[test]
+    fn empty_rendered_template_is_not_emitted() {
+        let registry = HarnessRegistry::with_builtins();
+        let (dir, skill) = create_skill_with_template("gated", "{{ skill_name }}", BTreeMap::new());
+        std::fs::write(
+            dir.path().join("codex-only.md.j2"),
+            "{%- if harness.id == \"codex\" -%}notes{%- endif -%}",
+        )
+        .unwrap();
+        std::fs::write(dir.path().join("shared.md.j2"), "for {{ harness.id }}").unwrap();
+
+        let claude = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        let output = Engine::render(&claude).unwrap().unwrap();
+        assert_eq!(
+            output
+                .rendered_files
+                .iter()
+                .map(|f| f.relative_path.as_path())
+                .collect::<Vec<_>>(),
+            [std::path::Path::new("shared.md")]
+        );
+
+        let codex = HarnessResolver::resolve_skill_harness(&skill, "codex", &registry).unwrap();
+        let output = Engine::render(&codex).unwrap().unwrap();
+        assert_eq!(output.rendered_files.len(), 2);
+    }
+
+    #[test]
+    fn empty_sidecar_is_not_emitted() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) =
+            create_skill_with_template("gated", "{{ skill_name }}", BTreeMap::new());
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        pair.harness.sidecars = vec![
+            crate::registry::SidecarDef {
+                filename: "empty.txt".to_string(),
+                template: "{%- if false -%}never{%- endif -%}".to_string(),
+                output_dir: None,
+            },
+            crate::registry::SidecarDef {
+                filename: "kept.txt".to_string(),
+                template: "{{ skill_name }}".to_string(),
+                output_dir: None,
+            },
+        ];
+        let output = Engine::render(&pair).unwrap().unwrap();
+        assert_eq!(output.sidecars.len(), 1);
+        assert_eq!(output.sidecars[0].filename, "kept.txt");
+    }
+
+    #[test]
+    fn empty_manifest_entry_is_none() {
+        let registry = HarnessRegistry::with_builtins();
+        let (_dir, skill) =
+            create_skill_with_template("test-agent", "{{ skill_name }}", BTreeMap::new());
+        let mut pair = HarnessResolver::resolve_skill_harness(&skill, "claude", &registry).unwrap();
+        pair.harness.manifest = Some(ManifestDef {
+            template: "{%- if false -%}{}{%- endif -%}".to_string(),
+        });
+        assert!(Engine::render_manifest_entry(&pair).unwrap().is_none());
     }
 }

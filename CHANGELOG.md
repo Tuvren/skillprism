@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.6.0 — 2026-11-19
+
+### Fixed
+
+- **Empty rendered output is no longer written** — A `.j2` template or harness sidecar that renders to empty output for a harness produces no file for that harness. When `SKILL.md` itself renders empty, the pair emits nothing — no skill file, sidecars, rendered files, assets, or manifest entry — and the build prints a `[render] skipped` warning. The same applies to `add` and `update`.
+
 ## v0.5.0 — 2026-10-08
 
 ### Added

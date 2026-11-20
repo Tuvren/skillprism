@@ -113,13 +113,6 @@ pub enum UpdateError {
     #[diagnostic(transparent)]
     Router(#[from] crate::router::RouterError),
 
-    /// Rendering error.
-    #[error("{0}")]
-    #[diagnostic(help(
-        "Inspect the skill template for invalid MiniJinja syntax or unknown variables."
-    ))]
-    Render(miette::Report),
-
     /// No matching skill found in fetched source.
     #[error("skill `{skill}` not found in the fetched source")]
     #[diagnostic(help(
@@ -613,8 +606,11 @@ fn update_skillprism_pairs(
 
     for pair in pairs {
         let harness_id = &pair.harness.id;
-        let output = crate::engine::Engine::render(pair)
-            .map_err(|e| miette::Report::new(UpdateError::Render(miette::Report::new(e))))?;
+        let Some(output) = super::install::render_nonempty(pair)
+            .map_err(|e| miette::Report::new(UpdateError::from(e)))?
+        else {
+            continue;
+        };
 
         let skill_path_buf = resolve_skill_path(project_root, &pair.harness, old_name, target)
             .map_err(|e| {

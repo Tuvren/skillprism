@@ -530,31 +530,19 @@ fn execute_build_pipeline(
     let target = crate::router::TargetScope::Dist;
     let t3 = Instant::now();
     let mut result = BuildResult::default();
-    let mut manifest_entries: Vec<ManifestEntry> = Vec::new();
     let mut skip_all = false;
     let mut overwrite_all = false;
     let outputs = render_build_pairs(valid_pairs, verbose)?;
 
     // Render and validate every manifest before writing skills, sidecars, or assets.
-    for pair in valid_pairs {
-        if let Some(entry) = Engine::render_manifest_entry(pair).map_err(miette::Report::new)? {
-            if let Some(path) =
-                crate::router::resolve_manifest_path(project_root, &pair.harness, target)
-            {
-                let path = path.map_err(miette::Report::new)?;
-                manifest_entries.push(ManifestEntry {
-                    skill: pair.skill.name.clone(),
-                    harness: pair.harness.id.clone(),
-                    path,
-                    content: entry,
-                });
-            }
-        }
-    }
+    let manifest_entries = collect_manifest_entries(valid_pairs, &outputs, project_root, target)?;
     Router::validate_manifests(&manifest_entries).map_err(miette::Report::new)?;
 
     for (pair, output) in valid_pairs.iter().zip(&outputs) {
         let pair_name = format!("{} \u{2192} {}", pair.skill.name, &pair.harness.id);
+        let Some(output) = output else {
+            continue;
+        };
 
         if diff {
             let entries =
@@ -633,18 +621,52 @@ fn execute_build_pipeline(
     Ok(())
 }
 
+/// Renders every pair's manifest entry, skipping pairs whose skill rendered
+/// empty — a harness that emits no skill files gets no manifest entry either.
+fn collect_manifest_entries(
+    valid_pairs: &[crate::resolver::ResolvedPair],
+    outputs: &[Option<crate::engine::HarnessOutput>],
+    project_root: &Path,
+    target: crate::router::TargetScope,
+) -> Result<Vec<ManifestEntry>, miette::Report> {
+    let mut manifest_entries = Vec::new();
+    for (pair, output) in valid_pairs.iter().zip(outputs) {
+        if output.is_none() {
+            continue;
+        }
+        if let Some(entry) = Engine::render_manifest_entry(pair).map_err(miette::Report::new)? {
+            if let Some(path) =
+                crate::router::resolve_manifest_path(project_root, &pair.harness, target)
+            {
+                let path = path.map_err(miette::Report::new)?;
+                manifest_entries.push(ManifestEntry {
+                    skill: pair.skill.name.clone(),
+                    harness: pair.harness.id.clone(),
+                    path,
+                    content: entry,
+                });
+            }
+        }
+    }
+    Ok(manifest_entries)
+}
+
 fn render_build_pairs(
     pairs: &[crate::resolver::ResolvedPair],
     verbose: bool,
-) -> Result<Vec<crate::engine::HarnessOutput>, miette::Report> {
+) -> Result<Vec<Option<crate::engine::HarnessOutput>>, miette::Report> {
     let mut outputs = Vec::with_capacity(pairs.len());
     let mut error_count = 0;
     for pair in pairs {
         let started = Instant::now();
         match Engine::render(pair).map_err(miette::Report::new) {
             Ok(output) => {
-                outputs.push(output);
-                if verbose {
+                if output.is_none() {
+                    eprintln!(
+                        "[render] skipped: {} → {}: rendered output is empty",
+                        pair.skill.name, pair.harness.id
+                    );
+                } else if verbose {
                     eprintln!(
                         "  [{time}] render {skill} → {harness}",
                         time = fmt_duration(started.elapsed()),
@@ -652,6 +674,7 @@ fn render_build_pairs(
                         harness = pair.harness.id,
                     );
                 }
+                outputs.push(output);
             }
             Err(error) => {
                 eprintln!("{error:?}");

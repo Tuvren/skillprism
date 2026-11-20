@@ -486,8 +486,12 @@ pub fn reject_divergent_skill_outputs(
 ) -> Result<(), InstallError> {
     let mut planned = Vec::new();
     for pair in pairs {
-        let output =
-            Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
+        // An empty render emits nothing for this harness.
+        let Some(output) =
+            Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?
+        else {
+            continue;
+        };
         let skill_path = crate::router::resolve_skill_path(
             project_root,
             &pair.harness,
@@ -764,8 +768,9 @@ fn install_skillprism_skill(
 
     let mut files = Vec::new();
     for pair in &pairs {
-        let output =
-            Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
+        let Some(output) = render_nonempty(pair)? else {
+            continue;
+        };
 
         // User-scope installs have no project root; `resolve_skill_path`/`Router`
         // ignore this argument for `TargetScope::User`, so `"."` is an unused
@@ -1007,6 +1012,22 @@ pub fn load_skill_into_temp_project(
         })?;
 
     Ok((skill, TempProject(temp_dir)))
+}
+
+/// Renders `pair`, warning and returning `Ok(None)` when the rendered output is
+/// empty — an empty render means the template does not apply to that harness,
+/// so no files are emitted for the pair. Shared by `add` and `update`.
+pub fn render_nonempty(
+    pair: &ResolvedPair,
+) -> Result<Option<crate::engine::HarnessOutput>, InstallError> {
+    let output = Engine::render(pair).map_err(|e| InstallError::Render(miette::Report::new(e)))?;
+    if output.is_none() {
+        eprintln!(
+            "[render] skipped: {} → {}: rendered output is empty",
+            pair.skill.name, pair.harness.id
+        );
+    }
+    Ok(output)
 }
 
 /// Validates resolved skillprism pairs before any output is written, so an

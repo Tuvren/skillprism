@@ -125,7 +125,7 @@ Every built-in defines `subagent_guide`. `claude` also defines `hints`.
 | Required | no |
 | Default | `[]` |
 
-Each item is rendered next to the skill file.
+Each item is rendered next to the skill file. An item that renders to empty output is not written.
 
 | Field | Type | Required | Meaning |
 |-------|------|----------|---------|
@@ -142,7 +142,7 @@ The built-in definitions ship no sidecar templates. `codex` and `pi` set `requir
 | Type | object |
 | Required | no |
 
-Top-level field. It is not an item of `sidecars`. It has one field, `template` (string, required when `manifest` is set). `build` fills that template once per skill, checks that each result is JSON, and writes one JSON array of those objects. Invalid JSON is an error and no output is written.
+Top-level field. It is not an item of `sidecars`. It has one field, `template` (string, required when `manifest` is set). `build` fills that template once per skill, checks that each result is JSON, and writes one JSON array of those objects. Invalid JSON is an error and no output is written. An entry that renders empty is skipped; a manifest with no entries is not written.
 
 `claude` and `codex` set `requires_manifest` to true and define a `manifest.template`. Their templates also emit `skill_ref`.
 

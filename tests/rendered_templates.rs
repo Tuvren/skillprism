@@ -194,6 +194,96 @@ fn validate_and_build_reject_undefined_variable_in_extra_template() {
 }
 
 #[test]
+fn empty_rendered_outputs_are_not_written() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("skillprism.yaml"),
+        "harnesses: [claude, opencode]\nskills_dir: skills\n",
+    )
+    .unwrap();
+    add_skill(dir.path(), "sample");
+    let skill = dir.path().join("skills/sample");
+
+    // Renders only for claude — the opencode output is empty and must not be written.
+    fs::create_dir_all(skill.join("notes")).unwrap();
+    fs::write(
+        skill.join("notes/claude-only.md.j2"),
+        "{%- if harness.id == \"claude\" -%}claude notes{%- endif -%}",
+    )
+    .unwrap();
+
+    let assert = bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+
+    let claude_out = dir.path().join("dist/claude/sample");
+    assert_eq!(
+        fs::read_to_string(claude_out.join("notes/claude-only.md")).unwrap(),
+        "claude notes"
+    );
+    let opencode_out = dir.path().join("dist/opencode/sample");
+    assert!(opencode_out.join("SKILL.md").exists());
+    assert!(
+        !opencode_out.join("notes/claude-only.md").exists(),
+        "empty rendered template must not produce a file: {}",
+        String::from_utf8_lossy(&assert.get_output().stderr)
+    );
+}
+
+#[test]
+fn empty_skill_render_emits_nothing_for_that_harness() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(
+        dir.path().join("skillprism.yaml"),
+        "harnesses: [claude, codex]\nskills_dir: skills\n",
+    )
+    .unwrap();
+    let skill = dir.path().join("skills/gated");
+    fs::create_dir_all(skill.join("references")).unwrap();
+    fs::write(
+        skill.join("skill.yaml"),
+        "skillprism: '1'\nname: gated\ndescription: A gated skill\n",
+    )
+    .unwrap();
+    fs::write(
+        skill.join("SKILL.md.j2"),
+        "{%- if harness.id == \"claude\" -%}---\nname: {{ skill_name | yaml_str }}\ndescription: {{ skill_description | yaml_str }}\n---\nBody\n{%- endif -%}",
+    )
+    .unwrap();
+    fs::write(skill.join("references/ref.md"), "reference\n").unwrap();
+
+    let assert = bin(dir.path())
+        .args(["build", "--force"])
+        .assert()
+        .success();
+    let stderr = String::from_utf8_lossy(&assert.get_output().stderr).into_owned();
+    assert!(
+        stderr.contains("[render] skipped") && stderr.contains("gated") && stderr.contains("codex"),
+        "expected a skip warning for the empty codex render, got: {stderr}"
+    );
+
+    assert!(dir.path().join("dist/claude/gated/SKILL.md").exists());
+    assert!(
+        dir.path()
+            .join("dist/claude/gated/references/ref.md")
+            .exists()
+    );
+    assert!(
+        !dir.path().join("dist/codex/gated").exists(),
+        "an empty skill render must not leave a codex output directory"
+    );
+
+    // The codex manifest must not reference a skill that emitted nothing.
+    let manifest = fs::read_to_string(dir.path().join("dist/codex/.agents/marketplace.json"))
+        .unwrap_or_else(|_| "[]".to_string());
+    assert!(
+        !manifest.contains("gated"),
+        "codex manifest should not reference the empty-rendered skill, got: {manifest}"
+    );
+}
+
+#[test]
 fn rendered_template_colliding_with_copied_file_fails() {
     let dir = project();
     add_skill(dir.path(), "sample");
